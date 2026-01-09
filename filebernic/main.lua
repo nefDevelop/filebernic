@@ -1,4 +1,5 @@
 local json = require "libs.dkjson"
+local http = require "love.http"
 
 -- Utility function to split a string by a delimiter
 function split(s, delimiter)
@@ -14,9 +15,10 @@ local systemName = "GBA"
 local romPath = ""
 local secondaryPath = nil
 local muosArtPath = ""
+local muosTextPath = ""
 local files = {}
 local selectedIndex = 1
-local state = "LIST" -- LIST, POST_GAME, DELETE_MENU
+local state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRAPING_IN_PROGRESS, SCRAPER_RESULTS
 local itemToDelete = nil
 local lastPlayedRom = ""
 local playedRoms = {}
@@ -33,6 +35,8 @@ local menuOptions = {"Borrar"}
 local menuSelection = 1
 local menuTitle = ""
 local menuMessage = ""
+local scraperResults = {}
+local scraperSelection = 1
 
 local validExtensions = {
     -- Nintendo
@@ -339,6 +343,9 @@ function love.quit()
 end
 
 function love.load(arg)
+    -- Create data directories
+    os.execute("mkdir -p " .. love.filesystem.getSource() .. "/data/log")
+
     -- Handle screen resolution from launch script
     if arg[1] then
         local res = arg[1]
@@ -351,22 +358,23 @@ function love.load(arg)
     
     love.keyboard.setKeyRepeat(false) -- Desactivado para control manual
     
-    -- This logic seems to be for backwards compatibility or a different launch method.
-    -- We are now using the launch script to define the path.
-    -- For now, we'll keep the simulation path for local testing.
+    local baseMuosPath = ""
     local f = io.open("/mnt/mmc", "r")
     if f then
         f:close()
         -- Running on a real device
         if arg and arg[4] then systemName = arg[4] end
-        muosArtPath = "/mnt/mmc/MUOS/info/catalogue/" .. systemName .. "/boxart/"
+        baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
     else
         -- Running in simulation on Fedora
         local cwd = love.filesystem.getSource()
         if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
         local simPath = cwd .. "/../Simulador_SD/"
-        muosArtPath = simPath .. "MUOS/info/catalogue/"
+        baseMuosPath = simPath .. "MUOS/info/catalogue/"
     end
+    
+    muosArtPath = baseMuosPath .. systemName .. "/box/"
+    muosTextPath = baseMuosPath .. systemName .. "/text/"
     
     iconFolder = love.graphics.newImage("assets/folder.png")
     iconRom = love.graphics.newImage("assets/roms.png")
@@ -544,6 +552,12 @@ function drawBottomBar()
     elseif state == "DELETE_MENU" or state == "POST_GAME" then
         drawHint(buttonIcons.a, "Confirmar")
         drawHint(buttonIcons.b, "Cancelar")
+    elseif state == "SCRAPER_VIEW" then
+        drawHint(buttonIcons.a, "Buscar")
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "SCRAPER_RESULTS" then
+        drawHint(buttonIcons.a, "Guardar")
+        drawHint(buttonIcons.b, "Volver")
     end
 end
 
@@ -592,9 +606,201 @@ function drawSideMenu()
     end
 end
 
+function startScraping()
+    state = "SCRAPING_IN_PROGRESS"
+    scraperResults = {}
+    scraperSelection = 1
+    local item = files[selectedIndex]
+    if not item then state = "LIST" return end
+
+    -- Limpiar nombre para la búsqueda
+    local cleanName = item.name:gsub("%..-$", "") -- Quita extensión
+    cleanName = cleanName:gsub("%s*%(.-%)", "") -- Quita paréntesis (USA, Europe, etc.)
+    cleanName = cleanName:gsub("%s*%[.-%]", "") -- Quita corchetes [!]
+    cleanName = cleanName:gsub(" ", "+") -- Reemplaza espacios por + para URL
+
+    local url = "https://www.screenscraper.fr/api2/jeuInfos.php?devid=test&devpassword=test&softname=test&output=json&recherche=" .. cleanName
+    
+    log("Scraping URL: " .. url)
+
+    love.http.request(url, function(data, status)
+        if status == 200 then
+            local success, response = pcall(json.decode, data)
+            if success and response and response.response and response.response.jeu then
+                local game = response.response.jeu
+                local mediaList = game.medias
+                local gameMetadata = {
+                    synopsis = game.synopsis and game.synopsis.overview or "N/A",
+                    releaseDate = game.dates and game.dates.date and game.dates.date[1] and game.dates.date[1].text or "N/A",
+                    developer = game.developer and game.developer.text or "N/A",
+                    publisher = game.publisher and game.publisher.text or "N/A",
+                    genre = game.genres and game.genres.genre and game.genres.genre[1] and game.genres.genre[1].text or "N/A",
+                    rating = game.ratings and game.ratings.rating and game.ratings.rating[1] and game.ratings.rating[1].text or "N/A"
+                }
+
+                if mediaList then
+                    for _, media in ipairs(mediaList) do
+                        if media.type == "box-2D" and media.region == "wor" then
+                           table.insert(scraperResults, {url = media.url, region = media.region, format = media.format, metadata = gameMetadata})
+                        end
+                    end
+                     -- Si no hay 'wor', coger otras regiones
+                    if #scraperResults == 0 then
+                        for _, media in ipairs(mediaList) do
+                            if media.type == "box-2D" then
+                               table.insert(scraperResults, {url = media.url, region = media.region, format = media.format, metadata = gameMetadata})
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            log("Error scraping: HTTP status " .. tostring(status))
+        end
+        
+        -- Descargar imágenes
+        if #scraperResults > 0 then
+            local imagesToLoad = #scraperResults
+            for i, result in ipairs(scraperResults) do
+                love.http.request(result.url, function(imgData, imgStatus)
+                    if imgStatus == 200 then
+                        local imgSuccess, img = pcall(love.graphics.newImage, love.image.newImageData(imgData))
+                        if imgSuccess then
+                            result.image = img
+                        else
+                            log("Failed to create image from data for " .. result.url)
+                        end
+                    else
+                        log("Failed to download image " .. result.url .. " status: " .. tostring(imgStatus))
+                    end
+                    imagesToLoad = imagesToLoad - 1
+                    if imagesToLoad == 0 then
+                        state = "SCRAPER_RESULTS"
+                    end
+                end)
+            end
+        else
+            state = "SCRAPER_RESULTS" -- Va a la pantalla de resultados aunque esté vacía
+        end
+    end)
+end
+
+function saveSelectedArt()
+    local result = scraperResults[scraperSelection]
+    if not result or not result.image then return end
+
+    local item = files[selectedIndex]
+    local baseName = item.name:gsub("%..-$", "")
+    local imgPath = muosArtPath .. baseName .. "." .. result.format
+    local textPath = muosTextPath .. baseName .. ".txt"
+    
+    os.execute("mkdir -p '" .. muosArtPath .. "'")
+    os.execute("mkdir -p '" .. muosTextPath .. "'")
+
+    local imgData = result.image:getData()
+    local success, err = pcall(function() imgData:encode("png", imgPath) end)
+
+    if success then
+        log("Artwork saved to " .. imgPath)
+        -- Guardar metadatos
+        if result.metadata then
+            local f = io.open(textPath, "w")
+            if f then
+                f:write("Title: " .. baseName .. "\n")
+                f:write("Synopsis: " .. result.metadata.synopsis .. "\n")
+                f:write("Release Date: " .. result.metadata.releaseDate .. "\n")
+                f:write("Developer: " .. result.metadata.developer .. "\n")
+                f:write("Publisher: " .. result.metadata.publisher .. "\n")
+                f:write("Genre: " .. result.metadata.genre .. "\n")
+                f:write("Rating: " .. result.metadata.rating .. "\n")
+                f:close()
+                log("Metadata saved to " .. textPath)
+            else
+                log("Failed to open metadata file for writing: " .. textPath)
+            end
+        end
+        -- Actualizar la imagen actual en la lista principal
+        loadPreview()
+    else
+        log("Failed to save image: " .. tostring(err))
+    end
+    state = "LIST"
+end
+
+
+function drawScraperView()
+    local w, h = love.graphics.getDimensions()
+    love.graphics.clear(0.1, 0.1, 0.12) -- Fondo de pantalla completa
+
+    local currentItem = files[selectedIndex]
+    if not currentItem then return end
+
+    -- Título
+    love.graphics.setFont(fontTitle)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf("Scraper: " .. currentItem.name, 0, 20, w, "center")
+
+    if state == "SCRAPER_VIEW" then
+        -- Imagen Actual
+        love.graphics.printf("Carátula Actual", 50, 80, w, "left")
+        if currentImage then
+            local scale = math.min(200 / currentImage:getWidth(), 200 / currentImage:getHeight())
+            love.graphics.draw(currentImage, 50, 120, 0, scale, scale)
+        else
+            love.graphics.setColor(0.4, 0.4, 0.4)
+            love.graphics.rectangle("fill", 50, 120, 200, 200)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.printf("No encontrada", 50, 120 + 90, 200, "center")
+        end
+
+        -- Botón de Scrapear
+        love.graphics.setColor(0.2, 0.6, 1)
+        love.graphics.rectangle("fill", 50, 350, 200, 40, 5)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.printf("Buscar Carátulas", 50, 360, 200, "center")
+
+    elseif state == "SCRAPING_IN_PROGRESS" then
+        love.graphics.printf("Buscando, por favor espere...", 0, h/2, w, "center")
+
+    elseif state == "SCRAPER_RESULTS" then
+        love.graphics.printf("Resultados:", 50, 80, w, "left")
+        if #scraperResults == 0 then
+            love.graphics.printf("No se encontraron resultados.", 50, 120, w - 100, "left")
+        else
+            local x, y = 50, 120
+            local spacing = 160
+            for i, result in ipairs(scraperResults) do
+                if result.image then
+                    if i == scraperSelection then
+                        love.graphics.setColor(0.2, 0.6, 1)
+                        love.graphics.rectangle("fill", x - 5, y - 5, 150, 150, 5)
+                    end
+                    love.graphics.setColor(1, 1, 1)
+                    local scale = math.min(140 / result.image:getWidth(), 140 / result.image:getHeight())
+                    love.graphics.draw(result.image, x, y, 0, scale, scale)
+                    love.graphics.printf(result.region, x, y + 145, 140, "center")
+                end
+                x = x + spacing
+                if x + spacing > w then
+                    x = 50
+                    y = y + spacing + 20
+                end
+            end
+        end
+    end
+
+    -- Hint de volver
+    drawBottomBar()
+end
+
 function love.draw()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(0.1, 0.1, 0.12)
+
+    if state == "SCRAPER_VIEW" or state == "SCRAPING_IN_PROGRESS" or state == "SCRAPER_RESULTS" then
+        drawScraperView()
+        return -- No dibujar la lista debajo
+    end
     
     -- Layout dinámico
     if currentImage then
@@ -749,6 +955,9 @@ function love.keypressed(key)
                     menuSelection = 2
                     state = "DELETE_MENU"
                 end
+            elseif menuOptions[menuSelection] == "Scraper" then
+                state = "SCRAPER_VIEW"
+                inputCooldown = 0.3
             elseif menuOptions[menuSelection] == "Borrar de SD1" then
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
@@ -800,6 +1009,33 @@ function love.keypressed(key)
             inputCooldown = 0.3
         elseif key == "backspace" or key == "tab" then
             state = "LIST"
+            inputCooldown = 0.3
+        end
+        return
+    end
+
+    if state == "SCRAPER_VIEW" then
+        if key == "backspace" then -- 'b' button
+            state = "LIST"
+            inputCooldown = 0.3
+        elseif key == "return" or key == "kpenter" then -- 'a' button
+            startScraping()
+        end
+        return
+    end
+
+    if state == "SCRAPER_RESULTS" then
+        if key == "backspace" then
+            state = "SCRAPER_VIEW"
+            inputCooldown = 0.3
+        elseif key == "left" then
+            scraperSelection = math.max(1, scraperSelection - 1)
+            inputCooldown = 0.2
+        elseif key == "right" then
+            scraperSelection = math.min(#scraperResults, scraperSelection + 1)
+            inputCooldown = 0.2
+        elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
+            saveSelectedArt()
             inputCooldown = 0.3
         end
         return
@@ -948,9 +1184,15 @@ function love.keypressed(key)
             end
             menuSelection = 1
             menuOptions = {"Borrar"}
+            if selectedFilesCount <= 1 then
+                table.insert(menuOptions, "Scraper")
+            end
             
             if item.sourceLabel == "SD1-SD2" then
                 menuOptions = {"Borrar de SD1", "Borrar de SD2"}
+                if selectedFilesCount <= 1 then
+                    table.insert(menuOptions, "Scraper")
+                end
                 -- Copy/Move disabled as it exists in both
             else
                 local _, targetLabel = getTargetSDPath(item.fullPath)
