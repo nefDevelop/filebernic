@@ -3,14 +3,52 @@ local function keypressed(key)
 
     -- Search mode logic
     if state == "SEARCH" then
-        if key == "escape" or key == "return" then
+        if key == "up" then
+            keyboardRow = math.max(1, keyboardRow - 1)
+            keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
+            inputCooldown = 0.2
+        elseif key == "down" then
+            keyboardRow = math.min(#keyboardGrid, keyboardRow + 1)
+            keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
+            inputCooldown = 0.2
+        elseif key == "left" then
+            keyboardCol = math.max(1, keyboardCol - 1)
+            inputCooldown = 0.2
+        elseif key == "right" then
+            keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol + 1)
+            inputCooldown = 0.2
+        elseif key == "return" or key == "kpenter" or key == "space" then -- 'a' button
+            local char = keyboardGrid[keyboardRow][keyboardCol]
+            if char == "OK" then
+                state = "LIST"
+                love.keyboard.setTextInput(false)
+            elseif char == "BACK" then
+                searchQuery = searchQuery:sub(1, -2)
+                filterFiles()
+            elseif char == "SPACE" then
+                searchQuery = searchQuery .. " "
+                filterFiles()
+            else
+                searchQuery = searchQuery .. char
+                filterFiles()
+            end
+            inputCooldown = 0.2
+        elseif key == "f" then -- L1: Exit search, keep filter
+            state = "LIST"
+            love.keyboard.setTextInput(false)
+            inputCooldown = 0.3
+        elseif key == "f2" then -- L2: Clear filter
+            searchQuery = ""
+            filterFiles()
+            state = "LIST"
+            love.keyboard.setTextInput(false)
+            inputCooldown = 0.3
+        elseif key == "escape" or key == "backspace" then -- 'b' button (Cancel)
             state = "LIST"
             files = allFiles -- Restore full list
             searchQuery = ""
             love.keyboard.setTextInput(false) -- Disable text input
-        elseif key == "backspace" then
-            searchQuery = searchQuery:sub(1, -2)
-            filterFiles()
+            inputCooldown = 0.3
         end
         return
     end
@@ -18,7 +56,7 @@ local function keypressed(key)
     local currentItem = files[selectedIndex]
     if currentItem and currentItem.empty then
         if key == "backspace" then -- Allow going back from an empty directory
-            local parent = romPath:gsub("[^/]+$", "")
+            local parent = romPath:gsub("[^/]+/$", "")
             if romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" then
                  createMergedVirtualRoot()
                  return
@@ -60,6 +98,9 @@ local function keypressed(key)
                     menuSelection = 2
                     state = "DELETE_MENU"
                 end
+            elseif menuOptions[menuSelection] == "Info" then
+                state = "INFO_VIEW"
+                inputCooldown = 0.3
             elseif menuOptions[menuSelection] == "Scraper" then
                 state = "SCRAPER_VIEW"
                 inputCooldown = 0.3
@@ -119,12 +160,51 @@ local function keypressed(key)
         return
     end
 
+    if state == "INFO_VIEW" then
+        if key == "backspace" or key == "b" or key == "escape" then
+            state = "LIST"
+            inputCooldown = 0.3
+        end
+        return
+    end
+
+    if state == "SCRAPER_OPTIONS" then
+        if key == "up" then
+            menuSelection = math.max(1, menuSelection - 1)
+        elseif key == "down" then
+            menuSelection = math.min(#menuOptions, menuSelection + 1)
+        elseif key == "return" or key == "kpenter" then
+            if menuOptions[menuSelection] == "Limpiar" then
+                local item = files[selectedIndex]
+                local baseName = item.name:gsub("%..-$", "")
+                os.remove(muosArtPath .. baseName .. ".png")
+                os.remove(muosTextPath .. baseName .. ".txt")
+                os.remove(muosTextPath .. baseName .. ".year")
+                os.remove(muosPreviewPath .. baseName .. ".png")
+                loadPreview()
+                state = "SCRAPER_VIEW"
+            end
+            inputCooldown = 0.3
+        elseif key == "backspace" or key == "x" or key == "escape" then
+            state = "SCRAPER_VIEW"
+            inputCooldown = 0.3
+        end
+        return
+    end
+
     if state == "SCRAPER_VIEW" then
         if key == "backspace" then -- 'b' button
             state = "LIST"
             inputCooldown = 0.3
         elseif key == "return" or key == "kpenter" then -- 'a' button
             startScraping()
+        elseif key == "tab" then -- 'y' button
+            state = "SCRAPER_OPTIONS"
+            menuTitle = "Opciones"
+            menuMessage = ""
+            menuOptions = {"Limpiar"}
+            menuSelection = 1
+            inputCooldown = 0.3
         end
         return
     end
@@ -205,8 +285,17 @@ local function keypressed(key)
     if key == "f" then
         state = "SEARCH"
         searchQuery = ""
+        keyboardRow = 1
+        keyboardCol = 1
         love.keyboard.setTextInput(true) -- Enable text input
         filterFiles()
+        return
+    end
+    
+    if key == "f2" then -- L2: Clear filter
+        searchQuery = ""
+        filterFiles()
+        inputCooldown = 0.3
         return
     end
 
@@ -232,8 +321,8 @@ local function keypressed(key)
                 refreshFiles()
                 inputCooldown = 0.3
             else
-                if item.name == "..") then
-                    local newPath = romPath:gsub("[^/]+$", "")
+                if item.name == ".." then
+                    local newPath = romPath:gsub("[^/]+/$", "")
                     if newPath == "/mnt/mmc/ROMS/" or newPath == "/mnt/sdcard/ROMS/" then
                         createMergedVirtualRoot()
                         return
@@ -266,7 +355,7 @@ local function keypressed(key)
         if isVirtualRoot then
             love.event.quit() -- Salir de la app desde el menú principal virtual
         else
-            local parent = romPath:gsub("[^/]+$", "")
+            local parent = romPath:gsub("[^/]+/$", "")
             if romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" then
                  createMergedVirtualRoot()
                  return
@@ -297,24 +386,31 @@ local function keypressed(key)
                 menuMessage = item.name
             end
             menuSelection = 1
-            menuOptions = {"Borrar"}
+            
+            menuOptions = {}
+            -- 1. Scraper
             if selectedFilesCount <= 1 then
+                table.insert(menuOptions, "Info")
                 table.insert(menuOptions, "Scraper")
             end
             
-            if item.sourceLabel == "SD1-SD2" then
-                menuOptions = {"Borrar de SD1", "Borrar de SD2"}
-                if selectedFilesCount <= 1 then
-                    table.insert(menuOptions, "Scraper")
-                end
-                -- Copy/Move disabled as it exists in both
-            else
+            -- 2. Copiar / Mover
+            if item.sourceLabel ~= "SD1-SD2" then
                 local _, targetLabel = getTargetSDPath(item.fullPath)
                 if targetLabel then
                     table.insert(menuOptions, "Copiar a " .. targetLabel)
                     table.insert(menuOptions, "Mover a " .. targetLabel)
                 end
             end
+            
+            -- 3. Borrar (Al final)
+            if item.sourceLabel == "SD1-SD2" then
+                table.insert(menuOptions, "Borrar de SD1")
+                table.insert(menuOptions, "Borrar de SD2")
+            else
+                table.insert(menuOptions, "Borrar")
+            end
+            
             inputCooldown = 0.3
         end
     elseif key == "x" then
@@ -355,6 +451,10 @@ local function gamepadpressed(joystick, button)
         keypressed("escape")
     elseif button == "start" then
         keypressed("f1")
+    elseif button == "leftshoulder" then
+        keypressed("f")
+    elseif button == "triggerleft" then
+        keypressed("f2")
     end
 end
 

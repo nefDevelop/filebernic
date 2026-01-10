@@ -31,8 +31,14 @@ local function drawBottomBar()
     elseif state == "DELETE_MENU" or state == "POST_GAME" then
         drawHint(buttonIcons.a, "Confirmar")
         drawHint(buttonIcons.b, "Cancelar")
+    elseif state == "INFO_VIEW" then
+        drawHint(buttonIcons.b, "Volver")
     elseif state == "SCRAPER_VIEW" then
         drawHint(buttonIcons.a, "Buscar")
+        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.y, "Opciones")
+    elseif state == "SCRAPER_OPTIONS" then
+        drawHint(buttonIcons.a, "Seleccionar")
         drawHint(buttonIcons.b, "Volver")
     elseif state == "SCRAPER_RESULTS" then
         drawHint(buttonIcons.a, "Guardar")
@@ -79,10 +85,75 @@ local function drawSideMenu()
             love.graphics.rectangle("fill", w/2 + 10, y - 5, w/2 - 20, 30, 5)
             love.graphics.setColor(theme.colors.text_white)
         else
-            love.graphics.setColor(theme.colors.text_dim)
+            if option:find("Borrar") or option:find("Limpiar") then
+                love.graphics.setColor(1, 0.4, 0.4) -- Rojo suave
+            else
+                love.graphics.setColor(theme.colors.text_dim)
+            end
         end
         love.graphics.print(option, w/2 + 20, y)
     end
+end
+
+local function drawInfoView()
+    local w, h = love.graphics.getDimensions()
+    love.graphics.clear(theme.colors.background)
+
+    local currentItem = files[selectedIndex]
+    if not currentItem then return end
+
+    -- Título
+    love.graphics.setFont(fontTitle)
+    love.graphics.setColor(theme.colors.text_white)
+    love.graphics.printf(currentItem.name, 0, 20, w, "center")
+
+    -- Layout dividido: Frontal (Izq), Screen (Der), Info (Abajo)
+    local boxX, boxY, boxW, boxH = 40, 70, 200, 260
+    local screenX, screenY, screenW, screenH = 280, 70, 320, 200
+    local textX, textY, textW, textH = 280, 280, 320, 180
+    
+    -- 1. Frontal (Boxart)
+    love.graphics.setColor(theme.colors.text_medium)
+    love.graphics.print("Frontal", boxX, boxY - 20)
+    if currentImage then
+        love.graphics.setColor(theme.colors.text_white)
+        local scale = math.min(boxW/currentImage:getWidth(), boxH/currentImage:getHeight())
+        love.graphics.draw(currentImage, boxX + (boxW - currentImage:getWidth()*scale)/2, boxY + (boxH - currentImage:getHeight()*scale)/2, 0, scale, scale)
+    else
+        love.graphics.setColor(theme.colors.placeholder_background)
+        love.graphics.rectangle("line", boxX, boxY, boxW, boxH)
+        love.graphics.printf("No Imagen", boxX, boxY + boxH/2 - 10, boxW, "center")
+    end
+
+    -- 2. Screen (Screenshot)
+    love.graphics.setColor(theme.colors.text_medium)
+    love.graphics.print("Screen", screenX, screenY - 20)
+    if currentScreenshot then
+        love.graphics.setColor(theme.colors.text_white)
+        local scale = math.min(screenW/currentScreenshot:getWidth(), screenH/currentScreenshot:getHeight())
+        love.graphics.draw(currentScreenshot, screenX + (screenW - currentScreenshot:getWidth()*scale)/2, screenY + (screenH - currentScreenshot:getHeight()*scale)/2, 0, scale, scale)
+    else
+        love.graphics.setColor(theme.colors.placeholder_background)
+        love.graphics.rectangle("line", screenX, screenY, screenW, screenH)
+        love.graphics.printf("No Preview", screenX, screenY + screenH/2 - 10, screenW, "center")
+    end
+
+    -- 3. Info (Description + Year)
+    love.graphics.setColor(theme.colors.text_medium)
+    local infoTitle = "Info"
+    if currentYear then infoTitle = infoTitle .. " (" .. currentYear .. ")" end
+    love.graphics.print(infoTitle, textX, textY - 20)
+    
+    love.graphics.setColor(theme.colors.text_dim)
+    love.graphics.setFont(fontSmall)
+    if currentDescription and currentDescription ~= "" then
+        love.graphics.printf(currentDescription, textX, textY, textW, "left")
+    else
+        love.graphics.printf("Sin información.", textX, textY, textW, "left")
+    end
+
+    -- Hint de volver
+    drawBottomBar()
 end
 
 local function drawScraperView()
@@ -98,50 +169,121 @@ local function drawScraperView()
     love.graphics.printf("Scraper: " .. currentItem.name, 0, 20, w, "center")
 
     if state == "SCRAPER_VIEW" then
-        -- Imagen Actual
-        love.graphics.printf("Carátula Actual", 50, 80, w, "left")
+        -- Layout dividido: Frontal (Izq), Screen (Der), Info (Abajo)
+        local boxX, boxY, boxW, boxH = 40, 70, 200, 260
+        local screenX, screenY, screenW, screenH = 280, 70, 320, 200
+        local textX, textY, textW, textH = 280, 280, 320, 100
+        
+        -- 1. Frontal (Boxart)
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.print("Frontal", boxX, boxY - 20)
         if currentImage then
-            local scale = math.min(200 / currentImage:getWidth(), 200 / currentImage:getHeight())
-            love.graphics.draw(currentImage, 50, 120, 0, scale, scale)
+            love.graphics.setColor(theme.colors.text_white)
+            local scale = math.min(boxW/currentImage:getWidth(), boxH/currentImage:getHeight())
+            love.graphics.draw(currentImage, boxX + (boxW - currentImage:getWidth()*scale)/2, boxY + (boxH - currentImage:getHeight()*scale)/2, 0, scale, scale)
         else
             love.graphics.setColor(theme.colors.placeholder_background)
-            love.graphics.rectangle("fill", 50, 120, 200, 200)
+            love.graphics.rectangle("line", boxX, boxY, boxW, boxH)
+            love.graphics.printf("No Imagen", boxX, boxY + boxH/2 - 10, boxW, "center")
+        end
+
+        -- 2. Screen (Screenshot)
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.print("Screen", screenX, screenY - 20)
+        if currentScreenshot then
             love.graphics.setColor(theme.colors.text_white)
-            love.graphics.printf("No encontrada", 50, 120 + 90, 200, "center")
+            local scale = math.min(screenW/currentScreenshot:getWidth(), screenH/currentScreenshot:getHeight())
+            love.graphics.draw(currentScreenshot, screenX + (screenW - currentScreenshot:getWidth()*scale)/2, screenY + (screenH - currentScreenshot:getHeight()*scale)/2, 0, scale, scale)
+        else
+            love.graphics.setColor(theme.colors.placeholder_background)
+            love.graphics.rectangle("line", screenX, screenY, screenW, screenH)
+            love.graphics.printf("No Preview", screenX, screenY + screenH/2 - 10, screenW, "center")
+        end
+
+        -- 3. Info (Description)
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.print("Info", textX, textY - 20)
+        love.graphics.setColor(theme.colors.text_dim)
+        love.graphics.setFont(fontSmall)
+        if currentDescription and currentDescription ~= "" then
+            love.graphics.printf(currentDescription, textX, textY, textW, "left")
+        else
+            love.graphics.printf("Sin información.", textX, textY, textW, "left")
         end
 
         -- Botón de Scrapear
+        love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.selection_accent)
-        love.graphics.rectangle("fill", 50, 350, 200, 40, 5)
+        love.graphics.rectangle("fill", w/2 - 100, 400, 200, 40, 5)
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf("Buscar Carátulas", 50, 360, 200, "center")
+        love.graphics.printf("Buscar Datos", w/2 - 100, 410, 200, "center")
 
     elseif state == "SCRAPING_IN_PROGRESS" then
-        love.graphics.printf("Buscando, por favor espere...", 0, h/2, w, "center")
+        love.graphics.printf("Consultando bases de datos...", 0, h/2, w, "center")
 
     elseif state == "SCRAPER_RESULTS" then
-        love.graphics.printf("Resultados:", 50, 80, w, "left")
+        love.graphics.setFont(fontMedium)
+        love.graphics.printf("Resultados:", 20, 60, w, "left")
+        
         if #scraperResults == 0 then
-            love.graphics.printf("No se encontraron resultados.", 50, 120, w - 100, "left")
+            love.graphics.printf("No se encontraron resultados.", 20, 100, w, "left")
         else
-            local x, y = 50, 120
-            local spacing = 160
+            -- Lista horizontal de miniaturas
+            local listY = 90
+            local thumbSize = 80
+            local spacing = 10
+            local startX = 20
+            
             for i, result in ipairs(scraperResults) do
+                local x = startX + (i-1) * (thumbSize + spacing)
+                if x > w - thumbSize then break end
+                
+                if i == scraperSelection then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                    love.graphics.rectangle("fill", x - 2, listY - 2, thumbSize + 4, thumbSize + 4)
+                end
+                
+                love.graphics.setColor(theme.colors.text_white)
                 if result.image then
-                    if i == scraperSelection then
-                        love.graphics.setColor(theme.colors.selection_accent)
-                        love.graphics.rectangle("fill", x - 5, y - 5, 150, 150, 5)
-                    end
+                    local scale = math.min(thumbSize/result.image:getWidth(), thumbSize/result.image:getHeight())
+                    love.graphics.draw(result.image, x + (thumbSize - result.image:getWidth()*scale)/2, listY + (thumbSize - result.image:getHeight()*scale)/2, 0, scale, scale)
+                else
+                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
+                end
+            end
+            
+            -- Vista previa del resultado seleccionado (Layout dividido)
+            local sel = scraperResults[scraperSelection]
+            if sel then
+                local boxX, boxY, boxW, boxH = 40, 200, 160, 220
+                local screenX, screenY, screenW, screenH = 240, 200, 360, 200
+                local textX, textY, textW, textH = 40, 430, 560, 40
+                
+                -- Frontal
+                love.graphics.setColor(theme.colors.text_medium)
+                love.graphics.print("Frontal", boxX, boxY - 20)
+                if sel.image then
+                love.graphics.setColor(theme.colors.text_white)
+                    local scale = math.min(boxW/sel.image:getWidth(), boxH/sel.image:getHeight())
+                    love.graphics.draw(sel.image, boxX + (boxW - sel.image:getWidth()*scale)/2, boxY + (boxH - sel.image:getHeight()*scale)/2, 0, scale, scale)
+                end
+                
+                -- Screen
+                love.graphics.setColor(theme.colors.text_medium)
+                love.graphics.print("Screen", screenX, screenY - 20)
+                if sel.screenshot then
                     love.graphics.setColor(theme.colors.text_white)
-                    local scale = math.min(140 / result.image:getWidth(), 140 / result.image:getHeight())
-                    love.graphics.draw(result.image, x, y, 0, scale, scale)
-                    love.graphics.printf(result.region, x, y + 145, 140, "center")
+                    local scale = math.min(screenW/sel.screenshot:getWidth(), screenH/sel.screenshot:getHeight())
+                    love.graphics.draw(sel.screenshot, screenX + (screenW - sel.screenshot:getWidth()*scale)/2, screenY + (screenH - sel.screenshot:getHeight()*scale)/2, 0, scale, scale)
+                else
+                    love.graphics.setColor(theme.colors.text_dim)
+                    love.graphics.printf("No Screen", screenX, screenY + screenH/2, screenW, "center")
                 end
-                x = x + spacing
-                if x + spacing > w then
-                    x = 50
-                    y = y + spacing + 20
-                end
+                
+                -- Info
+                love.graphics.setFont(fontSmall)
+                love.graphics.setColor(theme.colors.text_white)
+                love.graphics.printf(sel.description or "Sin descripción", textX, textY, textW, "left")
             end
         end
     end
@@ -165,18 +307,38 @@ local function draw()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
 
-    if state == "SCRAPER_VIEW" or state == "SCRAPING_IN_PROGRESS" or state == "SCRAPER_RESULTS" then
-        drawScraperView()
+    if state == "SCRAPER_VIEW" or state == "SCRAPING_IN_PROGRESS" or state == "SCRAPER_RESULTS" or state == "INFO_VIEW" or state == "SCRAPER_OPTIONS" then
+        if state == "INFO_VIEW" then
+            drawInfoView()
+        else
+            drawScraperView()
+        end
+        if state == "SCRAPER_OPTIONS" then
+            drawSideMenu()
+        end
         return -- No dibujar la lista debajo
     end
     
     -- Layout dinámico
-    if currentImage then
-        layout.selWidth = 300
+    -- Scrollbar fija a la derecha
+    local scrollbarMargin = 10
+    layout.scrollbarX = w - scrollbarMargin
+    
+    -- Columna SD (derecha de la imagen, izquierda del scroll)
+    local sdColW = 40
+    local sdColX = layout.scrollbarX - sdColW - 5
+    
+    -- Columna Preview (izquierda de SD)
+    local previewBoxW = 220 -- Reducido para evitar exceso de espacio
+    local previewBoxX = sdColX - previewBoxW - 10
+    
+    local showPreview = (currentImage ~= nil or currentScreenshot ~= nil)
+
+    if showPreview then
+        layout.selWidth = previewBoxX - 20 -- Ajustar lista al espacio restante
     else
-        layout.selWidth = w - 40
+        layout.selWidth = sdColX - 20
     end
-    layout.scrollbarX = 15 + layout.selWidth
 
     -- Título
     love.graphics.setColor(theme.colors.text_bright)
@@ -186,6 +348,14 @@ local function draw()
     -- Path actual
     love.graphics.setFont(fontSmall)
     local displayPath = isVirtualRoot and "Todos los Sistemas" or romPath
+    if not isVirtualRoot then
+        local shortened = displayPath:match("ROMS/.*")
+        if shortened then
+            displayPath = shortened
+        elseif displayPath:find("Simulador_SD") then
+            displayPath = displayPath:gsub(".*Simulador_SD/", "ROMS/")
+        end
+    end
     love.graphics.printf(displayPath, 0, 45, w, "center")
 
     -- Lista de Archivos
@@ -200,13 +370,11 @@ local function draw()
         local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
         
         if i == selectedIndex then
-            if isLastPlayed then
-                love.graphics.setColor(theme.colors.list_played_selected)
-            else
-                love.graphics.setColor(theme.colors.list_selection)
-            end
+            -- Cursor gris claro
+            love.graphics.setColor(0.9, 0.9, 0.9)
             love.graphics.rectangle("fill", 15, y - 4, layout.selWidth, layout.selHeight, 4)
-            love.graphics.setColor(theme.colors.selection_accent)
+            -- Texto e iconos en negro
+            love.graphics.setColor(0, 0, 0)
         else
             if isLastPlayed then
                 love.graphics.setColor(theme.colors.list_played_unselected)
@@ -225,23 +393,40 @@ local function draw()
             end
             
             love.graphics.draw(item.isDir and iconFolder or iconRom, 25, y, 0, layout.iconScale, layout.iconScale)
-            local maxChars = math.floor(layout.selWidth / 11)
             
-            if i == selectedIndex then
-                -- Simular negrita dibujando dos veces con offset
-                love.graphics.print(item.name:sub(1, maxChars), 55, y)
-                love.graphics.print(item.name:sub(1, maxChars), 56, y)
-            else
-                love.graphics.print(item.name:sub(1, maxChars), 55, y)
-            end
-
-            if item.sourceLabel then
-                love.graphics.printf(item.sourceLabel, 15, y, layout.selWidth - 10, "right")
-            else
-                local label = ""
+            -- Calcular etiqueta SD
+            local label = item.sourceLabel
+            if not label then
                 if romPath:find("/mnt/mmc") then label = "SD1"
                 elseif romPath:find("/mnt/sdcard") then label = "SD2" end
-                if label ~= "" then love.graphics.printf(label, 15, y, layout.selWidth - 10, "right") end
+            end
+            
+            local labelWidth = 0
+            if label then labelWidth = fontList:getWidth(label) end
+            
+            -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(15)
+            local availableWidth = layout.selWidth - 55 - labelWidth - 15
+            local nameToDraw = item.name
+            
+            if fontList:getWidth(nameToDraw) > availableWidth then
+                while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
+                    nameToDraw = nameToDraw:sub(1, -2)
+                end
+                nameToDraw = nameToDraw .. "..."
+            end
+            
+            if i == selectedIndex then
+                love.graphics.print(nameToDraw, 55, y)
+                love.graphics.print(nameToDraw, 56, y)
+            else
+                love.graphics.print(nameToDraw, 55, y)
+            end
+
+            if label then
+                if i == selectedIndex then
+                    love.graphics.setColor(theme.colors.text_medium) -- Restaurar color visible fuera del selector
+                end
+                love.graphics.printf(label, sdColX, y, sdColW, "center")
             end
         end
     end
@@ -249,34 +434,85 @@ local function draw()
     -- Scrollbar
     drawScrollbar()
 
-    -- Boxart
-    if currentImage then
-        local scale = math.min(layout.boxartMaxW/currentImage:getWidth(), layout.boxartMaxH/currentImage:getHeight())
-        love.graphics.setColor(theme.colors.text_white)
-        love.graphics.draw(currentImage, 340, layout.listY, 0, scale, scale)
+    -- Columna de Vista Previa (Boxart + Screenshot)
+    if showPreview then
+        local previewY = layout.listY
+
+        -- Boxart (Frontal)
+        if currentImage then
+            local boxMaxH = 165
+            local scale = math.min(previewBoxW/currentImage:getWidth(), boxMaxH/currentImage:getHeight())
+            love.graphics.setColor(theme.colors.text_white)
+            local imgW = currentImage:getWidth() * scale
+            local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
+            previewY = previewY + (currentImage:getHeight() * scale) + 15
+        else
+            previewY = previewY + 180
+        end
+
+        -- Screenshot (Pantalla)
+        if currentScreenshot then
+            local screenMaxH = 125
+            local scale = math.min(previewBoxW/currentScreenshot:getWidth(), screenMaxH/currentScreenshot:getHeight())
+            love.graphics.setColor(theme.colors.text_white)
+            local imgW = currentScreenshot:getWidth() * scale
+            local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
+        end
     end
 
     if state == "OPTIONS_MENU" or state == "DELETE_MENU" then
         drawSideMenu()
     end
 
-    -- Draw Search UI if active
-    if state == "SEARCH" then
-        local barHeight = 30
-        local barY = h - barHeight - 30 -- Place it above the bottom bar
-        
-        -- Draw search bar background
-        love.graphics.setColor(theme.colors.bottom_bar_background)
-        love.graphics.rectangle("fill", 0, barY, w, barHeight)
-        
-        -- Draw search text
-        love.graphics.setFont(fontMedium)
-        love.graphics.setColor(theme.colors.text_bright)
-        love.graphics.print("Buscar: " .. searchQuery .. "_", 20, barY + 5)
-    end
-
     -- Barra de estado
     drawBottomBar()
+
+    -- Draw Search UI if active
+    if state == "SEARCH" then
+        -- Fondo oscuro para el teclado
+        love.graphics.setColor(0, 0, 0, 0.9)
+        love.graphics.rectangle("fill", 0, h - 250, w, 250)
+        
+        -- Barra de búsqueda
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.setFont(fontTitle)
+        love.graphics.printf("Buscar: " .. searchQuery .. "_", 0, h - 240, w, "center")
+        
+        -- Teclado Virtual
+        love.graphics.setFont(fontMedium)
+        local keySize = 40
+        local spacing = 5
+        local startY = h - 190
+        
+        for r, row in ipairs(keyboardGrid) do
+            local rowWidth = #row * (keySize + spacing) - spacing
+            local startX = (w - rowWidth) / 2
+            
+            for c, key in ipairs(row) do
+                local x = startX + (c-1) * (keySize + spacing)
+                local y = startY + (r-1) * (keySize + spacing)
+                local kW = keySize
+                
+                -- Teclas especiales más anchas
+                if key == "SPACE" or key == "BACK" or key == "OK" then
+                    kW = keySize * 2
+                    x = startX + (c-1) * (kW + spacing) -- Ajuste simple para la última fila
+                end
+                
+                if r == keyboardRow and c == keyboardCol then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                else
+                    love.graphics.setColor(theme.colors.placeholder_background)
+                end
+                love.graphics.rectangle("fill", x, y, kW, keySize, 5)
+                
+                love.graphics.setColor(theme.colors.text_white)
+                love.graphics.printf(key, x, y + 10, kW, "center")
+            end
+        end
+    end
 end
 
 return draw

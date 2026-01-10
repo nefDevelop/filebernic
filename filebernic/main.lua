@@ -1,6 +1,4 @@
 local json = require "libs.dkjson"
-local http = require "love.http"
-
 -- Utility function to split a string by a delimiter
 function split(s, delimiter)
     local result = {};
@@ -11,37 +9,56 @@ function split(s, delimiter)
 end
 
 -- Variables de configuración y estado
-local systemName = "GBA"
-local romPath = ""
-local secondaryPath = nil
-local muosArtPath = ""
-local muosTextPath = ""
-local files = {}
-local selectedIndex = 1
-local state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRAPING_IN_PROGRESS, SCRAPER_RESULTS, SEARCH
-local itemToDelete = nil
-local lastPlayedRom = ""
-local playedRoms = {}
-local iconFolder, iconRom, currentImage, buttonIcons
-local timer, delay, pendingLoad = 0, 0.2, false
-local inputCooldown = 0 -- Temporizador para evitar doble input
-local launching = false -- Estado de lanzamiento
-local launchTimer = 0
-local hideEmpty = false
-local pageSize = 13
-local selectedFilesCount = 0
-local theme
-local fontList, fontTitle, fontSmall, fontMedium
-local menuOptions = {"Borrar"}
-local menuSelection = 1
-local menuTitle = ""
-local menuMessage = ""
-local scraperResults = {}
-local scraperSelection = 1
-local searchQuery = ""
-local allFiles = {}
+systemName = ""
+romPath = ""
+config = {
+    scraperApi = "libretro", -- Opciones: "libretro", "screenscraper", "thegamesdb"
+    screenscraper_devid = "",
+    screenscraper_password = "",
+    thegamesdb_apikey = ""
+}
+scraperApi = config.scraperApi
+secondaryPath = nil
+muosArtPath = ""
+muosTextPath = ""
+muosPreviewPath = ""
+files = {}
+selectedIndex = 1
+state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRAPING_IN_PROGRESS, SCRAPER_RESULTS, SEARCH
+itemToDelete = nil
+lastPlayedRom = ""
+playedRoms = {}
+iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons = nil, nil, nil, nil, nil, nil
+currentDescription = ""
+timer, delay, pendingLoad = 0, 0.05, false
+inputCooldown = 0 -- Temporizador para evitar doble input
+launching = false -- Estado de lanzamiento
+launchTimer = 0
+hideEmpty = false
+pageSize = 13
+selectedFilesCount = 0
+theme = nil
+fontList, fontTitle, fontSmall, fontMedium = nil, nil, nil, nil
+menuOptions = {"Borrar"}
+menuSelection = 1
+menuTitle = ""
+menuMessage = ""
+scraperResults = {}
+scraperSelection = 1
+searchQuery = ""
+allFiles = {}
+-- Virtual Keyboard
+keyboardGrid = {
+    {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"},
+    {"A", "S", "D", "F", "G", "H", "J", "K", "L"},
+    {"Z", "X", "C", "V", "B", "N", "M", ".", "-"},
+    {"SPACE", "BACK", "OK"}
+}
+keyboardRow = 1
+keyboardCol = 1
 
-local validExtensions = {
+validExtensions = {
     -- Nintendo
     gb=true, gbc=true, gba=true, nes=true, fds=true, unf=true, unif=true,
     snes=true, smc=true, sfc=true, fig=true, swc=true, bs=true, bml=true,
@@ -109,7 +126,7 @@ local validExtensions = {
 }
 
 -- Configuración de diseño (Layout)
-local layout = {
+layout = {
     listY = 60,           -- Posición Y inicial de la lista
     rowHeight = 30,       -- Altura de cada fila
     selWidth = 300,       -- Ancho del selector
@@ -122,11 +139,11 @@ local layout = {
 }
 
 -- Variables para el control de scroll
-local scrollTimer = 0
-local initialScrollDelay = 0.4
-local subsequentScrollDelay = 0.1
-local keyHeld = nil -- ('up' o 'down')
-local isVirtualRoot = false
+scrollTimer = 0
+initialScrollDelay = 0.4
+subsequentScrollDelay = 0.1
+keyHeld = nil -- ('up' o 'down')
+isVirtualRoot = false
 
 function createMergedVirtualRoot()
     files = {}
@@ -208,7 +225,30 @@ function createMergedVirtualRoot()
     loadPreview()
 end
 
+function updateSystemPaths()
+    local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
+    
+    if detectedSystem and detectedSystem ~= systemName then
+        systemName = detectedSystem
+        
+        local baseMuosPath = ""
+        if io.open("/mnt/mmc", "r") then
+             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
+        else
+             local cwd = love.filesystem.getSource()
+             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+             local simPath = cwd .. "/../Simulador_SD/"
+             baseMuosPath = simPath .. "MUOS/info/catalogue/"
+        end
+        muosArtPath = baseMuosPath .. systemName .. "/box/"
+        muosTextPath = baseMuosPath .. systemName .. "/text/"
+        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+        -- Year is stored in text path with .year extension
+    end
+end
+
 function refreshFiles()
+    updateSystemPaths()
     files = {}
     selectedFilesCount = 0
     -- Botón para subir nivel si no estamos en la raíz
@@ -265,21 +305,484 @@ function filterFiles()
     selectedIndex = 1
 end
 
+-- Helper para codificar URL
+local function urlencode(str)
+    if (str) then
+        str = string.gsub (str, "\n", "\r\n")
+        str = string.gsub (str, "([^%w %-%_%.%~])",
+            function (c) return string.format ("%%%02X", string.byte(c)) end)
+        str = string.gsub (str, " ", "+")
+    end
+    return str
+end
+
+function loadConfig()
+    local configPath = love.filesystem.getSource() .. "/data/config.json"
+    local f = io.open(configPath, "r")
+    if f then
+        local content = f:read("*all")
+        f:close()
+        local loaded = json.decode(content)
+        if loaded then
+            for k, v in pairs(loaded) do config[k] = v end
+        end
+    else
+        f = io.open(configPath, "w")
+        if f then
+            f:write(json.encode(config))
+            f:close()
+        end
+    end
+    scraperApi = config.scraperApi
+end
+
+function startScraping()
+    local item = files[selectedIndex]
+    if not item then return end
+    
+    log("Starting scrape for: " .. item.name)
+
+    -- Detectar sistema desde el archivo actual para asegurar rutas correctas
+    local currentPath = item.fullPath or (romPath .. item.name)
+    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
+    
+    if detectedSystem and detectedSystem ~= systemName then
+        systemName = detectedSystem
+        
+        log("System detected changed to: " .. systemName)
+        -- Recalcular rutas de arte
+        local baseMuosPath = ""
+        if io.open("/mnt/mmc", "r") then
+             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
+        else
+             local cwd = love.filesystem.getSource()
+             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+             local simPath = cwd .. "/../Simulador_SD/"
+             baseMuosPath = simPath .. "MUOS/info/catalogue/"
+        end
+        muosArtPath = baseMuosPath .. systemName .. "/box/"
+        muosTextPath = baseMuosPath .. systemName .. "/text/"
+        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+    end
+
+    state = "SCRAPING_IN_PROGRESS"
+    love.graphics.present() -- Forzar dibujado para mostrar mensaje de espera
+    
+    scraperResults = {}
+    scraperSelection = 1
+    
+    local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
+    local encodedName = urlencode(cleanName)
+
+    if scraperApi == "screenscraper" then
+    -- Configuración API ScreenScraper
+    local devid = config.screenscraper_devid
+    local devpassword = config.screenscraper_password
+    local softname = "FileBernic"
+    
+    if devid == "" or devpassword == "" then
+        table.insert(scraperResults, {
+            error = true,
+            text = "Error: Faltan credenciales en data/config.json"
+        })
+        state = "SCRAPER_RESULTS"
+        return
+    end
+
+    -- Construir URL para buscar por nombre de archivo (romNom)
+    local url = "https://www.screenscraper.fr/api2/jeuInfos.php?output=json&romNom=" .. encodedName
+    if devid ~= "" then
+        url = url .. "&devid=" .. devid .. "&devpassword=" .. devpassword .. "&softname=" .. softname
+    else
+        -- Intento sin credenciales (puede requerir softname registrado)
+        url = url .. "&softname=" .. softname
+    end
+
+    log("Scraping Request URL: " .. url)
+
+    -- Ejecutar curl
+    local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
+    local response = handle:read("*a")
+    handle:close()
+    log("Scraping Response: " .. (response or "nil"))
+
+    if response and response ~= "" then
+        if response:sub(1, 1) ~= "{" then
+            table.insert(scraperResults, {
+                error = true,
+                text = "API Error: " .. response
+            })
+        else
+            local data, pos, err = json.decode(response)
+            if data and data.response and data.response.jeu then
+            local game = data.response.jeu
+            -- ScreenScraper a veces devuelve un array o un objeto único
+            -- Aquí asumimos respuesta simple por nombre exacto o procesamos el primero
+            
+            -- Buscar imagen (boxart 2d o 3d)
+            local imageUrl = nil
+            local screenUrl = nil
+            local region = "Mundo"
+            local description = "Sin descripción."
+            local year = nil
+            
+            if game.synopsis then
+                if type(game.synopsis) == "table" and #game.synopsis > 0 then
+                    for _, s in ipairs(game.synopsis) do
+                        if s.langue == "es" then description = s.text break end
+                        if s.langue == "en" and description == "Sin descripción." then description = s.text end
+                    end
+                elseif type(game.synopsis) == "string" then
+                    description = game.synopsis
+                elseif type(game.synopsis) == "table" and game.synopsis.text then
+                    description = game.synopsis.text
+                end
+            end
+            
+            if game.dates then
+                for _, d in ipairs(game.dates) do
+                    if d.text then
+                        year = d.text:match("^(%d%d%d%d)")
+                        if year then break end
+                    end
+                end
+            end
+            
+            if game.medias and game.medias.media then
+                local medias = game.medias.media
+                if not medias[1] then medias = {medias} end
+                for _, media in ipairs(medias) do
+                    if media.type == "box-2d" or media.type == "box-3d" then
+                        imageUrl = media.url
+                        region = media.region or region
+                    elseif media.type == "ss" then
+                        screenUrl = media.url
+                    end
+                end
+            end
+
+            if imageUrl then
+                -- Descargar imagen temporal
+                local tempImgPath = "/tmp/scraper_temp.png"
+                os.execute("curl -s -L '" .. imageUrl .. "' -o " .. tempImgPath)
+                
+                local tempScreenPath = nil
+                local screenImg = nil
+                if screenUrl then
+                    tempScreenPath = "/tmp/scraper_temp_screen.png"
+                    os.execute("curl -s -L '" .. screenUrl .. "' -o " .. tempScreenPath)
+                    if love.filesystem.getInfo(tempScreenPath) or io.open(tempScreenPath, "r") then
+                         local sData = love.image.newImageData(tempScreenPath)
+                         screenImg = love.graphics.newImage(sData)
+                    end
+                end
+
+                -- Cargar en LÖVE
+                if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
+                    local imgData = love.image.newImageData(tempImgPath)
+                    local img = love.graphics.newImage(imgData)
+                    table.insert(scraperResults, {
+                        image = img,
+                        screenshot = screenImg,
+                        tempScreenPath = tempScreenPath,
+                        description = description,
+                        year = year,
+                        region = region,
+                        tempPath = tempImgPath
+                    })
+                end
+            end
+            end
+        end
+    end
+
+    elseif scraperApi == "thegamesdb" then
+        -- Configuración API TheGamesDB
+        local apikey = config.thegamesdb_apikey
+        
+        if apikey == "" then
+            table.insert(scraperResults, {
+                error = true,
+                text = "Error: Falta API Key en data/config.json"
+            })
+            state = "SCRAPER_RESULTS"
+            return
+        end
+
+        local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview&include=boxart,screenshot"
+        log("TGDB Request: " .. url)
+
+        local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
+        local response = handle:read("*a")
+        handle:close()
+        log("TGDB Response: " .. (response or "nil"))
+
+        if response and response:sub(1, 1) == "{" then
+            local data = json.decode(response)
+            if data and data.data and data.data.games then
+                for _, game in ipairs(data.data.games) do
+                    local gameId = tostring(game.id)
+                    -- Buscar imagen en los datos incluidos (sideloaded)
+                    if data.include and data.include.boxart and data.include.boxart.data and data.include.boxart.data[gameId] then
+                        for _, art in ipairs(data.include.boxart.data[gameId]) do
+                            if art.side == "front" then
+                                local imageUrl = "https://cdn.thegamesdb.net/images/original/" .. art.filename
+                                local tempImgPath = "/tmp/scraper_tgdb_" .. gameId .. ".png"
+                                os.execute("curl -s -L '" .. imageUrl .. "' -o " .. tempImgPath)
+                                
+                                local year = nil
+                                if game.release_date then
+                                    year = game.release_date:match("^(%d%d%d%d)")
+                                end
+                                
+                                local screenImg = nil
+                                local tempScreenPath = nil
+                                if data.include.screenshot and data.include.screenshot.data and data.include.screenshot.data[gameId] then
+                                    local scr = data.include.screenshot.data[gameId][1]
+                                    if scr then
+                                        local screenUrl = "https://cdn.thegamesdb.net/images/original/" .. scr.filename
+                                        tempScreenPath = "/tmp/scraper_tgdb_scr_" .. gameId .. ".png"
+                                        os.execute("curl -s -L '" .. screenUrl .. "' -o " .. tempScreenPath)
+                                        if love.filesystem.getInfo(tempScreenPath) or io.open(tempScreenPath, "r") then
+                                            screenImg = love.graphics.newImage(tempScreenPath)
+                                        end
+                                    end
+                                end
+
+                                if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
+                                    local imgData = love.image.newImageData(tempImgPath)
+                                    local img = love.graphics.newImage(imgData)
+                                    table.insert(scraperResults, {
+                                        image = img,
+                                        screenshot = screenImg,
+                                        tempScreenPath = tempScreenPath,
+                                        description = game.overview or "Sin descripción.",
+                                        year = year,
+                                        region = game.game_title, -- Usamos el título como info
+                                        tempPath = tempImgPath
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+    elseif scraperApi == "libretro" then
+        -- Repositorio de miniaturas de Libretro (Sin API Key, basado en nombres No-Intro)
+        local libretroSystems = {
+            gba = "Nintendo - Game Boy Advance",
+            snes = "Nintendo - Super Nintendo Entertainment System",
+            sfc = "Nintendo - Super Nintendo Entertainment System",
+            nes = "Nintendo - Nintendo Entertainment System",
+            fc = "Nintendo - Nintendo Entertainment System",
+            gb = "Nintendo - Game Boy",
+            gbc = "Nintendo - Game Boy Color",
+            md = "Sega - Mega Drive - Genesis",
+            gen = "Sega - Mega Drive - Genesis",
+            ps = "Sony - PlayStation",
+            ps1 = "Sony - PlayStation",
+            psx = "Sony - PlayStation",
+            nds = "Nintendo - Nintendo DS",
+            n64 = "Nintendo - Nintendo 64",
+            sms = "Sega - Master System - Mark III",
+            gg = "Sega - Game Gear",
+            neogeo = "SNK - Neo Geo",
+            arcade = "MAME",
+            mame = "MAME",
+            fbneo = "MAME",
+            pce = "NEC - PC Engine",
+            ngp = "SNK - Neo Geo Pocket",
+            ngpc = "SNK - Neo Geo Pocket Color"
+        }
+        
+        local sysName = libretroSystems[systemName:lower()]
+        if not sysName then
+             local msg = "Sistema no mapeado en Libretro: " .. tostring(systemName)
+             log(msg)
+             table.insert(scraperResults, {error=true, text=msg})
+        else
+             -- Ajustar encoding para URL de Libretro (espacios como %20 en lugar de +)
+             local sysEncoded = urlencode(sysName):gsub("%+", "%%20")
+             local nameEncoded = encodedName:gsub("%+", "%%20")
+
+             local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEncoded .. ".png"
+             log("Libretro Request: " .. url)
+             
+             local tempImgPath = "/tmp/scraper_libretro.png"
+             -- Usamos curl -v y capturamos stderr para ver la respuesta en el log
+             local handle = io.popen("curl -v -s -L -f '" .. url .. "' -o " .. tempImgPath .. " 2>&1")
+             local output = handle:read("*a")
+             handle:close()
+             log("Libretro Response: " .. (output or "nil"))
+             
+             -- Try to fetch snap (Screenshot)
+             local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEncoded .. ".png"
+             local tempScreenPath = "/tmp/scraper_libretro_snap.png"
+             local screenImg = nil
+             local hSnap = io.popen("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
+             hSnap:close()
+             
+             local fSnap = io.open(tempScreenPath, "rb")
+             if fSnap then
+                 local sData = fSnap:read("*a")
+                 fSnap:close()
+                 if sData and #sData > 0 then
+                     screenImg = love.graphics.newImage(love.filesystem.newFileData(sData, "snap.png"))
+                 end
+             end
+             
+             -- Verificar si el archivo existe y tiene contenido
+             local f = io.open(tempImgPath, "rb")
+             local data = nil
+             if f then
+                 data = f:read("*a")
+                 f:close()
+             end
+
+             if data and #data > 0 then
+                 local fileData = love.filesystem.newFileData(data, "scraper.png")
+                 local img = love.graphics.newImage(fileData)
+                 table.insert(scraperResults, {
+                     image = img,
+                     screenshot = screenImg,
+                     tempScreenPath = tempScreenPath,
+                     description = "Libretro no proporciona descripciones.",
+                     region = "Libretro (Auto)",
+                     tempPath = tempImgPath
+                 })
+             else
+                 table.insert(scraperResults, {error=true, text="No encontrado (Requiere nombre exacto No-Intro)"})
+             end
+        end
+
+    elseif scraperApi == "mock" then
+        -- Modo de prueba sin API Key
+        log("Mock Scraping: " .. item.name)
+        
+        -- Usamos un asset existente como resultado falso
+        local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
+        local mockTemp = "/tmp/scraper_mock.png"
+        
+        os.execute("cp '" .. mockSrc .. "' " .. mockTemp)
+        
+        if io.open(mockTemp, "r") then
+            local img = love.graphics.newImage(mockTemp)
+            table.insert(scraperResults, {
+                image = img,
+                description = "Esto es una descripción de prueba en modo Mock.",
+                region = "Mock Result (Test)",
+                tempPath = mockTemp
+            })
+        end
+    end
+    
+    state = "SCRAPER_RESULTS"
+end
+
+function saveSelectedArt()
+    local result = scraperResults[scraperSelection]
+    if result and result.tempPath then
+        local item = files[selectedIndex]
+        local baseName = item.name:gsub("%..-$", "")
+        
+        -- Asegurar directorio de destino
+        os.execute("mkdir -p '" .. muosArtPath .. "'")
+        
+        -- Mover archivo temporal a destino final
+        local destPath = muosArtPath .. baseName .. ".png"
+        log("Saving boxart to: " .. destPath)
+        os.execute("cp '" .. result.tempPath .. "' '" .. destPath .. "'")
+        
+        -- Guardar descripción
+        if result.description then
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
+            local txtPath = muosTextPath .. baseName .. ".txt"
+            log("Saving description to: " .. txtPath)
+            local f = io.open(txtPath, "w")
+            if f then
+                f:write(result.description)
+                f:close()
+            end
+        end
+        
+        -- Guardar año
+        if result.year then
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
+            local yearPath = muosTextPath .. baseName .. ".year"
+            log("Saving year to: " .. yearPath)
+            local f = io.open(yearPath, "w")
+            if f then
+                f:write(result.year)
+                f:close()
+            end
+        end
+        
+        -- Guardar screenshot (si existe carpeta preview)
+        if result.tempScreenPath and muosPreviewPath ~= "" then
+            os.execute("mkdir -p '" .. muosPreviewPath .. "'")
+            local destScreen = muosPreviewPath .. baseName .. ".png"
+            log("Saving preview to: " .. destScreen)
+            os.execute("cp '" .. result.tempScreenPath .. "' '" .. destScreen .. "'")
+        end
+    end
+    
+    state = "LIST"
+    loadPreview()
+end
+
 function loadPreview()
     currentImage = nil
+    currentScreenshot = nil
+    currentYear = nil
+    currentDescription = ""
     if #files == 0 or files[selectedIndex].isDir then return end
     
     local baseName = files[selectedIndex].name:gsub("%..-$", "")
-    local imgFile = muosArtPath .. baseName .. ".png"
     
-    local f = io.open(imgFile, "r")
+    -- Boxart
+    local imgFile = muosArtPath .. baseName .. ".png"
+    local f = io.open(imgFile, "rb")
     if f then
+        local data = f:read("*a")
         f:close()
-        currentImage = love.graphics.newImage(imgFile)
+        if data then
+            local fileData = love.filesystem.newFileData(data, "boxart.png")
+            currentImage = love.graphics.newImage(fileData)
+        end
+    end
+    
+    -- Screenshot
+    local scrFile = muosPreviewPath .. baseName .. ".png"
+    local fScr = io.open(scrFile, "rb")
+    if fScr then
+        local data = fScr:read("*a")
+        fScr:close()
+        if data then
+            local fileData = love.filesystem.newFileData(data, "preview.png")
+            currentScreenshot = love.graphics.newImage(fileData)
+        end
+    end
+    
+    -- Description
+    local txtFile = muosTextPath .. baseName .. ".txt"
+    local fTxt = io.open(txtFile, "r")
+    if fTxt then
+        currentDescription = fTxt:read("*all")
+        fTxt:close()
+    end
+    
+    -- Year
+    local yearFile = muosTextPath .. baseName .. ".year"
+    local fYear = io.open(yearFile, "r")
+    if fYear then
+        currentYear = fYear:read("*all")
+        fYear:close()
     end
 end
 
-local function saveHistory()
+function saveHistory()
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/played_roms.txt", "w")
     if f then
@@ -290,7 +793,7 @@ local function saveHistory()
     end
 end
 
-local function getTargetSDPath(currentPath)
+function getTargetSDPath(currentPath)
     if currentPath:find("/mnt/mmc") then
         return currentPath:gsub("/mnt/mmc", "/mnt/sdcard"), "SD2"
     elseif currentPath:find("/mnt/sdcard") then
@@ -299,7 +802,7 @@ local function getTargetSDPath(currentPath)
     return nil, nil
 end
 
-local function resolveSecondary(path)
+function resolveSecondary(path)
     local p2 = nil
     if path:find("/mnt/mmc") then
         p2 = path:gsub("/mnt/mmc", "/mnt/sdcard")
@@ -311,7 +814,7 @@ local function resolveSecondary(path)
     return nil
 end
 
-local function saveLastPlayed(path)
+function saveLastPlayed(path)
     local dataDir = love.filesystem.getSource() .. "/data"
     os.execute("mkdir -p " .. dataDir)
     local f = io.open(dataDir .. "/last_played.txt", "w")
@@ -321,7 +824,7 @@ local function saveLastPlayed(path)
     end
 end
 
-local function addToHistory(path)
+function addToHistory(path)
     if playedRoms[path] then return end
     playedRoms[path] = true
     local dataDir = love.filesystem.getSource() .. "/data"
@@ -333,8 +836,9 @@ local function addToHistory(path)
     end
 end
 
-local function log(message)
+function log(message)
     local logPath = love.filesystem.getSource() .. "/data/log/filebernic.log"
+    print("[CONSOLE] " .. message)
     local f = io.open(logPath, "a")
     if f then
         f:write("[LUA DEBUG] " .. os.date() .. ": " .. message .. "\n")
@@ -342,13 +846,23 @@ local function log(message)
     end
 end
 
-local function saveAppState()
+function saveAppState()
     local dataDir = love.filesystem.getSource() .. "/data"
     os.execute("mkdir -p " .. dataDir)
     local f = io.open(dataDir .. "/app_state.json", "w")
     if f then
+        -- Normalizar ruta para guardar (convertir a virtual ROMS/...)
+        local savedPath = romPath
+        if savedPath:find("/mnt/mmc/ROMS/") then
+            savedPath = savedPath:gsub("/mnt/mmc/ROMS/", "ROMS/")
+        elseif savedPath:find("/mnt/sdcard/ROMS/") then
+            savedPath = savedPath:gsub("/mnt/sdcard/ROMS/", "ROMS/")
+        elseif savedPath:find("Simulador_SD") then
+            savedPath = savedPath:gsub(".*Simulador_SD/", "ROMS/")
+        end
+
         local stateToSave = {
-            romPath = romPath,
+            romPath = savedPath,
             selectedIndex = selectedIndex,
             hideEmpty = hideEmpty
         }
@@ -357,8 +871,86 @@ local function saveAppState()
     end
 end
 
+function love.errorhandler(msg)
+    local err = tostring(msg)
+    local trace = debug.traceback()
+    
+    -- Log to file
+    local logPath = love.filesystem.getSource() .. "/data/log/filebernic.log"
+    local f = io.open(logPath, "a")
+    if f then
+        f:write("\n========================================\n")
+        f:write("[FATAL ERROR] " .. os.date() .. "\n")
+        f:write("Error: " .. err .. "\n")
+        f:write("Traceback:\n" .. trace .. "\n")
+        f:write("========================================\n")
+        f:close()
+    end
+
+    -- Standard LÖVE error handler logic
+    if not love.window or not love.graphics or not love.event then
+        return
+    end
+
+    if not love.graphics.isCreated() or not love.window.isOpen() then
+        local success, status = pcall(love.window.setMode, 800, 600)
+        if not success or not status then
+            return
+        end
+    end
+
+    if love.mouse then
+        love.mouse.setVisible(true)
+        love.mouse.setGrabbed(false)
+        love.mouse.setRelativeMode(false)
+    end
+
+    love.graphics.reset()
+    local font = love.graphics.setNewFont(14)
+    love.graphics.setColor(1, 1, 1, 1)
+
+    local function draw()
+        love.graphics.clear(89/255, 157/255, 220/255)
+        love.graphics.printf(err, 70, 70, love.graphics.getWidth() - 140)
+        love.graphics.printf(trace, 70, 70 + font:getHeight() + 10, love.graphics.getWidth() - 140)
+        love.graphics.present()
+    end
+
+    return function()
+        love.event.pump()
+        for e, a, b, c in love.event.poll() do
+            if e == "quit" or (e == "keypressed" and a == "escape") then
+                return 1
+            end
+        end
+        draw()
+        if love.timer then love.timer.sleep(0.1) end
+    end
+end
+
 function love.quit()
     saveAppState()
+    
+    -- Log content of art folders on exit
+    if muosArtPath and muosArtPath ~= "" then
+        log("Listing Boxart folder content: " .. muosArtPath)
+        local h = io.popen('ls -1 "'..muosArtPath..'"')
+        if h then 
+            local content = h:read("*a")
+            log(content and content ~= "" and content or "[Empty]") 
+            h:close() 
+        end
+    end
+    
+    if muosPreviewPath and muosPreviewPath ~= "" then
+        log("Listing Preview folder content: " .. muosPreviewPath)
+        local h = io.popen('ls -1 "'..muosPreviewPath..'"')
+        if h then 
+            local content = h:read("*a")
+            log(content and content ~= "" and content or "[Empty]") 
+            h:close() 
+        end
+    end
 end
 
 function love.load(arg)
@@ -394,6 +986,7 @@ function love.load(arg)
     
     muosArtPath = baseMuosPath .. systemName .. "/box/"
     muosTextPath = baseMuosPath .. systemName .. "/text/"
+    muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
     
     iconFolder = love.graphics.newImage("assets/folder.png")
     iconRom = love.graphics.newImage("assets/roms.png")
@@ -414,6 +1007,9 @@ function love.load(arg)
     fontSmall = theme.fonts.small
     fontMedium = theme.fonts.medium
 
+    -- Cargar configuración global (API keys, etc)
+    loadConfig()
+
     -- Cargar configuración guardada
     local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")
     if f then
@@ -422,7 +1018,33 @@ function love.load(arg)
         local loadedState = json.decode(content)
         if loadedState then
             if loadedState.hideEmpty ~= nil then hideEmpty = loadedState.hideEmpty end
-            if loadedState.romPath then romPath = loadedState.romPath end
+            if loadedState.romPath then 
+                local p = loadedState.romPath
+                -- Restaurar ruta real desde virtual (ROMS/...)
+                if p:match("^ROMS/") then
+                    local suffix = p:gsub("^ROMS/", "")
+                    
+                    -- Detectar entorno (Dispositivo vs Simulador)
+                    local fCheck = io.open("/mnt/mmc", "r")
+                    if fCheck then
+                        fCheck:close()
+                        -- Estamos en dispositivo (muOS)
+                        local pathSD1 = "/mnt/mmc/ROMS/" .. suffix
+                        -- Verificar si existe en SD1, sino asumir SD2
+                        local h = io.popen('ls -d "'..pathSD1..'" 2>/dev/null')
+                        local res = h:read("*a")
+                        h:close()
+                        romPath = (res and res ~= "") and pathSD1 or ("/mnt/sdcard/ROMS/" .. suffix)
+                    else
+                        -- Estamos en simulador
+                        local cwd = love.filesystem.getSource()
+                        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+                        romPath = cwd .. "/../Simulador_SD/" .. suffix
+                    end
+                else
+                    romPath = p
+                end
+            end
             if loadedState.selectedIndex then selectedIndex = loadedState.selectedIndex end
         end
     end
