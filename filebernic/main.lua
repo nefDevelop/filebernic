@@ -371,6 +371,9 @@ function startScraping()
     scraperResults = {}
     scraperSelection = 1
     
+    -- Limpiar archivos temporales anteriores para evitar falsos positivos si falla la descarga
+    os.execute("rm -f /tmp/scraper_*.png")
+    
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
     local encodedName = urlencode(cleanName)
 
