@@ -1,7 +1,7 @@
 #!/bin/bash
-# HELP: Filebernic
+# HELP: filebernic
 # ICON: filebernic
-# GRID: Filebernic
+# GRID: filebernic
 
 . /opt/muos/script/var/func.sh
 

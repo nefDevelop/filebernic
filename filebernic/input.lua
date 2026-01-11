@@ -122,6 +122,10 @@ local function keypressed(key)
                 hideEmpty = not hideEmpty
                 menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
                 if isVirtualRoot then createMergedVirtualRoot() end
+            elseif menuOptions[menuSelection]:match("Marcar Jugado") then
+                markPlayed = not markPlayed
+                menuOptions[menuSelection] = "Marcar Jugado: " .. (markPlayed and "Si" or "No")
+                saveAppState()
             elseif menuOptions[menuSelection]:match("Copiar") or menuOptions[menuSelection]:match("Mover") then
                 local isMove = menuOptions[menuSelection]:match("Mover")
                 local targetDir, _ = getTargetSDPath(romPath)
@@ -395,7 +399,7 @@ local function keypressed(key)
             end
             
             -- 2. Copiar / Mover
-            if item.sourceLabel ~= "SD1-SD2" then
+            if item.sourceLabel ~= "SD½" then
                 local _, targetLabel = getTargetSDPath(item.fullPath)
                 if targetLabel then
                     table.insert(menuOptions, "Copiar a " .. targetLabel)
@@ -404,7 +408,7 @@ local function keypressed(key)
             end
             
             -- 3. Borrar (Al final)
-            if item.sourceLabel == "SD1-SD2" then
+            if item.sourceLabel == "SD½" then
                 table.insert(menuOptions, "Borrar de SD1")
                 table.insert(menuOptions, "Borrar de SD2")
             else
@@ -430,6 +434,7 @@ local function keypressed(key)
         menuSelection = 1
         menuOptions = {}
         table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
+        table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
         inputCooldown = 0.3
     end
 end

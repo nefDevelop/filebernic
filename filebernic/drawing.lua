@@ -329,7 +329,7 @@ local function draw()
     local sdColX = layout.scrollbarX - sdColW - 5
     
     -- Columna Preview (izquierda de SD)
-    local previewBoxW = 220 -- Reducido para evitar exceso de espacio
+    local previewBoxW = 200 -- Reducido para evitar exceso de espacio
     local previewBoxX = sdColX - previewBoxW - 10
     
     local showPreview = (currentImage ~= nil or currentScreenshot ~= nil)
@@ -376,7 +376,7 @@ local function draw()
             -- Texto e iconos en negro
             love.graphics.setColor(0, 0, 0)
         else
-            if isLastPlayed then
+            if isLastPlayed and markPlayed then
                 love.graphics.setColor(theme.colors.list_played_unselected)
                 love.graphics.rectangle("fill", 15, y - 4, layout.selWidth, layout.selHeight, 4)
             end
@@ -404,8 +404,8 @@ local function draw()
             local labelWidth = 0
             if label then labelWidth = fontList:getWidth(label) end
             
-            -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(15)
-            local availableWidth = layout.selWidth - 55 - labelWidth - 15
+            -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(5)
+            local availableWidth = layout.selWidth - 55 - labelWidth - 5
             local nameToDraw = item.name
             
             if fontList:getWidth(nameToDraw) > availableWidth then
@@ -423,8 +423,16 @@ local function draw()
             end
 
             if label then
+                -- Colores distintivos para SD
+                if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
+                elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
+                elseif label == "SD½" then love.graphics.setColor(0.8, 0.5, 1)
+                else love.graphics.setColor(theme.colors.text_dim) end
+
                 if i == selectedIndex then
-                    love.graphics.setColor(theme.colors.text_medium) -- Restaurar color visible fuera del selector
+                    -- Oscurecer un poco para contraste sobre fondo claro
+                    local r, g, b = love.graphics.getColor()
+                    love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
                 end
                 love.graphics.printf(label, sdColX, y, sdColW, "center")
             end

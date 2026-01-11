@@ -35,6 +35,7 @@ inputCooldown = 0 -- Temporizador para evitar doble input
 launching = false -- Estado de lanzamiento
 launchTimer = 0
 hideEmpty = false
+markPlayed = true
 pageSize = 13
 selectedFilesCount = 0
 theme = nil
@@ -145,6 +146,20 @@ subsequentScrollDelay = 0.1
 keyHeld = nil -- ('up' o 'down')
 isVirtualRoot = false
 
+local function hasRoms(path)
+    local h = io.popen('ls -p "'..path..'"')
+    if not h then return false end
+    for l in h:lines() do
+        local ext = l:match("[^%.]+$")
+        if l:sub(-1) ~= "/" and ext and validExtensions[ext:lower()] then
+            h:close()
+            return true
+        end
+    end
+    h:close()
+    return false
+end
+
 function createMergedVirtualRoot()
     files = {}
     isVirtualRoot = true
@@ -153,20 +168,6 @@ function createMergedVirtualRoot()
     selectedIndex = 1
 
     local dirMap = {} -- Mapa para rastrear directorios y fusionar etiquetas
-
-    local function hasRoms(path)
-        local h = io.popen('ls -p "'..path..'"')
-        if not h then return false end
-        for l in h:lines() do
-            local ext = l:match("[^%.]+$")
-            if l:sub(-1) ~= "/" and ext and validExtensions[ext:lower()] then
-                h:close()
-                return true
-            end
-        end
-        h:close()
-        return false
-    end
 
     local function scanAndAdd(scanPath, label)
         local f = io.open(scanPath, "r")
@@ -182,7 +183,7 @@ function createMergedVirtualRoot()
                     if dirName ~= "BIOS" and dirName ~= "Saves" then
                         if not hideEmpty or hasRoms(scanPath .. line) then
                             if dirMap[dirName] then
-                                files[dirMap[dirName]].sourceLabel = "SD1-SD2"
+                                files[dirMap[dirName]].sourceLabel = "SD½"
                                 files[dirMap[dirName]].secondaryPath = scanPath .. line
                             else
                                 table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label})
@@ -269,12 +270,19 @@ function refreshFiles()
                 local cleanName = isDirectory and line:sub(1, -2) or line
                 local ext = cleanName:match("[^%.]+$")
                 if isDirectory or (ext and validExtensions[ext:lower()]) then
-                    if fileMap[cleanName] then
-                        files[fileMap[cleanName]].sourceLabel = "SD1-SD2"
-                        files[fileMap[cleanName]].secondaryPath = path .. line
-                    else
-                        table.insert(files, {name = cleanName, isDir = isDirectory, fullPath = path .. line, sourceLabel = label})
-                        fileMap[cleanName] = #files
+                    local skip = false
+                    if isDirectory and hideEmpty and not hasRoms(path .. line) then
+                        skip = true
+                    end
+
+                    if not skip then
+                        if fileMap[cleanName] then
+                            files[fileMap[cleanName]].sourceLabel = "SD½"
+                            files[fileMap[cleanName]].secondaryPath = path .. line
+                        else
+                            table.insert(files, {name = cleanName, isDir = isDirectory, fullPath = path .. line, sourceLabel = label})
+                            fileMap[cleanName] = #files
+                        end
                     end
                 end
             end
@@ -867,7 +875,8 @@ function saveAppState()
         local stateToSave = {
             romPath = savedPath,
             selectedIndex = selectedIndex,
-            hideEmpty = hideEmpty
+            hideEmpty = hideEmpty,
+            markPlayed = markPlayed
         }
         f:write(json.encode(stateToSave))
         f:close()
@@ -1021,6 +1030,7 @@ function love.load(arg)
         local loadedState = json.decode(content)
         if loadedState then
             if loadedState.hideEmpty ~= nil then hideEmpty = loadedState.hideEmpty end
+            if loadedState.markPlayed ~= nil then markPlayed = loadedState.markPlayed end
             if loadedState.romPath then 
                 local p = loadedState.romPath
                 -- Restaurar ruta real desde virtual (ROMS/...)
