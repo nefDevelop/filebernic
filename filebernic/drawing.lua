@@ -55,29 +55,37 @@ end
 local function drawSideMenu()
     local w, h = love.graphics.getDimensions()
     
-    -- Overlay oscuro
-    love.graphics.setColor(theme.colors.overlay_dark)
+    -- Animación (Slide in)
+    local t = menuAnim
+    local ease = 1 - (1 - t)^3 -- Cubic ease out
+    local offset = (w / 2) * (1 - ease)
+    
+    -- Overlay oscuro (Fade in)
+    local r, g, b, a = unpack(theme.colors.overlay_dark)
+    love.graphics.setColor(r, g, b, a * ease)
     love.graphics.rectangle("fill", 0, 0, w/2, h)
 
     -- Panel lateral
     love.graphics.setColor(theme.colors.side_menu_background)
-    love.graphics.rectangle("fill", w/2, 0, w/2, h)
+    love.graphics.rectangle("fill", w/2 + offset, 0, w/2, h)
     
     -- Línea separadora
     love.graphics.setColor(theme.colors.side_menu_separator)
-    love.graphics.line(w/2, 0, w/2, h)
+    love.graphics.line(w/2 + offset, 0, w/2 + offset, h)
+
+    local contentX = w/2 + offset
 
     -- Título
     love.graphics.setColor(theme.colors.text_white)
     love.graphics.setFont(fontTitle)
-    love.graphics.printf(menuTitle, w/2 + 20, 40, w/2 - 40, "left")
+    love.graphics.printf(menuTitle, contentX + 20, 40, w/2 - 40, "left")
 
     -- Mensaje
     local startY = 90
     if menuMessage and menuMessage ~= "" then
         love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.printf(menuMessage, w/2 + 20, 80, w/2 - 40, "left")
+        love.graphics.printf(menuMessage, contentX + 20, 80, w/2 - 40, "left")
         local width, wrappedtext = fontMedium:getWrap(menuMessage, w/2 - 40)
         startY = 80 + (#wrappedtext * fontMedium:getHeight()) + 30
     end
@@ -88,7 +96,7 @@ local function drawSideMenu()
         local y = startY + (i-1) * 40
         if i == menuSelection then
             love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", w/2 + 10, y - 5, w/2 - 20, 30, 5)
+            love.graphics.rectangle("fill", contentX + 10, y - 5, w/2 - 20, 30, 5)
             love.graphics.setColor(theme.colors.text_white)
         else
             if option:find("Borrar") or option:find("Limpiar") then
@@ -97,7 +105,7 @@ local function drawSideMenu()
                 love.graphics.setColor(theme.colors.text_dim)
             end
         end
-        love.graphics.print(option, w/2 + 20, y)
+        love.graphics.print(option, contentX + 20, y)
     end
 end
 
@@ -347,6 +355,28 @@ local function drawSaveManager()
     drawBottomBar()
 end
 
+local function drawTrimmed(text, x, y, limit, font)
+    local dText = text
+    if font:getWidth(dText) > limit then
+        while font:getWidth(dText .. "...") > limit and #dText > 0 do
+            dText = dText:sub(1, -2)
+        end
+        dText = dText .. "..."
+    end
+    love.graphics.print(dText, x, y)
+end
+
+local function drawTrimmedStart(text, x, y, limit, font)
+    local dText = text
+    if font:getWidth(dText) > limit then
+        while font:getWidth("..." .. dText) > limit and #dText > 0 do
+            dText = dText:sub(2)
+        end
+        dText = "..." .. dText
+    end
+    love.graphics.print(dText, x, y)
+end
+
 local function drawCleanupMenu()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
@@ -376,8 +406,13 @@ local function drawCleanupMenu()
         
     else
         -- Resultados (2 Columnas)
-        local col1X, colW = 20, w/2 - 30
-        local col2X = w/2 + 10
+        local hasImages = #cleanupData.orphanedImages > 0
+        local colCount = hasImages and 3 or 2
+        local colW = (w - 40 - (colCount-1)*10) / colCount
+        
+        local col1X = 20
+        local col2X = col1X + colW + 10
+        local col3X = col2X + colW + 10
         
         -- Cabeceras
         love.graphics.setFont(fontMedium)
@@ -385,9 +420,15 @@ local function drawCleanupMenu()
         love.graphics.printf("States Huérfanos", col1X, 60, colW, "center")
         love.graphics.setColor(1, 1, 0.4) -- Amarillo
         love.graphics.printf("Juegos Duplicados", col2X, 60, colW, "center")
+        if hasImages then
+            love.graphics.setColor(0.4, 1, 0.4) -- Verde
+            love.graphics.printf("Imágenes Huérfanas", col3X, 60, colW, "center")
+        end
         
         love.graphics.setFont(fontSmall)
         local listY = 100
+        local listH = h - 250 -- Reducir altura para dejar espacio al panel de info
+        local maxVisible = math.floor(listH / 20)
         
         -- Columna 1: Huérfanos
         -- Botón Borrar Todo
@@ -400,19 +441,27 @@ local function drawCleanupMenu()
         love.graphics.setColor(1, 1, 1)
         love.graphics.printf("BORRAR TODOS LOS STATES", col1X, listY + 5, colW, "center")
         
-        for i, item in ipairs(cleanupData.orphans) do
-            local y = listY + 30 + (i-1) * 20
-            if cleanupData.cursor.col == 1 and cleanupData.cursor.row == i + 1 then
+        -- Scroll para huérfanos
+        local startIdx1 = 1
+        if cleanupData.cursor.col == 1 and cleanupData.cursor.row > maxVisible + 1 then
+            startIdx1 = cleanupData.cursor.row - maxVisible
+        end
+        local endIdx1 = math.min(#cleanupData.orphans, startIdx1 + maxVisible - 1)
+
+        for i = startIdx1, endIdx1 do
+            local item = cleanupData.orphans[i]
+            local displayIndex = i - startIdx1
+            local y = listY + 30 + displayIndex * 20
+            
+            if cleanupData.cursor.col == 1 and cleanupData.cursor.row == i + 1 then 
                 love.graphics.setColor(theme.colors.selection_accent)
                 love.graphics.rectangle("fill", col1X, y, colW, 18)
             end
             love.graphics.setColor(theme.colors.text_medium)
-            love.graphics.print(item.name, col1X + 5, y)
+            drawTrimmed(item.name, col1X + 5, y, colW - 10, fontSmall)
         end
         
         -- Columna 2: Duplicados
-        -- Implementar scroll simple para la lista de duplicados
-        local maxVisible = 15
         local startIdx = 1
         if cleanupData.cursor.col == 2 and cleanupData.cursor.row > maxVisible then
             startIdx = cleanupData.cursor.row - maxVisible + 1
@@ -432,11 +481,122 @@ local function drawCleanupMenu()
             love.graphics.setColor(theme.colors.text_medium)
             -- Formato: Nombre [SYSTEM] SDx
             local text = item.name .. " [" .. item.system .. "]"
-            love.graphics.print(text, col2X + 5, y)
+            drawTrimmed(text, col2X + 5, y, colW - 45, fontSmall)
             
             if item.location == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
             else love.graphics.setColor(1, 0.8, 0.4) end
             love.graphics.printf(item.location, col2X + colW - 40, y, 35, "right")
+        end
+        
+        -- Columna 3: Imágenes Huérfanas
+        if hasImages then
+            local startIdx3 = 1
+            if cleanupData.cursor.col == 3 and cleanupData.cursor.row > maxVisible then
+                startIdx3 = cleanupData.cursor.row - maxVisible + 1
+            end
+            local endIdx3 = math.min(#cleanupData.orphanedImages, startIdx3 + maxVisible - 1)
+            
+            for i = startIdx3, endIdx3 do
+                local item = cleanupData.orphanedImages[i]
+                local displayIndex = i - startIdx3
+                local y = listY + displayIndex * 20
+                if cleanupData.cursor.col == 3 and cleanupData.cursor.row == i then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                    love.graphics.rectangle("fill", col3X, y, colW, 18)
+                end
+                love.graphics.setColor(theme.colors.text_medium)
+                drawTrimmed(item.name, col3X + 5, y, colW - 10, fontSmall)
+            end
+        end
+
+        -- Panel de Información (Abajo)
+        local infoY = h - 140
+        love.graphics.setColor(0.15, 0.15, 0.17)
+        love.graphics.rectangle("fill", 10, infoY, w - 20, 100, 5)
+        love.graphics.setColor(theme.colors.side_menu_separator)
+        love.graphics.rectangle("line", 10, infoY, w - 20, 100, 5)
+        
+        local selItem = nil
+        local selTitle = ""
+        if cleanupData.cursor.col == 1 then
+            if cleanupData.cursor.row == 1 then
+                selTitle = "Acción: Borrar TODOS los estados huérfanos"
+            elseif cleanupData.orphans[cleanupData.cursor.row - 1] then
+                selItem = cleanupData.orphans[cleanupData.cursor.row - 1]
+                selTitle = "Estado Huérfano"
+            end
+        elseif cleanupData.cursor.col == 3 then
+            if cleanupData.orphanedImages[cleanupData.cursor.row] then
+                selItem = cleanupData.orphanedImages[cleanupData.cursor.row]
+                selTitle = "Imagen Huérfana"
+            end
+        else
+            if cleanupData.duplicates[cleanupData.cursor.row] then
+                selItem = cleanupData.duplicates[cleanupData.cursor.row]
+                selTitle = "Juego Duplicado"
+            end
+        end
+
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.setFont(fontMedium)
+        love.graphics.print(selTitle, 20, infoY + 10)
+        
+        if selItem then
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(theme.colors.text_medium)
+            love.graphics.print("Archivo: " .. selItem.name, 20, infoY + 35)
+            drawTrimmedStart("Ruta: " .. selItem.fullPath, 20, infoY + 55, w - 40, fontSmall)
+            if selItem.system then
+                love.graphics.print("Sistema: " .. selItem.system .. " | Ubicación: " .. selItem.location, 20, infoY + 75)
+            else
+                love.graphics.print("Ubicación: " .. selItem.location, 20, infoY + 75)
+            end
+            
+            -- Preview de imagen huérfana
+            if cleanupData.cursor.col == 3 and selItem and selItem.fullPath then
+                local img = love.graphics.newImage(selItem.fullPath)
+                if img then
+                    local pH = 90
+                    local scale = pH / img:getHeight()
+                    love.graphics.draw(img, w - 100, infoY + 5, 0, scale, scale)
+                end
+            end
+        end
+
+        -- Modal de Confirmación
+        if cleanupData.confirming then
+            love.graphics.setColor(0, 0, 0, 0.8)
+            love.graphics.rectangle("fill", 0, 0, w, h)
+            
+            local modalW, modalH = 400, 200
+            local mx, my = (w - modalW)/2, (h - modalH)/2
+            
+            love.graphics.setColor(theme.colors.side_menu_background)
+            love.graphics.rectangle("fill", mx, my, modalW, modalH, 10)
+            love.graphics.setColor(theme.colors.text_white)
+            love.graphics.rectangle("line", mx, my, modalW, modalH, 10)
+            
+            love.graphics.setFont(fontTitle)
+            love.graphics.printf("¿Confirmar Acción?", mx, my + 20, modalW, "center")
+            love.graphics.setFont(fontMedium)
+            love.graphics.printf(selTitle, mx + 20, my + 60, modalW - 40, "center")
+            if selItem then
+                love.graphics.setFont(fontSmall)
+                love.graphics.printf(selItem.name, mx + 20, my + 90, modalW - 40, "center")
+            end
+            
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.selection_accent)
+            
+            local iconY = my + 140
+            local iconScale = 0.8
+            local totalW = buttonIcons.a:getWidth()*iconScale + fontMedium:getWidth(" Confirmar   ") + buttonIcons.b:getWidth()*iconScale + fontMedium:getWidth(" Cancelar")
+            local startX = mx + (modalW - totalW) / 2
+            
+            love.graphics.draw(buttonIcons.a, startX, iconY, 0, iconScale, iconScale)
+            love.graphics.print(" Confirmar   ", startX + buttonIcons.a:getWidth()*iconScale, iconY + 2)
+            love.graphics.draw(buttonIcons.b, startX + buttonIcons.a:getWidth()*iconScale + fontMedium:getWidth(" Confirmar   "), iconY, 0, iconScale, iconScale)
+            love.graphics.print(" Cancelar", startX + buttonIcons.a:getWidth()*iconScale + fontMedium:getWidth(" Confirmar   ") + buttonIcons.b:getWidth()*iconScale, iconY + 2)
         end
     end
     drawBottomBar()

@@ -78,11 +78,7 @@ local function keypressed(key)
     end
 
     if state == "OPTIONS_MENU" then
-        if key == "up" then
-            menuSelection = math.max(1, menuSelection - 1)
-        elseif key == "down" then
-            menuSelection = math.min(#menuOptions, menuSelection + 1)
-        elseif key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
+        if key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
             if menuOptions[menuSelection] == "Borrar" then
                 if selectedFilesCount > 0 then
                     menuTitle = "Confirmar Borrado"
@@ -107,6 +103,7 @@ local function keypressed(key)
             elseif menuOptions[menuSelection] == "Borrar de SD1" then
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
+                deleteGameMedia(pathToDelete)
                 os.remove(pathToDelete)
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
                 refreshFiles()
@@ -114,6 +111,7 @@ local function keypressed(key)
             elseif menuOptions[menuSelection] == "Borrar de SD2" then
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
+                deleteGameMedia(pathToDelete)
                 os.remove(pathToDelete)
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
                 refreshFiles()
@@ -124,7 +122,7 @@ local function keypressed(key)
                 if isVirtualRoot then createMergedVirtualRoot() end
             elseif menuOptions[menuSelection] == "Limpieza" then
                 state = "CLEANUP_MENU"
-                cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1} }
+                cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
                 inputCooldown = 0.3
             elseif menuOptions[menuSelection]:match("Marcar Jugado") then
                 markPlayed = not markPlayed
@@ -180,11 +178,7 @@ local function keypressed(key)
     end
 
     if state == "SCRAPER_OPTIONS" then
-        if key == "up" then
-            menuSelection = math.max(1, menuSelection - 1)
-        elseif key == "down" then
-            menuSelection = math.min(#menuOptions, menuSelection + 1)
-        elseif key == "return" or key == "kpenter" then
+        if key == "return" or key == "kpenter" then
             if menuOptions[menuSelection] == "Limpiar" then
                 local item = files[selectedIndex]
                 local baseName = item.name:gsub("%..-$", "")
@@ -212,6 +206,7 @@ local function keypressed(key)
         elseif key == "tab" then -- 'y' button
             state = "SCRAPER_OPTIONS"
             menuTitle = "Opciones"
+            menuAnim = 0
             menuMessage = ""
             menuOptions = {"Limpiar"}
             menuSelection = 1
@@ -241,10 +236,6 @@ local function keypressed(key)
         if key == "backspace" or key == "escape" then
             state = "LIST"
             inputCooldown = 0.3
-        elseif key == "up" then
-            saveManagerSelection = math.max(1, saveManagerSelection - 1)
-        elseif key == "down" then
-            saveManagerSelection = math.min(#saveFiles, saveManagerSelection + 1)
         elseif key == "return" or key == "kpenter" then
             -- Copiar save a la otra SD
             local item = saveFiles[saveManagerSelection]
@@ -267,27 +258,12 @@ local function keypressed(key)
     end
 
     if state == "CLEANUP_MENU" then
-        if key == "backspace" or key == "escape" then
-            state = "LIST"
-            inputCooldown = 0.3
-        elseif not cleanupData.scanned then
-            if key == "return" or key == "kpenter" then
-                performCleanupScan()
-            end
-        else
-            -- Navegación en resultados
-            if key == "left" then
-                cleanupData.cursor.col = 1
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
-            elseif key == "right" then
-                cleanupData.cursor.col = 2
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
-            elseif key == "up" then
-                cleanupData.cursor.row = math.max(1, cleanupData.cursor.row - 1)
-            elseif key == "down" then
-                local maxRows = cleanupData.cursor.col == 1 and (#cleanupData.orphans + 1) or #cleanupData.duplicates
-                cleanupData.cursor.row = math.min(maxRows, cleanupData.cursor.row + 1)
-            elseif key == "return" or key == "kpenter" then
+        if cleanupData.confirming then
+            if key == "backspace" or key == "escape" or key == "b" then
+                cleanupData.confirming = false
+                inputCooldown = 0.3
+            elseif key == "return" or key == "kpenter" or key == "space" or key == "a" then
+                -- Ejecutar acción de borrado confirmada
                 if cleanupData.cursor.col == 1 then
                     -- Columna Huérfanos
                     if cleanupData.cursor.row == 1 then
@@ -304,8 +280,22 @@ local function keypressed(key)
                             os.remove(orphan.fullPath)
                             table.remove(cleanupData.orphans, idx)
                             if cleanupData.cursor.row > #cleanupData.orphans + 1 then
-                                cleanupData.cursor.row = #cleanupData.orphans + 1
+                                cleanupData.cursor.row = math.max(1, #cleanupData.orphans + 1)
                             end
+                        end
+                    end
+                elseif cleanupData.cursor.col == 3 then
+                    -- Columna Imágenes Huérfanas
+                    local idx = cleanupData.cursor.row
+                    local item = cleanupData.orphanedImages[idx]
+                    if item then
+                        os.remove(item.fullPath)
+                        -- También borrar preview/text/year si existen?
+                        -- Por ahora solo borramos el archivo listado (boxart)
+                        table.remove(cleanupData.orphanedImages, idx)
+                        
+                        if cleanupData.cursor.row > #cleanupData.orphanedImages then
+                            cleanupData.cursor.row = math.max(1, #cleanupData.orphanedImages)
                         end
                     end
                 else
@@ -323,22 +313,62 @@ local function keypressed(key)
                         if playedRoms[item.fullPath] then playedRoms[item.fullPath] = nil end
                     end
                 end
+                
+                cleanupData.confirming = false
+                inputCooldown = 0.3
+            end
+            return
+        end
+
+        if key == "backspace" or key == "escape" then
+            state = "LIST"
+            inputCooldown = 0.3
+        elseif not cleanupData.scanned then
+            if key == "return" or key == "kpenter" then
+                performCleanupScan()
+            end
+        else
+            -- Navegación en resultados
+            if key == "left" then
+                cleanupData.cursor.col = 1
+                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
+            elseif key == "right" then
+                if cleanupData.cursor.col == 1 then
+                    cleanupData.cursor.col = 2
+                    cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
+                elseif cleanupData.cursor.col == 2 and #cleanupData.orphanedImages > 0 then
+                    cleanupData.cursor.col = 3
+                    cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphanedImages)
+                end
+            elseif key == "return" or key == "kpenter" then
+                -- Verificar si hay algo válido seleccionado para borrar
+                local valid = false
+                if cleanupData.cursor.col == 1 then
+                    if cleanupData.cursor.row == 1 and #cleanupData.orphans > 0 then valid = true
+                    elseif cleanupData.cursor.row > 1 and cleanupData.orphans[cleanupData.cursor.row - 1] then valid = true end
+                elseif cleanupData.cursor.col == 3 then
+                    if cleanupData.orphanedImages[cleanupData.cursor.row] then valid = true end
+                else
+                    if cleanupData.duplicates[cleanupData.cursor.row] then valid = true end
+                end
+                
+                if valid then
+                    cleanupData.confirming = true
+                    inputCooldown = 0.3
+                end
             end
         end
         return
     end
 
     if state == "DELETE_MENU" then
-        if key == "up" then
-            menuSelection = math.max(1, menuSelection - 1)
-        elseif key == "down" then
-            menuSelection = math.min(#menuOptions, menuSelection + 1)
-        elseif key == "return" or key == "space" or key == "kpenter" then
+        if key == "return" or key == "space" or key == "kpenter" then
             if menuOptions[menuSelection] == "Borrar" then
                 if selectedFilesCount > 0 then
                     for _, item in ipairs(files) do
                         if item.selected then
                             local fullPath = romPath .. item.name
+                            deleteGameMedia(fullPath)
                             os.remove(fullPath)
                             if playedRoms[fullPath] then
                                 playedRoms[fullPath] = nil
@@ -349,6 +379,7 @@ local function keypressed(key)
                     refreshFiles()
                     itemToDelete = nil
                 elseif itemToDelete then
+                    deleteGameMedia(romPath .. itemToDelete.name)
                     os.remove(romPath .. itemToDelete.name)
                     if playedRoms[romPath .. itemToDelete.name] then
                         playedRoms[romPath .. itemToDelete.name] = nil
@@ -481,6 +512,7 @@ local function keypressed(key)
         local item = files[selectedIndex]
         if item and not item.isDir then
             state = "OPTIONS_MENU"
+            menuAnim = 0
             menuTitle = "Opciones de Archivo"
             if selectedFilesCount > 1 then
                 menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
@@ -530,6 +562,7 @@ local function keypressed(key)
         end
     elseif key == "f1" then -- Start button
         state = "OPTIONS_MENU"
+        menuAnim = 0
         menuTitle = "Configuración"
         menuMessage = ""
         menuSelection = 1

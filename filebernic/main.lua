@@ -44,9 +44,11 @@ menuOptions = {"Borrar"}
 menuSelection = 1
 menuTitle = ""
 menuMessage = ""
+menuAnim = 0
 saveFiles = {}
 saveManagerSelection = 1
-cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1} }
+cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
+cleanupCoroutine = nil
 scraperResults = {}
 scraperSelection = 1
 searchQuery = ""
@@ -736,96 +738,169 @@ function findSaveFiles(item)
     end
 end
 
-function performCleanupScan()
-    cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1} }
-    love.graphics.present() -- Forzar dibujado inicial
+function deleteGameMedia(romPath)
+    local system = romPath:match("ROMS/([^/]+)/")
+    if not system then return end
     
-    local romNames = {} -- Para huérfanos: nombre base -> true
-    local romsByStem = {} -- Para duplicados: nombre base -> lista de archivos
+    local filename = romPath:match("([^/]+)$")
+    local baseName = filename:gsub("%..-$", "")
+    
+    -- Base path for catalogue (usually on SD1 in muOS)
+    local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
+    if not io.open("/mnt/mmc", "r") then
+        -- Simulator fallback
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        cataloguePath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
+    end
+    
+    local artPath = cataloguePath .. system .. "/box/" .. baseName .. ".png"
+    local textPath = cataloguePath .. system .. "/text/" .. baseName .. ".txt"
+    local yearPath = cataloguePath .. system .. "/text/" .. baseName .. ".year"
+    local prevPath = cataloguePath .. system .. "/preview/" .. baseName .. ".png"
+    
+    os.remove(artPath)
+    os.remove(textPath)
+    os.remove(yearPath)
+    os.remove(prevPath)
+end
 
-    local function scanAndRegister(path, locationLabel)
-        local h = io.popen('find "'..path..'" -type f')
-        if h then
-            for line in h:lines() do
-                local filename = line:match("([^/]+)$")
-                if filename then
-                    local ext = filename:match("[^%.]+$")
-                    if ext and validExtensions[ext:lower()] then
-                        local stem = filename:gsub("%..-$", "")
-                        romNames[stem] = true
-                        
-                        if not romsByStem[stem] then romsByStem[stem] = {} end
-                        
-                        -- Extraer sistema de la ruta (ej. .../ROMS/GBA/...)
-                        local system = line:match("ROMS/([^/]+)/") or "UNK"
-                        
-                        table.insert(romsByStem[stem], {
-                            name = stem,
-                            filename = filename,
+function performCleanupScan()
+    cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false }
+    
+    cleanupCoroutine = coroutine.create(function()
+        local romNames = {} -- Para huérfanos: nombre base -> true
+        local romsByStem = {} -- Para duplicados: nombre base -> lista de archivos
+        local romsBySystem = {} -- Para imágenes huérfanas: system -> stem -> true
+
+        local function scanAndRegister(path, locationLabel)
+            local h = io.popen('find "'..path..'" -type f')
+            if h then
+                local count = 0
+                for line in h:lines() do
+                    count = count + 1
+                    if count % 50 == 0 then coroutine.yield() end
+                    
+                    local filename = line:match("([^/]+)$")
+                    if filename then
+                        local ext = filename:match("[^%.]+$")
+                        if ext then
+                            local extLower = ext:lower()
+                            -- Excluir imágenes y states de la búsqueda de duplicados
+                            if validExtensions[extLower] and extLower ~= "png" and extLower ~= "jpg" and extLower ~= "jpeg" and extLower ~= "state" then
+                                local stem = filename:gsub("%..-$", "")
+                                romNames[stem] = true
+                                
+                                if not romsByStem[stem] then romsByStem[stem] = {} end
+                                
+                                local system = line:match("ROMS/([^/]+)/") or "UNK"
+                                
+                                table.insert(romsByStem[stem], {
+                                    name = stem,
+                                    filename = filename,
+                                    fullPath = line,
+                                    system = system,
+                                    location = locationLabel
+                                })
+
+                                if system ~= "UNK" then
+                                    if not romsBySystem[system] then romsBySystem[system] = {} end
+                                    romsBySystem[system][stem] = true
+                                end
+                            end
+                        end
+                    end
+                end
+                h:close()
+            end
+        end
+
+        scanAndRegister("/mnt/mmc/ROMS", "SD1")
+        cleanupData.progress = 0.4
+        coroutine.yield()
+        
+        scanAndRegister("/mnt/sdcard/ROMS", "SD2")
+        cleanupData.progress = 0.7
+        coroutine.yield()
+
+        -- 2. Buscar Save States Huérfanos
+        local savePaths = {"/mnt/mmc/MUOS/save", "/mnt/sdcard/MUOS/save"}
+        for _, path in ipairs(savePaths) do
+            local h = io.popen('find "'..path..'" -name "*.state*"')
+            if h then
+                for line in h:lines() do
+                    local name = line:match("([^/]+)$")
+                    local base = name:gsub("%.state.*$", "")
+                    if not romNames[base] then
+                        table.insert(cleanupData.orphans, {
+                            name = name,
                             fullPath = line,
-                            system = system,
-                            location = locationLabel
+                            location = line:find("/mnt/mmc") and "SD1" or "SD2"
                         })
                     end
                 end
+                h:close()
             end
-            h:close()
         end
-    end
+        
+        cleanupData.progress = 0.9
+        coroutine.yield()
 
-    scanAndRegister("/mnt/mmc/ROMS", "SD1")
-    scanAndRegister("/mnt/sdcard/ROMS", "SD2")
-    
-    cleanupData.progress = 0.5
-    love.graphics.present()
-
-    -- 2. Buscar Save States Huérfanos
-    local savePaths = {"/mnt/mmc/MUOS/save", "/mnt/sdcard/MUOS/save"}
-    for _, path in ipairs(savePaths) do
-        local h = io.popen('find "'..path..'" -name "*.state*"')
-        if h then
-            for line in h:lines() do
-                local name = line:match("([^/]+)$")
-                -- Quitar extensión y slot (.state, .state1, etc)
-                local base = name:gsub("%.state.*$", "")
-                if not romNames[base] then
-                    table.insert(cleanupData.orphans, {
-                        name = name,
-                        fullPath = line,
-                        location = line:find("/mnt/mmc") and "SD1" or "SD2"
-                    })
+        -- 3. Procesar Duplicados
+        for stem, list in pairs(romsByStem) do
+            if #list > 1 then
+                for _, item in ipairs(list) do
+                    table.insert(cleanupData.duplicates, item)
                 end
             end
-            h:close()
         end
-    end
-    
-    cleanupData.progress = 0.7
-    love.graphics.present()
 
-    -- 3. Procesar Duplicados (Agrupar por nombre base)
-    for stem, list in pairs(romsByStem) do
-        if #list > 1 then
-            for _, item in ipairs(list) do
-                table.insert(cleanupData.duplicates, item)
+        table.sort(cleanupData.duplicates, function(a, b)
+            if a.name == b.name then
+                if a.system == b.system then
+                    return a.location < b.location
+                end
+                return a.system < b.system
             end
-        end
-    end
+            return a.name < b.name
+        end)
 
-    -- Ordenar duplicados por Nombre -> Sistema -> Ubicación
-    table.sort(cleanupData.duplicates, function(a, b)
-        if a.name == b.name then
-            if a.system == b.system then
-                return a.location < b.location
-            end
-            return a.system < b.system
+        cleanupData.progress = 0.95
+        coroutine.yield()
+
+        -- 4. Buscar Imágenes Huérfanas
+        local catalogueBase = "/mnt/mmc/MUOS/info/catalogue/"
+        if not io.open("/mnt/mmc", "r") then
+            local cwd = love.filesystem.getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            catalogueBase = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
         end
-        return a.name < b.name
+
+        for system, stems in pairs(romsBySystem) do
+            local boxPath = catalogueBase .. system .. "/box"
+            local h = io.popen('find "'..boxPath..'" -maxdepth 1 -name "*.png" 2>/dev/null')
+            if h then
+                for line in h:lines() do
+                    local filename = line:match("([^/]+)$")
+                    local stem = filename:gsub("%..-$", "")
+                    if not stems[stem] then
+                        table.insert(cleanupData.orphanedImages, {
+                            name = filename,
+                            fullPath = line,
+                            system = system,
+                            type = "Image"
+                        })
+                    end
+                end
+                h:close()
+            end
+            coroutine.yield()
+        end
+
+        cleanupData.progress = 1.0
+        cleanupData.scanning = false
+        cleanupData.scanned = true
     end)
-
-    cleanupData.progress = 1.0
-    cleanupData.scanning = false
-    cleanupData.scanned = true
 end
 
 function saveSelectedArt()
