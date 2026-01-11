@@ -43,6 +43,12 @@ local function drawBottomBar()
     elseif state == "SCRAPER_RESULTS" then
         drawHint(buttonIcons.a, "Guardar")
         drawHint(buttonIcons.b, "Volver")
+    elseif state == "SAVE_MANAGER" then
+        drawHint(buttonIcons.a, "Copiar a otra SD")
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "CLEANUP_MENU" then
+        drawHint(buttonIcons.a, "Acción")
+        drawHint(buttonIcons.b, "Salir")
     end
 end
 
@@ -303,6 +309,139 @@ local function drawScrollbar()
     end
 end
 
+local function drawSaveManager()
+    local w, h = love.graphics.getDimensions()
+    love.graphics.clear(theme.colors.background)
+    
+    love.graphics.setFont(fontTitle)
+    love.graphics.setColor(theme.colors.text_white)
+    love.graphics.printf("Gestor de Partidas (Save Games)", 0, 20, w, "center")
+    
+    love.graphics.setFont(fontList)
+    local startY = 80
+    
+    if #saveFiles == 0 then
+        love.graphics.printf("No se encontraron partidas guardadas.", 0, h/2, w, "center")
+    else
+        for i, item in ipairs(saveFiles) do
+            local y = startY + (i-1) * 35
+            
+            if i == saveManagerSelection then
+                love.graphics.setColor(theme.colors.selection_accent)
+                love.graphics.rectangle("fill", 20, y - 2, w - 40, 30, 5)
+                love.graphics.setColor(theme.colors.text_white)
+            else
+                love.graphics.setColor(theme.colors.text_medium)
+            end
+            
+            love.graphics.print(item.name, 30, y)
+            love.graphics.printf(item.type, w - 200, y, 100, "right")
+            
+            -- Etiqueta SD
+            if item.location == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
+            elseif item.location == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
+            else love.graphics.setColor(0.7, 0.7, 0.7) end
+            love.graphics.print(item.location, w - 80, y)
+        end
+    end
+    drawBottomBar()
+end
+
+local function drawCleanupMenu()
+    local w, h = love.graphics.getDimensions()
+    love.graphics.clear(theme.colors.background)
+    
+    love.graphics.setFont(fontTitle)
+    love.graphics.setColor(theme.colors.text_white)
+    love.graphics.printf("Limpieza de Archivos", 0, 20, w, "center")
+    
+    if not cleanupData.scanned and not cleanupData.scanning then
+        -- Pantalla inicial
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", w/2 - 100, h/2 - 25, 200, 50, 10)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf("BUSCAR", w/2 - 100, h/2 - 10, 200, "center")
+        
+    elseif cleanupData.scanning then
+        -- Barra de progreso
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf("Escaneando archivos...", 0, h/2 - 40, w, "center")
+        
+        love.graphics.setColor(theme.colors.placeholder_background)
+        love.graphics.rectangle("fill", w/2 - 150, h/2, 300, 20)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", w/2 - 150, h/2, 300 * cleanupData.progress, 20)
+        
+    else
+        -- Resultados (2 Columnas)
+        local col1X, colW = 20, w/2 - 30
+        local col2X = w/2 + 10
+        
+        -- Cabeceras
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(1, 0.4, 0.4) -- Rojo
+        love.graphics.printf("States Huérfanos", col1X, 60, colW, "center")
+        love.graphics.setColor(1, 1, 0.4) -- Amarillo
+        love.graphics.printf("Juegos Duplicados", col2X, 60, colW, "center")
+        
+        love.graphics.setFont(fontSmall)
+        local listY = 100
+        
+        -- Columna 1: Huérfanos
+        -- Botón Borrar Todo
+        if cleanupData.cursor.col == 1 and cleanupData.cursor.row == 1 then
+            love.graphics.setColor(1, 0, 0)
+        else
+            love.graphics.setColor(0.5, 0, 0)
+        end
+        love.graphics.rectangle("fill", col1X, listY, colW, 25, 5)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.printf("BORRAR TODOS LOS STATES", col1X, listY + 5, colW, "center")
+        
+        for i, item in ipairs(cleanupData.orphans) do
+            local y = listY + 30 + (i-1) * 20
+            if cleanupData.cursor.col == 1 and cleanupData.cursor.row == i + 1 then
+                love.graphics.setColor(theme.colors.selection_accent)
+                love.graphics.rectangle("fill", col1X, y, colW, 18)
+            end
+            love.graphics.setColor(theme.colors.text_medium)
+            love.graphics.print(item.name, col1X + 5, y)
+        end
+        
+        -- Columna 2: Duplicados
+        -- Implementar scroll simple para la lista de duplicados
+        local maxVisible = 15
+        local startIdx = 1
+        if cleanupData.cursor.col == 2 and cleanupData.cursor.row > maxVisible then
+            startIdx = cleanupData.cursor.row - maxVisible + 1
+        end
+        local endIdx = math.min(#cleanupData.duplicates, startIdx + maxVisible - 1)
+
+        for i = startIdx, endIdx do
+            local item = cleanupData.duplicates[i]
+            local displayIndex = i - startIdx
+            local y = listY + displayIndex * 20
+            
+            if cleanupData.cursor.col == 2 and cleanupData.cursor.row == i then 
+                love.graphics.setColor(theme.colors.selection_accent)
+                love.graphics.rectangle("fill", col2X, y, colW, 18)
+            end
+            
+            love.graphics.setColor(theme.colors.text_medium)
+            -- Formato: Nombre [SYSTEM] SDx
+            local text = item.name .. " [" .. item.system .. "]"
+            love.graphics.print(text, col2X + 5, y)
+            
+            if item.location == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
+            else love.graphics.setColor(1, 0.8, 0.4) end
+            love.graphics.printf(item.location, col2X + colW - 40, y, 35, "right")
+        end
+    end
+    drawBottomBar()
+end
+
 local function draw()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
@@ -317,6 +456,16 @@ local function draw()
             drawSideMenu()
         end
         return -- No dibujar la lista debajo
+    end
+    
+    if state == "SAVE_MANAGER" then
+        drawSaveManager()
+        return
+    end
+    
+    if state == "CLEANUP_MENU" then
+        drawCleanupMenu()
+        return
     end
     
     -- Layout dinámico
@@ -481,32 +630,42 @@ local function draw()
     if state == "SEARCH" then
         -- Fondo oscuro para el teclado
         love.graphics.setColor(0, 0, 0, 0.9)
-        love.graphics.rectangle("fill", 0, h - 250, w, 250)
+        love.graphics.rectangle("fill", 0, h - 280, w, 280)
         
         -- Barra de búsqueda
         love.graphics.setColor(theme.colors.text_white)
         love.graphics.setFont(fontTitle)
-        love.graphics.printf("Buscar: " .. searchQuery .. "_", 0, h - 240, w, "center")
+        love.graphics.printf("Buscar: " .. searchQuery .. "_", 0, h - 270, w, "center")
         
         -- Teclado Virtual
         love.graphics.setFont(fontMedium)
         local keySize = 40
         local spacing = 5
-        local startY = h - 190
+        local startY = h - 230
+        
+        -- Calcular ancho del bloque principal (10 teclas)
+        local mainBlockWidth = 10 * (keySize + spacing) - spacing
+        -- Centrar bloque principal en el espacio disponible a la izquierda (reservando 100px para botones laterales)
+        local mainBlockStartX = (w - 100 - mainBlockWidth) / 2
+        if mainBlockStartX < 10 then mainBlockStartX = 10 end
         
         for r, row in ipairs(keyboardGrid) do
-            local rowWidth = #row * (keySize + spacing) - spacing
-            local startX = (w - rowWidth) / 2
-            
             for c, key in ipairs(row) do
-                local x = startX + (c-1) * (keySize + spacing)
-                local y = startY + (r-1) * (keySize + spacing)
-                local kW = keySize
+                local x, y, kW, kH
                 
-                -- Teclas especiales más anchas
                 if key == "SPACE" or key == "BACK" or key == "OK" then
-                    kW = keySize * 2
-                    x = startX + (c-1) * (kW + spacing) -- Ajuste simple para la última fila
+                    kW = 80
+                    kH = keySize
+                    x = w - kW - 20
+                    y = startY + (r-1) * (keySize + spacing)
+                else
+                    kW = keySize
+                    kH = keySize
+                    x = mainBlockStartX + (c-1) * (keySize + spacing)
+                    y = startY + (r-1) * (keySize + spacing)
+                    -- Indentar filas 3 y 4
+                    if r == 3 then x = x + (keySize/2) end
+                    if r == 4 then x = x + (keySize/2) end
                 end
                 
                 if r == keyboardRow and c == keyboardCol then
@@ -514,7 +673,7 @@ local function draw()
                 else
                     love.graphics.setColor(theme.colors.placeholder_background)
                 end
-                love.graphics.rectangle("fill", x, y, kW, keySize, 5)
+                love.graphics.rectangle("fill", x, y, kW, kH, 5)
                 
                 love.graphics.setColor(theme.colors.text_white)
                 love.graphics.printf(key, x, y + 10, kW, "center")

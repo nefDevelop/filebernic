@@ -122,6 +122,10 @@ local function keypressed(key)
                 hideEmpty = not hideEmpty
                 menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
                 if isVirtualRoot then createMergedVirtualRoot() end
+            elseif menuOptions[menuSelection] == "Limpieza" then
+                state = "CLEANUP_MENU"
+                cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1} }
+                inputCooldown = 0.3
             elseif menuOptions[menuSelection]:match("Marcar Jugado") then
                 markPlayed = not markPlayed
                 menuOptions[menuSelection] = "Marcar Jugado: " .. (markPlayed and "Si" or "No")
@@ -155,6 +159,9 @@ local function keypressed(key)
                     refreshFiles()
                     state = "LIST"
                 end
+            elseif menuOptions[menuSelection] == "Save Games" then
+                findSaveFiles(files[selectedIndex])
+                state = "SAVE_MANAGER"
             end
             inputCooldown = 0.3
         elseif key == "backspace" or key == "tab" then
@@ -226,6 +233,97 @@ local function keypressed(key)
         elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
             saveSelectedArt()
             inputCooldown = 0.3
+        end
+        return
+    end
+
+    if state == "SAVE_MANAGER" then
+        if key == "backspace" or key == "escape" then
+            state = "LIST"
+            inputCooldown = 0.3
+        elseif key == "up" then
+            saveManagerSelection = math.max(1, saveManagerSelection - 1)
+        elseif key == "down" then
+            saveManagerSelection = math.min(#saveFiles, saveManagerSelection + 1)
+        elseif key == "return" or key == "kpenter" then
+            -- Copiar save a la otra SD
+            local item = saveFiles[saveManagerSelection]
+            if item then
+                local targetRoot = item.location == "SD1" and "/mnt/sdcard" or "/mnt/mmc"
+                -- Reconstruir ruta destino preservando estructura desde /mnt/xxx/
+                local relPath = item.fullPath:match("/mnt/[^/]+/(.*)")
+                if relPath then
+                    local destPath = targetRoot .. "/" .. relPath
+                    local destDir = destPath:match("(.*/)")
+                    os.execute('mkdir -p "' .. destDir .. '"')
+                    os.execute('cp "' .. item.fullPath .. '" "' .. destPath .. '"')
+                    -- Refrescar lista para ver el nuevo archivo
+                    findSaveFiles(files[selectedIndex])
+                end
+            end
+            inputCooldown = 0.3
+        end
+        return
+    end
+
+    if state == "CLEANUP_MENU" then
+        if key == "backspace" or key == "escape" then
+            state = "LIST"
+            inputCooldown = 0.3
+        elseif not cleanupData.scanned then
+            if key == "return" or key == "kpenter" then
+                performCleanupScan()
+            end
+        else
+            -- Navegación en resultados
+            if key == "left" then
+                cleanupData.cursor.col = 1
+                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
+            elseif key == "right" then
+                cleanupData.cursor.col = 2
+                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
+            elseif key == "up" then
+                cleanupData.cursor.row = math.max(1, cleanupData.cursor.row - 1)
+            elseif key == "down" then
+                local maxRows = cleanupData.cursor.col == 1 and (#cleanupData.orphans + 1) or #cleanupData.duplicates
+                cleanupData.cursor.row = math.min(maxRows, cleanupData.cursor.row + 1)
+            elseif key == "return" or key == "kpenter" then
+                if cleanupData.cursor.col == 1 then
+                    -- Columna Huérfanos
+                    if cleanupData.cursor.row == 1 then
+                        -- Borrar TODOS
+                        for _, orphan in ipairs(cleanupData.orphans) do
+                            os.remove(orphan.fullPath)
+                        end
+                        cleanupData.orphans = {}
+                    else
+                        -- Borrar Individual
+                        local idx = cleanupData.cursor.row - 1
+                        local orphan = cleanupData.orphans[idx]
+                        if orphan then
+                            os.remove(orphan.fullPath)
+                            table.remove(cleanupData.orphans, idx)
+                            if cleanupData.cursor.row > #cleanupData.orphans + 1 then
+                                cleanupData.cursor.row = #cleanupData.orphans + 1
+                            end
+                        end
+                    end
+                else
+                    -- Columna Duplicados: Borrar archivo seleccionado
+                    local idx = cleanupData.cursor.row
+                    local item = cleanupData.duplicates[idx]
+                    if item then
+                        os.remove(item.fullPath)
+                        table.remove(cleanupData.duplicates, idx)
+                        
+                        if cleanupData.cursor.row > #cleanupData.duplicates then
+                            cleanupData.cursor.row = math.max(1, #cleanupData.duplicates)
+                        end
+                        -- Si estaba en el historial, quitarlo
+                        if playedRoms[item.fullPath] then playedRoms[item.fullPath] = nil end
+                    end
+                end
+            end
         end
         return
     end
@@ -407,7 +505,10 @@ local function keypressed(key)
                 end
             end
             
-            -- 3. Borrar (Al final)
+            -- 3. Save Games
+            table.insert(menuOptions, "Save Games")
+            
+            -- 4. Borrar (Al final)
             if item.sourceLabel == "SD½" then
                 table.insert(menuOptions, "Borrar de SD1")
                 table.insert(menuOptions, "Borrar de SD2")
@@ -435,6 +536,7 @@ local function keypressed(key)
         menuOptions = {}
         table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
         table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
+        table.insert(menuOptions, "Limpieza")
         inputCooldown = 0.3
     end
 end

@@ -44,6 +44,9 @@ menuOptions = {"Borrar"}
 menuSelection = 1
 menuTitle = ""
 menuMessage = ""
+saveFiles = {}
+saveManagerSelection = 1
+cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1} }
 scraperResults = {}
 scraperSelection = 1
 searchQuery = ""
@@ -51,10 +54,9 @@ allFiles = {}
 -- Virtual Keyboard
 keyboardGrid = {
     {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
-    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"},
-    {"A", "S", "D", "F", "G", "H", "J", "K", "L"},
-    {"Z", "X", "C", "V", "B", "N", "M", ".", "-"},
-    {"SPACE", "BACK", "OK"}
+    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "SPACE"},
+    {"A", "S", "D", "F", "G", "H", "J", "K", "L", "BACK"},
+    {"Z", "X", "C", "V", "B", "N", "M", ".", "-", "OK"}
 }
 keyboardRow = 1
 keyboardCol = 1
@@ -520,7 +522,7 @@ function startScraping()
             return
         end
 
-        local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview&include=boxart,screenshot"
+        local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview,release_date&include=boxart,screenshot"
         log("TGDB Request: " .. url)
 
         local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
@@ -690,6 +692,140 @@ function startScraping()
     end
     
     state = "SCRAPER_RESULTS"
+end
+
+function findSaveFiles(item)
+    saveFiles = {}
+    saveManagerSelection = 1
+    local baseName = item.name:gsub("%..-$", "")
+    
+    -- Rutas comunes de guardado en muOS / RetroArch
+    local searchPaths = {
+        "/mnt/mmc/MUOS/save",
+        "/mnt/sdcard/MUOS/save",
+        "/mnt/mmc/MUOS/save/state",
+        "/mnt/sdcard/MUOS/save/state",
+        item.fullPath:match("(.*/)") -- Carpeta de la ROM
+    }
+    
+    local foundMap = {}
+
+    for _, path in ipairs(searchPaths) do
+        -- Listar archivos que empiecen por el nombre de la ROM
+        local h = io.popen('find "'..path..'" -maxdepth 1 -name "'..baseName..'.*" 2>/dev/null')
+        if h then
+            for line in h:lines() do
+                if line:match("%.srm$") or line:match("%.state") then
+                    if not foundMap[line] then
+                        foundMap[line] = true
+                        local location = "UNK"
+                        if line:find("/mnt/mmc") then location = "SD1"
+                        elseif line:find("/mnt/sdcard") then location = "SD2" end
+                        
+                        table.insert(saveFiles, {
+                            name = line:match("([^/]+)$"),
+                            fullPath = line,
+                            location = location,
+                            type = line:match("%.srm$") and "SaveRAM" or "State"
+                        })
+                    end
+                end
+            end
+            h:close()
+        end
+    end
+end
+
+function performCleanupScan()
+    cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1} }
+    love.graphics.present() -- Forzar dibujado inicial
+    
+    local romNames = {} -- Para huérfanos: nombre base -> true
+    local romsByStem = {} -- Para duplicados: nombre base -> lista de archivos
+
+    local function scanAndRegister(path, locationLabel)
+        local h = io.popen('find "'..path..'" -type f')
+        if h then
+            for line in h:lines() do
+                local filename = line:match("([^/]+)$")
+                if filename then
+                    local ext = filename:match("[^%.]+$")
+                    if ext and validExtensions[ext:lower()] then
+                        local stem = filename:gsub("%..-$", "")
+                        romNames[stem] = true
+                        
+                        if not romsByStem[stem] then romsByStem[stem] = {} end
+                        
+                        -- Extraer sistema de la ruta (ej. .../ROMS/GBA/...)
+                        local system = line:match("ROMS/([^/]+)/") or "UNK"
+                        
+                        table.insert(romsByStem[stem], {
+                            name = stem,
+                            filename = filename,
+                            fullPath = line,
+                            system = system,
+                            location = locationLabel
+                        })
+                    end
+                end
+            end
+            h:close()
+        end
+    end
+
+    scanAndRegister("/mnt/mmc/ROMS", "SD1")
+    scanAndRegister("/mnt/sdcard/ROMS", "SD2")
+    
+    cleanupData.progress = 0.5
+    love.graphics.present()
+
+    -- 2. Buscar Save States Huérfanos
+    local savePaths = {"/mnt/mmc/MUOS/save", "/mnt/sdcard/MUOS/save"}
+    for _, path in ipairs(savePaths) do
+        local h = io.popen('find "'..path..'" -name "*.state*"')
+        if h then
+            for line in h:lines() do
+                local name = line:match("([^/]+)$")
+                -- Quitar extensión y slot (.state, .state1, etc)
+                local base = name:gsub("%.state.*$", "")
+                if not romNames[base] then
+                    table.insert(cleanupData.orphans, {
+                        name = name,
+                        fullPath = line,
+                        location = line:find("/mnt/mmc") and "SD1" or "SD2"
+                    })
+                end
+            end
+            h:close()
+        end
+    end
+    
+    cleanupData.progress = 0.7
+    love.graphics.present()
+
+    -- 3. Procesar Duplicados (Agrupar por nombre base)
+    for stem, list in pairs(romsByStem) do
+        if #list > 1 then
+            for _, item in ipairs(list) do
+                table.insert(cleanupData.duplicates, item)
+            end
+        end
+    end
+
+    -- Ordenar duplicados por Nombre -> Sistema -> Ubicación
+    table.sort(cleanupData.duplicates, function(a, b)
+        if a.name == b.name then
+            if a.system == b.system then
+                return a.location < b.location
+            end
+            return a.system < b.system
+        end
+        return a.name < b.name
+    end)
+
+    cleanupData.progress = 1.0
+    cleanupData.scanning = false
+    cleanupData.scanned = true
 end
 
 function saveSelectedArt()
