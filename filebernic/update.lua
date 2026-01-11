@@ -1,7 +1,7 @@
 local function update(dt)
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     
-    if state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" then
+    if state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" or showHelp then
         menuAnim = math.min(1, menuAnim + dt * 8)
     else
         menuAnim = 0
@@ -80,9 +80,21 @@ local function update(dt)
     if moved then
         if state == "LIST" then
             if is_down_pressed then
-                selectedIndex = math.min(#files, selectedIndex + 1)
+                if viewMode == "GRID" then
+                    if selectedIndex + gridCols <= #files then
+                        selectedIndex = selectedIndex + gridCols
+                    end
+                else
+                    selectedIndex = math.min(#files, selectedIndex + 1)
+                end
             else
-                selectedIndex = math.max(1, selectedIndex - 1)
+                if viewMode == "GRID" then
+                    if selectedIndex > gridCols then
+                        selectedIndex = selectedIndex - gridCols
+                    end
+                else
+                    selectedIndex = math.max(1, selectedIndex - 1)
+                end
             end
             pendingLoad = true
             timer = 0

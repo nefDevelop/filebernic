@@ -37,6 +37,8 @@ launchTimer = 0
 hideEmpty = false
 markPlayed = true
 pageSize = 13
+viewMode = "LIST" -- "LIST" or "GRID"
+gridCols = 4
 selectedFilesCount = 0
 theme = nil
 fontList, fontTitle, fontSmall, fontMedium = nil, nil, nil, nil
@@ -44,6 +46,8 @@ menuOptions = {"Borrar"}
 menuSelection = 1
 menuTitle = ""
 menuMessage = ""
+showHelp = false
+helpData = {}
 menuAnim = 0
 saveFiles = {}
 saveManagerSelection = 1
@@ -132,7 +136,7 @@ validExtensions = {
 
 -- Configuración de diseño (Layout)
 layout = {
-    listY = 60,           -- Posición Y inicial de la lista
+    listY = 64,           -- Posición Y inicial de la lista
     rowHeight = 30,       -- Altura de cada fila
     selWidth = 300,       -- Ancho del selector
     selHeight = 28,       -- Alto del selector
@@ -766,7 +770,7 @@ function deleteGameMedia(romPath)
 end
 
 function performCleanupScan()
-    cleanupData = { orphans = {}, duplicates = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false }
+    cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false }
     
     cleanupCoroutine = coroutine.create(function()
         local romNames = {} -- Para huérfanos: nombre base -> true
@@ -1220,7 +1224,9 @@ function love.load(arg)
         y = love.graphics.newImage("assets/button/gamepad/small/y.png"),
         x = love.graphics.newImage("assets/button/gamepad/small/x.png"),
         select = love.graphics.newImage("assets/button/gamepad/small/select.png"),
-        start = love.graphics.newImage("assets/button/gamepad/small/start.png")
+        start = love.graphics.newImage("assets/button/gamepad/small/start.png"),
+        l1 = love.graphics.newImage("assets/button/gamepad/small/l1.png"),
+        r1 = love.graphics.newImage("assets/button/gamepad/small/r1.png")
     }
 
     -- Load theme and fonts
@@ -1229,6 +1235,46 @@ function love.load(arg)
     fontTitle = theme.fonts.title
     fontSmall = theme.fonts.small
     fontMedium = theme.fonts.medium
+
+    -- Define Help Data
+    helpData = {
+        LIST = {
+            {icon=buttonIcons.a, text="Entrar/Jugar"},
+            {icon=buttonIcons.b, text="Subir/Atrás"},
+            {icon=buttonIcons.y, text="Opciones"},
+            {icon=buttonIcons.x, text="Seleccionar"},
+            {icon=buttonIcons.start, text="Config"},
+            {icon=buttonIcons.select, text="Salir"},
+            {icon=buttonIcons.l1, text="Buscar"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        },
+        CLEANUP_MENU = {
+            {icon=buttonIcons.l1, text="Cambiar Columna"},
+            {icon=buttonIcons.a, text="Acción"},
+            {icon=buttonIcons.b, text="Salir"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        },
+        INFO_VIEW = {
+            {icon=buttonIcons.b, text="Volver"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        },
+        SCRAPER_VIEW = {
+            {icon=buttonIcons.a, text="Buscar"},
+            {icon=buttonIcons.y, text="Opciones"},
+            {icon=buttonIcons.b, text="Volver"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        },
+        OPTIONS_MENU = {
+            {icon=buttonIcons.a, text="Seleccionar"},
+            {icon=buttonIcons.b, text="Cerrar"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        },
+        DEFAULT = {
+            {icon=buttonIcons.a, text="Aceptar"},
+            {icon=buttonIcons.b, text="Cancelar"},
+            {icon=buttonIcons.r1, text="Ayuda"}
+        }
+    }
 
     -- Cargar configuración global (API keys, etc)
     loadConfig()
@@ -1242,6 +1288,7 @@ function love.load(arg)
         if loadedState then
             if loadedState.hideEmpty ~= nil then hideEmpty = loadedState.hideEmpty end
             if loadedState.markPlayed ~= nil then markPlayed = loadedState.markPlayed end
+            if loadedState.viewMode then viewMode = loadedState.viewMode end
             if loadedState.romPath then 
                 local p = loadedState.romPath
                 -- Restaurar ruta real desde virtual (ROMS/...)

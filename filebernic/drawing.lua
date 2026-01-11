@@ -5,14 +5,19 @@ local function drawBottomBar()
     love.graphics.rectangle("fill", 0, h - 30, w, 30)
     love.graphics.setColor(theme.colors.text_bright)
     
+    local barCenterY = h - 15
+    local textH = fontMedium:getHeight()
+    local textY = barCenterY - textH / 2
+    
     local x = 20
-    local y = h - 27
     local scale = 0.8
 
     local function drawHint(icon, text)
-        love.graphics.draw(icon, x, y, 0, scale, scale)
+        local iconH = icon:getHeight() * scale
+        local iconY = barCenterY - iconH / 2
+        love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
-        love.graphics.print(text, x, y + 2)
+        love.graphics.print(text, x, textY)
         x = x + love.graphics.getFont():getWidth(text) + 20
     end
 
@@ -25,9 +30,11 @@ local function drawBottomBar()
         -- Select button with offset
         local icon = buttonIcons.select
         local text = "Salir"
-        love.graphics.draw(icon, x, y + 5, 0, scale, scale)
+        local iconH = icon:getHeight() * scale
+        local iconY = barCenterY - iconH / 2
+        love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
-        love.graphics.print(text, x, y + 2)
+        love.graphics.print(text, x, textY)
     elseif state == "DELETE_MENU" or state == "POST_GAME" then
         drawHint(buttonIcons.a, "Confirmar")
         drawHint(buttonIcons.b, "Cancelar")
@@ -99,13 +106,53 @@ local function drawSideMenu()
             love.graphics.rectangle("fill", contentX + 10, y - 5, w/2 - 20, 30, 5)
             love.graphics.setColor(theme.colors.text_white)
         else
-            if option:find("Borrar") or option:find("Limpiar") then
+            if option:find("Borrar") then
                 love.graphics.setColor(1, 0.4, 0.4) -- Rojo suave
+            elseif option:find("Limpieza") then
+                love.graphics.setColor(0.8, 0.1, 0.1) -- Rojo oscuro
             else
                 love.graphics.setColor(theme.colors.text_dim)
             end
         end
         love.graphics.print(option, contentX + 20, y)
+    end
+end
+
+local function drawHelpOverlay()
+    if not showHelp then return end
+    local w, h = love.graphics.getDimensions()
+    
+    -- Animación (Slide in)
+    local t = menuAnim
+    local ease = 1 - (1 - t)^3 -- Cubic ease out
+    local offset = (w / 2) * (1 - ease)
+    
+    -- Overlay oscuro (Fade in)
+    local r, g, b, a = unpack(theme.colors.overlay_dark)
+    love.graphics.setColor(r, g, b, a * ease)
+    love.graphics.rectangle("fill", 0, 0, w/2, h)
+    
+    -- Panel lateral
+    love.graphics.setColor(theme.colors.side_menu_background)
+    love.graphics.rectangle("fill", w/2 + offset, 0, w/2, h)
+    
+    -- Línea separadora
+    love.graphics.setColor(theme.colors.side_menu_separator)
+    love.graphics.line(w/2 + offset, 0, w/2 + offset, h)
+
+    local contentX = w/2 + offset
+
+    love.graphics.setColor(theme.colors.text_white)
+    love.graphics.setFont(fontTitle)
+    love.graphics.printf("Ayuda - Controles", contentX + 20, 40, w/2 - 40, "left")
+    
+    local list = helpData[state] or helpData.DEFAULT
+    love.graphics.setFont(fontMedium)
+    local startY = 90
+    for i, item in ipairs(list) do
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.draw(item.icon, contentX + 20, startY + (i-1)*40, 0, 0.8, 0.8)
+        love.graphics.print(item.text, contentX + 60, startY + (i-1)*40 + 2)
     end
 end
 
@@ -595,11 +642,84 @@ local function drawCleanupMenu()
             
             love.graphics.draw(buttonIcons.a, startX, iconY, 0, iconScale, iconScale)
             love.graphics.print(" Confirmar   ", startX + buttonIcons.a:getWidth()*iconScale, iconY + 2)
+            love.graphics.setColor(1, 1, 1, 1) -- Reset color for B icon
             love.graphics.draw(buttonIcons.b, startX + buttonIcons.a:getWidth()*iconScale + fontMedium:getWidth(" Confirmar   "), iconY, 0, iconScale, iconScale)
             love.graphics.print(" Cancelar", startX + buttonIcons.a:getWidth()*iconScale + fontMedium:getWidth(" Confirmar   ") + buttonIcons.b:getWidth()*iconScale, iconY + 2)
         end
     end
     drawBottomBar()
+end
+
+local function drawGrid(w, h)
+    local cols = gridCols
+    local rows = 3
+    local cellW = w / cols
+    local cellH = (h - 60) / rows -- Restar header/footer
+    local startY = 50
+    
+    -- Calcular fila inicial para scroll
+    local currentRow = math.ceil(selectedIndex / cols)
+    local startRow = math.max(1, currentRow - rows + 1)
+    if currentRow <= rows then startRow = 1 end
+    
+    local startIndex = (startRow - 1) * cols + 1
+    local endIndex = math.min(#files, startIndex + (cols * rows) - 1)
+    
+    for i = startIndex, endIndex do
+        local relIndex = i - startIndex
+        local r = math.floor(relIndex / cols)
+        local c = relIndex % cols
+        
+        local x = c * cellW
+        local y = startY + r * cellH
+        local item = files[i]
+        
+        -- Fondo selección
+        if i == selectedIndex then
+            love.graphics.setColor(theme.colors.selection_accent)
+            love.graphics.rectangle("fill", x + 5, y + 5, cellW - 10, cellH - 10, 5)
+        end
+        
+        local contentWidth = cellW - 10
+
+        -- Cargar imagen si no se ha intentado
+        if not item.isDir and not item.gridImage and not item.triedGridImage then
+            item.triedGridImage = true
+            local base = item.name:gsub("%..-$", "")
+            local path = muosArtPath .. base .. ".png"
+            local f = io.open(path, "rb")
+            if f then
+                local data = f:read("*a")
+                f:close()
+                if data then
+                    local success, img = pcall(function() return love.graphics.newImage(love.filesystem.newFileData(data, "cover.png")) end)
+                    if success then item.gridImage = img end
+                end
+            end
+        end
+
+        -- Dibujar imagen o icono
+        if item.gridImage then
+            love.graphics.setColor(1, 1, 1)
+            local scale = math.min(contentWidth / item.gridImage:getWidth(), (cellH - 50) / item.gridImage:getHeight())
+            local imgW = item.gridImage:getWidth() * scale
+            local imgH = item.gridImage:getHeight() * scale
+            local ix = x + 5 + (contentWidth - imgW) / 2
+            local iy = y + 10 + ((cellH - 50) - imgH) / 2
+            love.graphics.draw(item.gridImage, ix, iy, 0, scale, scale)
+        else
+            love.graphics.setColor(1, 1, 1)
+            local icon = item.isDir and iconFolder or iconRom
+            local iconScale = 0.5
+            local ix = x + (cellW - icon:getWidth()*iconScale)/2 -- Centrado en celda
+            local iy = y + 15
+            love.graphics.draw(icon, ix, iy, 0, iconScale, iconScale)
+        end
+        
+        -- Texto
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf(item.name, x + 5, y + cellH - 40, contentWidth, "center")
+    end
 end
 
 local function draw()
@@ -615,6 +735,7 @@ local function draw()
         if state == "SCRAPER_OPTIONS" then
             drawSideMenu()
         end
+        drawHelpOverlay()
         return -- No dibujar la lista debajo
     end
     
@@ -666,6 +787,13 @@ local function draw()
         end
     end
     love.graphics.printf(displayPath, 0, 45, w, "center")
+
+    if viewMode == "GRID" then
+        drawGrid(w, h)
+        drawBottomBar()
+        if state == "OPTIONS_MENU" or state == "DELETE_MENU" then drawSideMenu() end
+        return
+    end
 
     -- Lista de Archivos
     love.graphics.setFont(fontList)
@@ -840,6 +968,8 @@ local function draw()
             end
         end
     end
+
+    drawHelpOverlay()
 end
 
 return draw
