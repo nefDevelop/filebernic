@@ -67,51 +67,68 @@ local function drawSideMenu()
     local ease = 1 - (1 - t)^3 -- Cubic ease out
     local offset = (w / 2) * (1 - ease)
     
+    -- Calcular ancho dinámico basado en contenido
+    love.graphics.setFont(fontList)
+    local maxW = 0
+    for _, opt in ipairs(menuOptions) do
+        local text = type(opt) == "table" and opt.text or opt
+        local width = fontList:getWidth(text)
+        if type(opt) == "table" and opt.icon then width = width + 35 end
+        if width > maxW then maxW = width end
+    end
+    local menuW = math.max(300, maxW + 60) -- Mínimo 300px, o contenido + padding
+    local menuX = w - menuW
+    local slideX = menuX + (menuW * (1 - ease))
+    
     -- Overlay oscuro (Fade in)
     local r, g, b, a = unpack(theme.colors.overlay_dark)
     love.graphics.setColor(r, g, b, a * ease)
-    love.graphics.rectangle("fill", 0, 0, w/2, h)
+    love.graphics.rectangle("fill", 0, 0, w, h)
 
     -- Panel lateral
     love.graphics.setColor(theme.colors.side_menu_background)
-    love.graphics.rectangle("fill", w/2 + offset, 0, w/2, h)
+    love.graphics.rectangle("fill", slideX, 0, menuW, h)
     
     -- Línea separadora
     love.graphics.setColor(theme.colors.side_menu_separator)
-    love.graphics.line(w/2 + offset, 0, w/2 + offset, h)
-
-    local contentX = w/2 + offset
+    love.graphics.line(slideX, 0, slideX, h)
 
     -- Título
     love.graphics.setColor(theme.colors.text_white)
     love.graphics.setFont(fontTitle)
-    love.graphics.printf(menuTitle, contentX + 20, 40, w/2 - 40, "left")
+    love.graphics.printf(menuTitle, slideX + 20, 40, menuW - 40, "left")
 
     -- Mensaje
     local startY = 90
     if menuMessage and menuMessage ~= "" then
         love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.printf(menuMessage, contentX + 20, 80, w/2 - 40, "left")
-        local width, wrappedtext = fontMedium:getWrap(menuMessage, w/2 - 40)
+        love.graphics.printf(menuMessage, slideX + 20, 80, menuW - 40, "left")
+        local width, wrappedtext = fontMedium:getWrap(menuMessage, menuW - 40)
         startY = 80 + (#wrappedtext * fontMedium:getHeight()) + 30
     end
 
     -- Opciones
     love.graphics.setFont(fontList)
+    local rowHeight = 40
     for i, option in ipairs(menuOptions) do
-        local y = startY + (i-1) * 40
+        local rowY = startY + (i-1) * rowHeight
+        local centerY = rowY + rowHeight / 2
+        
+        local text = type(option) == "table" and option.text or option
+        local icon = type(option) == "table" and option.icon or nil
+        
         local labelColor, valueColor
 
         if i == menuSelection then
             love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", contentX + 10, y - 5, w/2 - 20, 30, 5)
+            love.graphics.rectangle("fill", slideX, rowY, menuW, rowHeight)
             labelColor = theme.colors.text_white
             valueColor = theme.colors.text_white
         else
-            if option:find("Borrar") then
+            if type(option) == "string" and option:find("Borrar") then
                 labelColor = {1, 0.4, 0.4} -- Rojo suave
-            elseif option:find("Limpieza") then
+            elseif type(option) == "string" and option:find("Limpieza") then
                 labelColor = {0.8, 0.1, 0.1} -- Rojo oscuro
             else
                 labelColor = theme.colors.text_dim
@@ -119,16 +136,29 @@ local function drawSideMenu()
             valueColor = theme.colors.selection_accent -- Otro tono (Azul claro)
         end
 
-        local label, value = option:match("^(.-):%s*(.+)$")
+        local label, value = nil, nil
+        if type(option) == "string" then
+            label, value = option:match("^(.-):%s*(.+)$")
+        end
+
+        local textY = centerY - fontList:getHeight() / 2
+
         if label and value then
             love.graphics.setColor(labelColor)
-            love.graphics.print(label .. ":", contentX + 20, y)
+            love.graphics.print(label .. ":", slideX + 20, textY)
             love.graphics.setColor(valueColor)
             local valW = fontList:getWidth(value)
-            love.graphics.print(value, contentX + w/2 - 20 - valW, y)
+            love.graphics.print(value, slideX + menuW - 20 - valW, textY)
+        elseif icon then
+            love.graphics.setColor(1, 1, 1)
+            local iconH = 24
+            local scale = iconH / icon:getHeight()
+            love.graphics.draw(icon, slideX + 20, centerY - iconH/2, 0, scale, scale)
+            love.graphics.setColor(labelColor)
+            love.graphics.print(text, slideX + 55, textY)
         else
             love.graphics.setColor(labelColor)
-            love.graphics.print(option, contentX + 20, y)
+            love.graphics.print(text, slideX + 20, textY)
         end
     end
 end
@@ -175,7 +205,7 @@ local function drawInfoView()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
 
-    local currentItem = files[selectedIndex]
+    local currentItem = focusedItem or files[selectedIndex]
     if not currentItem then return end
 
     -- Título
@@ -236,7 +266,7 @@ local function drawScraperView()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background) -- Fondo de pantalla completa
 
-    local currentItem = files[selectedIndex]
+    local currentItem = focusedItem or files[selectedIndex]
     if not currentItem then return end
 
     -- Título
@@ -697,6 +727,7 @@ local function drawCleanupMenu()
         end
     end
     drawBottomBar()
+    drawHelpOverlay()
 end
 
 local function drawGrid(w, h)
@@ -758,7 +789,7 @@ local function drawGrid(w, h)
             love.graphics.draw(item.gridImage, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
-            local icon = item.isDir and iconFolder or (currentSystemContentIcon or iconRom)
+            local icon = item.icon or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
             local iconScale = 0.5
             local ix = x + (cellW - icon:getWidth()*iconScale)/2 -- Centrado en celda
             local iy = y + 15
@@ -878,10 +909,10 @@ local function draw()
                 love.graphics.setColor(theme.colors.selection_accent)
             end
             
-            local iconToDraw = item.isDir and iconFolder or (currentSystemContentIcon or iconRom)
+            local iconToDraw = item.icon or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
             local drawScale = layout.iconScale
             
-            if iconToDraw == currentSystemContentIcon then
+            if iconToDraw == currentSystemContentIcon or iconToDraw == item.icon then
                 drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
             end
             
@@ -920,14 +951,30 @@ local function draw()
             end
 
             if launchMode == "Juego Unico" then
-                if currentSystemIcon then
-                    love.graphics.setColor(1, 1, 1)
-                    local iconH = 22
-                    local scale = iconH / currentSystemIcon:getHeight()
-                    local iconW = currentSystemIcon:getWidth() * scale
-                    local ix = sdColX + (sdColW - iconW) / 2
-                    local iy = y + (layout.rowHeight - iconH) / 2
-                    love.graphics.draw(currentSystemIcon, ix, iy, 0, scale, scale)
+                -- Dibujar iconos de sistemas apilados a la derecha
+                local systems = {}
+                local seen = {}
+                if item.versions then
+                    for _, v in ipairs(item.versions) do
+                        if v.system and not seen[v.system] then
+                            seen[v.system] = true
+                            table.insert(systems, v.system)
+                        end
+                    end
+                end
+                
+                local iconSize = 20
+                local spacing = 2
+                local totalW = #systems * (iconSize + spacing) - spacing
+                local startX = layout.scrollbarX - totalW - 5
+                
+                for idx, sys in ipairs(systems) do
+                    local icon = getSystemIcon(sys)
+                    if icon then
+                        love.graphics.setColor(1, 1, 1)
+                        local scale = iconSize / icon:getHeight()
+                        love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
+                    end
                 end
             elseif label then
                 -- Colores distintivos para SD

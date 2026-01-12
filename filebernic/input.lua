@@ -74,6 +74,7 @@ local function keypressed(key)
     if currentItem and currentItem.empty then
         if key == "backspace" then -- Allow going back from an empty directory
             local parent = romPath:gsub("[^/]+/$", "")
+            log("Back (Empty). Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
             
             -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
             local cwd = love.filesystem.getSource()
@@ -83,7 +84,9 @@ local function keypressed(key)
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
+                 log("Límite alcanzado. Volviendo a Ruta Virtual.")
                  createMergedVirtualRoot()
+                 inputCooldown = 0.3
                  return
             end
             romPath = parent
@@ -98,6 +101,31 @@ local function keypressed(key)
 
     if state == "OPTIONS_MENU" then
         if key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
+            if parentMenuData then
+                 -- Acciones del sub-menú de versión
+                 local opt = menuOptions[menuSelection]
+                 if opt == "Info" then
+                     loadPreview()
+                     state = "INFO_VIEW"
+                 elseif opt == "Scraper" then
+                     state = "SCRAPER_VIEW"
+                 elseif opt == "Save Games" then
+                     findSaveFiles(focusedItem)
+                     state = "SAVE_MANAGER"
+                 elseif opt == "Borrar" then
+                     local fullPath = focusedItem.fullPath
+                     deleteGameMedia(fullPath)
+                     os.remove(fullPath)
+                     if playedRoms[fullPath] then playedRoms[fullPath] = nil saveHistory() end
+                     refreshFiles()
+                     state = "LIST"
+                     parentMenuData = nil
+                     focusedItem = nil
+                 end
+                 inputCooldown = 0.3
+                 return
+            end
+
             if menuTitle == "Seleccionar Versión" then
                  local item = files[selectedIndex]
                  if item and item.versions and item.versions[menuSelection] then
@@ -160,11 +188,7 @@ local function keypressed(key)
                 launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
                 menuOptions[menuSelection] = "Modo: " .. launchMode
                 saveAppState()
-                if isVirtualRoot then
-                    createMergedVirtualRoot()
-                else
-                    refreshFiles()
-                end
+                createMergedVirtualRoot()
             elseif menuOptions[menuSelection]:match("Ocultar vacíos") then
                 hideEmpty = not hideEmpty
                 menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
@@ -215,16 +239,54 @@ local function keypressed(key)
                 state = "SAVE_MANAGER"
             end
             inputCooldown = 0.3
+        elseif key == "tab" then
+             if menuTitle == "Seleccionar Versión" then
+                 local item = files[selectedIndex]
+                 local ver = item.versions[menuSelection]
+                 
+                 parentMenuData = {
+                     title = menuTitle,
+                     message = menuMessage,
+                     options = menuOptions,
+                     selection = menuSelection
+                 }
+                 focusedItem = ver
+                 
+                 menuTitle = "Opciones: " .. ver.name
+                 menuMessage = ver.name
+                 menuOptions = {"Info", "Scraper", "Save Games", "Borrar"}
+                 menuSelection = 1
+                 inputCooldown = 0.3
+                 return
+             elseif not parentMenuData then
+                 -- Cerrar menú si no estamos en sub-menú (comportamiento normal)
+                 state = "LIST"
+                 inputCooldown = 0.3
+             end
         elseif key == "backspace" or key == "tab" then
-            state = "LIST"
-            inputCooldown = 0.3
+            if parentMenuData then
+                 menuTitle = parentMenuData.title
+                 menuMessage = parentMenuData.message
+                 menuOptions = parentMenuData.options
+                 menuSelection = parentMenuData.selection
+                 parentMenuData = nil
+                 focusedItem = nil
+                 inputCooldown = 0.3
+            else
+                state = "LIST"
+                inputCooldown = 0.3
+            end
         end
         return
     end
 
     if state == "INFO_VIEW" then
         if key == "backspace" or key == "b" or key == "escape" then
-            state = "LIST"
+            if parentMenuData then
+                state = "OPTIONS_MENU"
+            else
+                state = "LIST"
+            end
             showHelp = false
             inputCooldown = 0.3
         end
@@ -253,7 +315,11 @@ local function keypressed(key)
 
     if state == "SCRAPER_VIEW" then
         if key == "backspace" then -- 'b' button
-            state = "LIST"
+            if parentMenuData then
+                state = "OPTIONS_MENU"
+            else
+                state = "LIST"
+            end
             showHelp = false
             inputCooldown = 0.3
         elseif key == "return" or key == "kpenter" then -- 'a' button
@@ -293,7 +359,11 @@ local function keypressed(key)
 
     if state == "SAVE_MANAGER" then
         if key == "backspace" or key == "escape" then
-            state = "LIST"
+            if parentMenuData then
+                state = "OPTIONS_MENU"
+            else
+                state = "LIST"
+            end
             inputCooldown = 0.3
         elseif key == "return" or key == "kpenter" then
             -- Copiar save a la otra SD
@@ -596,7 +666,12 @@ local function keypressed(key)
                     menuMessage = item.name
                     menuOptions = {}
                     for _, v in ipairs(item.versions) do
-                        table.insert(menuOptions, "Jugar: " .. v.name .. " (" .. v.sourceLabel .. ")")
+                        local icon = getSystemContentIcon(v.system)
+                        table.insert(menuOptions, {
+                            text = v.name,
+                            icon = icon,
+                            system = v.system
+                        })
                     end
                     menuSelection = 1
                     inputCooldown = 0.3
@@ -619,9 +694,10 @@ local function keypressed(key)
         end
     elseif key == "backspace" then -- 'b' button
         if isVirtualRoot then
-            love.event.quit() -- Salir de la app desde el menú principal virtual
+            return -- No hacer nada si ya estamos en la raíz virtual
         else
             local parent = romPath:gsub("[^/]+/$", "")
+            log("Back. Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
             
             -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
             local cwd = love.filesystem.getSource()
@@ -631,7 +707,9 @@ local function keypressed(key)
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
+                 log("Límite alcanzado. Volviendo a Ruta Virtual.")
                  createMergedVirtualRoot()
+                 inputCooldown = 0.3
                  return
             end
             romPath = parent
@@ -646,6 +724,11 @@ local function keypressed(key)
     elseif key == "tab" then -- 'Y' button
         local item = files[selectedIndex]
         if item and not item.isDir then
+            -- En modo único, si hay versiones, el menú de opciones está dentro de la selección de versión
+            if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
+                return
+            end
+
             state = "OPTIONS_MENU"
             menuAnim = 0
             menuTitle = "Opciones de Archivo"

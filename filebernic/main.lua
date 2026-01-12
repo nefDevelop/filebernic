@@ -59,6 +59,8 @@ scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, fai
 scraperCoroutine = nil
 scraperSelection = 1
 searchQuery = ""
+parentMenuData = nil
+focusedItem = nil
 allFiles = {}
 -- Virtual Keyboard
 keyboardGrid = {
@@ -171,72 +173,6 @@ local function hasRoms(path)
     return false
 end
 
-function createMergedVirtualRoot()
-    files = {}
-    isVirtualRoot = true
-    romPath = "" -- Not a real path in this view
-    secondaryPath = nil
-    selectedIndex = 1
-
-    local dirMap = {} -- Mapa para rastrear directorios y fusionar etiquetas
-
-    local function scanAndAdd(scanPath, label)
-        local f = io.open(scanPath, "r")
-        if not f then return end
-        f:close()
-
-        local handle = io.popen('ls -p "'..scanPath..'"')
-        if handle then
-            for line in handle:lines() do
-                if line:sub(-1) == "/" then
-                    local dirName = line:sub(1, -2)
-                    -- Excluir carpetas que no son de roms
-                    if dirName ~= "BIOS" and dirName ~= "Saves" then
-                        if not hideEmpty or hasRoms(scanPath .. line) then
-                            if dirMap[dirName] then
-                                files[dirMap[dirName]].sourceLabel = "SD½"
-                                files[dirMap[dirName]].secondaryPath = scanPath .. line
-                            else
-                                table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label})
-                                dirMap[dirName] = #files
-                            end
-                        end
-                    end
-                end
-            end
-            handle:close()
-        end
-    end
-
-    -- Scan real device paths
-    scanAndAdd("/mnt/mmc/ROMS/", "SD1")
-    scanAndAdd("/mnt/sdcard/ROMS/", "SD2")
-
-    -- If no device paths found, use simulation
-    if #files == 0 then
-        local cwd = love.filesystem.getSource()
-        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-        local simPath = cwd .. "/../Simulador_SD/"
-        -- Check if Simulador_SD exists and add it
-        local h = io.popen('ls -d "'..simPath..'"')
-        if h and h:read("*a") ~= "" then
-            table.insert(files, {name = "Simulador_SD", isDir = true, fullPath = simPath, sourceLabel = "SIM"})
-        end
-        scanAndAdd(simPath, "SIM")
-    end
-    
-    -- Sort files alphabetically by name
-    table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
-
-    -- Back up the full list
-    allFiles = {}
-    for _, item in ipairs(files) do
-        table.insert(allFiles, item)
-    end
-
-    loadPreview()
-end
-
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
 local systemVariants = {
     -- Nintendo
@@ -283,6 +219,228 @@ local systemVariants = {
     {"SCUMMVM", "scummvm"},
     {"OPENBOR", "openbor"}
 }
+
+function getSystemIcon(sysName)
+    local variants = {sysName}
+    local lowerName = sysName:lower()
+    
+    for _, group in ipairs(systemVariants) do
+        local match = false
+        for _, v in ipairs(group) do
+            if v:lower() == lowerName then
+                match = true
+                break
+            end
+        end
+        if match then
+            variants = group
+            break
+        end
+    end
+
+    for _, v in ipairs(variants) do
+        local path = "assets/systems/" .. v .. ".png"
+        if love.filesystem.getInfo(path) then
+            return love.graphics.newImage(path)
+        end
+    end
+    return nil
+end
+
+function getSystemContentIcon(sysName)
+    local variants = {sysName}
+    local lowerName = sysName:lower()
+    
+    for _, group in ipairs(systemVariants) do
+        local match = false
+        for _, v in ipairs(group) do
+            if v:lower() == lowerName then
+                match = true
+                break
+            end
+        end
+        if match then
+            variants = group
+            break
+        end
+    end
+
+    for _, v in ipairs(variants) do
+        local path = "assets/systems/" .. v .. "-content.png"
+        if love.filesystem.getInfo(path) then
+            return love.graphics.newImage(path)
+        end
+    end
+    return nil
+end
+
+function updateSystemForFile(item)
+    local currentPath = item.fullPath or (romPath .. item.name)
+    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
+    
+    if detectedSystem and detectedSystem ~= systemName then
+        systemName = detectedSystem
+        
+        -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
+        -- Recalcular rutas de arte
+        local baseMuosPath = ""
+        if io.open("/mnt/mmc", "r") then
+             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
+        else
+             local cwd = love.filesystem.getSource()
+             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+             local simPath = cwd .. "/../Simulador_SD/"
+             baseMuosPath = simPath .. "MUOS/info/catalogue/"
+        end
+        muosArtPath = baseMuosPath .. systemName .. "/box/"
+        muosTextPath = baseMuosPath .. systemName .. "/text/"
+        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+        return true
+    end
+    return false
+end
+
+function createMergedVirtualRoot()
+    files = {}
+    isVirtualRoot = true
+    romPath = "" -- Not a real path in this view
+    secondaryPath = nil
+    selectedIndex = 1
+
+    if launchMode == "Juego Unico" then
+        -- MODO ÚNICO GLOBAL: Escanear TODOS los juegos de TODOS los sistemas
+        local fileMap = {} -- Key: stem -> index in files
+        
+        local function scanRoot(rootPath)
+            local h = io.popen('ls -p "'..rootPath..'"')
+            if h then
+                for line in h:lines() do
+                    if line:sub(-1) == "/" then
+                        local sysName = line:sub(1, -2)
+                        if sysName ~= "BIOS" and sysName ~= "Saves" then
+                            local sysPath = rootPath .. line
+                            -- Escaneo recursivo dentro del sistema
+                            local h2 = io.popen('find "'..sysPath..'" -type f')
+                            if h2 then
+                                for fLine in h2:lines() do
+                                    local filename = fLine:match("([^/]+)$")
+                                    if filename and filename:sub(1, 1) ~= "." then
+                                        local ext = filename:match("[^%.]+$")
+                                        if ext and validExtensions[ext:lower()] then
+                                            local stem = filename:gsub("%.[^%.]+$", "")
+                                            local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
+                                            if groupKey == "" then groupKey = stem end
+                                            local icon = getSystemIcon(sysName)
+                                            
+                                            if fileMap[groupKey] then
+                                                local idx = fileMap[groupKey]
+                                                local item = files[idx]
+                                                table.insert(item.versions, {
+                                                    name = filename,
+                                                    fullPath = fLine,
+                                                    sourceLabel = sysName, -- Usamos el nombre del sistema como etiqueta
+                                                    ext = ext,
+                                                    system = sysName
+                                                })
+                                                item.sourceLabel = "Multi"
+                                            else
+                                                local newItem = {
+                                                    name = groupKey,
+                                                    isDir = false,
+                                                    fullPath = fLine,
+                                                    sourceLabel = sysName,
+                                                    icon = nil,
+                                                    versions = {{
+                                                        name = filename,
+                                                        fullPath = fLine,
+                                                        sourceLabel = sysName,
+                                                        ext = ext,
+                                                        system = sysName
+                                                    }}
+                                                }
+                                                table.insert(files, newItem)
+                                                fileMap[groupKey] = #files
+                                            end
+                                        end
+                                    end
+                                end
+                                h2:close()
+                            end
+                        end
+                    end
+                end
+                h:close()
+            end
+        end
+
+        scanRoot("/mnt/mmc/ROMS/")
+        scanRoot("/mnt/sdcard/ROMS/")
+        
+        -- Fallback Simulador
+        if #files == 0 then
+            local cwd = love.filesystem.getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            local simPath = cwd .. "/../Simulador_SD/"
+            scanRoot(simPath)
+        end
+
+    else
+        -- MODO CARPETA: Listar Sistemas (Comportamiento original)
+        local dirMap = {} 
+        local function scanAndAdd(scanPath, label)
+            local f = io.open(scanPath, "r")
+            if not f then return end
+            f:close()
+
+            local handle = io.popen('ls -p "'..scanPath..'"')
+            if handle then
+                for line in handle:lines() do
+                    if line:sub(-1) == "/" then
+                        local dirName = line:sub(1, -2)
+                        if dirName ~= "BIOS" and dirName ~= "Saves" then
+                            if not hideEmpty or hasRoms(scanPath .. line) then
+                                if dirMap[dirName] then
+                                    files[dirMap[dirName]].sourceLabel = "SD½"
+                                    files[dirMap[dirName]].secondaryPath = scanPath .. line
+                                else
+                                    local icon = getSystemIcon(dirName)
+                                    table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
+                                    dirMap[dirName] = #files
+                                end
+                            end
+                        end
+                    end
+                end
+                handle:close()
+            end
+        end
+
+        scanAndAdd("/mnt/mmc/ROMS/", "SD1")
+        scanAndAdd("/mnt/sdcard/ROMS/", "SD2")
+
+        if #files == 0 then
+            local cwd = love.filesystem.getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            local simPath = cwd .. "/../Simulador_SD/"
+            local h = io.popen('ls -d "'..simPath..'"')
+            if h and h:read("*a") ~= "" then
+                table.insert(files, {name = "Simulador_SD", isDir = true, fullPath = simPath, sourceLabel = "SIM"})
+            end
+            scanAndAdd(simPath, "SIM")
+        end
+    end
+    
+    -- Sort files alphabetically by name
+    table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
+
+    -- Back up the full list
+    allFiles = {}
+    for _, item in ipairs(files) do
+        table.insert(allFiles, item)
+    end
+
+    loadPreview()
+end
 
 function updateSystemPaths()
     local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
@@ -392,9 +550,13 @@ function refreshFiles()
                     if not skip then
                         local key = cleanName
                         local stem = cleanName
+                        local system = nil
+
                         if not isDirectory and launchMode == "Juego Unico" then
                             stem = cleanName:gsub("%.[^%.]+$", "")
-                            key = stem
+                            key = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
+                            if key == "" then key = stem end
+                            system = fullPath:match("ROMS/([^/]+)/") or fullPath:match("Simulador_SD/([^/]+)/")
                         end
 
                         if fileMap[key] then
@@ -407,7 +569,8 @@ function refreshFiles()
                                     name = cleanName,
                                     fullPath = fullPath,
                                     sourceLabel = label,
-                                    ext = ext
+                                    ext = ext,
+                                    system = system
                                 })
                                 item.sourceLabel = "Multi"
                             else
@@ -417,7 +580,7 @@ function refreshFiles()
                         else
                             local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label}
                             if not isDirectory and launchMode == "Juego Unico" then
-                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext}}
+                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext, system = system}}
                             end
                             table.insert(files, newItem)
                             fileMap[key] = #files
@@ -439,6 +602,7 @@ function refreshFiles()
     table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
     
     -- Ensure selectedIndex is within bounds
+    if selectedIndex < 1 then selectedIndex = 1 end
     if selectedIndex > #files then selectedIndex = math.max(1, #files) end
     
     allFiles = {}
@@ -488,32 +652,6 @@ function loadConfig()
         end
     end
     scraperApi = config.scraperApi
-end
-
-function updateSystemForFile(item)
-    local currentPath = item.fullPath or (romPath .. item.name)
-    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
-    
-    if detectedSystem and detectedSystem ~= systemName then
-        systemName = detectedSystem
-        
-        log("System detected changed to: " .. systemName)
-        -- Recalcular rutas de arte
-        local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
-        muosArtPath = baseMuosPath .. systemName .. "/box/"
-        muosTextPath = baseMuosPath .. systemName .. "/text/"
-        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-        return true
-    end
-    return false
 end
 
 function getScrapeResults(item)
@@ -1167,9 +1305,19 @@ function loadPreview()
     currentScreenshot = nil
     currentYear = nil
     currentDescription = ""
-    if #files == 0 or files[selectedIndex].isDir then return end
     
-    local baseName = files[selectedIndex].name:gsub("%..-$", "")
+    local item = focusedItem
+    if not item then
+        if #files == 0 then return end
+        item = files[selectedIndex]
+    end
+    
+    if not item or item.isDir then return end
+    
+    -- Asegurar que el sistema detectado corresponde al archivo seleccionado (para lista mixta)
+    updateSystemForFile(item)
+    
+    local baseName = item.name:gsub("%..-$", "")
     
     -- Boxart
     local imgFile = muosArtPath .. baseName .. ".png"
