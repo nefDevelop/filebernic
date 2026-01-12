@@ -2,16 +2,19 @@ local function keypressed(key)
     log("Key pressed: " .. key)
     if inputCooldown > 0 then return end
 
-    -- Global Help Toggle
-    if key == "f3" then
-        showHelp = not showHelp
+    -- Modal Help Menu Logic
+    if showHelp then
+        -- Close with the same help button (f3/R1) or the back button (B)
+        if key == "f3" or key == "backspace" or key == "b" or key == "escape" then
+            showHelp = false
+        end
+        -- Block all other inputs while help is visible
         return
     end
 
-    if showHelp then
-        if key == "backspace" or key == "b" or key == "escape" then
-            showHelp = false
-        end
+    -- If help is not shown, f3 will open it.
+    if key == "f3" then
+        showHelp = true
         return
     end
 
@@ -126,8 +129,17 @@ local function keypressed(key)
                 state = "INFO_VIEW"
                 inputCooldown = 0.3
             elseif menuOptions[menuSelection] == "Scraper" then
-                state = "SCRAPER_VIEW"
-                inputCooldown = 0.3
+                if selectedFilesCount > 0 then
+                    local items = {}
+                    for _, f in ipairs(files) do
+                        if f.selected then table.insert(items, f) end
+                    end
+                    performBatchScrape(items)
+                    inputCooldown = 0.3
+                else
+                    state = "SCRAPER_VIEW"
+                    inputCooldown = 0.3
+                end
             elseif menuOptions[menuSelection] == "Borrar de SD1" then
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
@@ -634,7 +646,7 @@ local function keypressed(key)
             state = "OPTIONS_MENU"
             menuAnim = 0
             menuTitle = "Opciones de Archivo"
-            if selectedFilesCount > 1 then
+            if selectedFilesCount > 0 then
                 menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
             else
                 menuMessage = item.name
@@ -642,11 +654,11 @@ local function keypressed(key)
             menuSelection = 1
             
             menuOptions = {}
-            -- 1. Scraper
+            -- 1. Info (Solo individual)
             if selectedFilesCount <= 1 then
                 table.insert(menuOptions, "Info")
-                table.insert(menuOptions, "Scraper")
             end
+            table.insert(menuOptions, "Scraper")
             
             -- 2. Copiar / Mover
             if item.sourceLabel ~= "SD½" then

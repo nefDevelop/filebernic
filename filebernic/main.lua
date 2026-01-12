@@ -55,6 +55,8 @@ saveManagerSelection = 1
 cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
 cleanupCoroutine = nil
 scraperResults = {}
+scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
+scraperCoroutine = nil
 scraperSelection = 1
 searchQuery = ""
 allFiles = {}
@@ -488,13 +490,7 @@ function loadConfig()
     scraperApi = config.scraperApi
 end
 
-function startScraping()
-    local item = files[selectedIndex]
-    if not item then return end
-    
-    log("Starting scrape for: " .. item.name)
-
-    -- Detectar sistema desde el archivo actual para asegurar rutas correctas
+function updateSystemForFile(item)
     local currentPath = item.fullPath or (romPath .. item.name)
     local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
     
@@ -515,16 +511,14 @@ function startScraping()
         muosArtPath = baseMuosPath .. systemName .. "/box/"
         muosTextPath = baseMuosPath .. systemName .. "/text/"
         muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+        return true
     end
+    return false
+end
 
-    state = "SCRAPING_IN_PROGRESS"
-    love.graphics.present() -- Forzar dibujado para mostrar mensaje de espera
-    
-    scraperResults = {}
-    scraperSelection = 1
-    
-    -- Limpiar archivos temporales anteriores para evitar falsos positivos si falla la descarga
-    os.execute("rm -f /tmp/scraper_*.png")
+function getScrapeResults(item)
+    local results = {}
+    updateSystemForFile(item)
     
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
     local encodedName = urlencode(cleanName)
@@ -536,12 +530,11 @@ function startScraping()
     local softname = "FileBernic"
     
     if devid == "" or devpassword == "" then
-        table.insert(scraperResults, {
+        table.insert(results, {
             error = true,
             text = "Error: Faltan credenciales en data/config.json"
         })
-        state = "SCRAPER_RESULTS"
-        return
+        return results
     end
 
     -- Construir URL para buscar por nombre de archivo (romNom)
@@ -563,7 +556,7 @@ function startScraping()
 
     if response and response ~= "" then
         if response:sub(1, 1) ~= "{" then
-            table.insert(scraperResults, {
+            table.insert(results, {
                 error = true,
                 text = "API Error: " .. response
             })
@@ -636,7 +629,7 @@ function startScraping()
                 if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
                     local imgData = love.image.newImageData(tempImgPath)
                     local img = love.graphics.newImage(imgData)
-                    table.insert(scraperResults, {
+                    table.insert(results, {
                         image = img,
                         screenshot = screenImg,
                         tempScreenPath = tempScreenPath,
@@ -656,12 +649,11 @@ function startScraping()
         local apikey = config.thegamesdb_apikey
         
         if apikey == "" then
-            table.insert(scraperResults, {
+            table.insert(results, {
                 error = true,
                 text = "Error: Falta API Key en data/config.json"
             })
-            state = "SCRAPER_RESULTS"
-            return
+            return results
         end
 
         local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview,release_date&include=boxart,screenshot"
@@ -707,7 +699,7 @@ function startScraping()
                                 if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
                                     local imgData = love.image.newImageData(tempImgPath)
                                     local img = love.graphics.newImage(imgData)
-                                    table.insert(scraperResults, {
+                                    table.insert(results, {
                                         image = img,
                                         screenshot = screenImg,
                                         tempScreenPath = tempScreenPath,
@@ -756,7 +748,7 @@ function startScraping()
         if not sysName then
              local msg = "Sistema no mapeado en Libretro: " .. tostring(systemName)
              log(msg)
-             table.insert(scraperResults, {error=true, text=msg})
+             table.insert(results, {error=true, text=msg})
         else
              -- Ajustar encoding para URL de Libretro (espacios como %20 en lugar de +)
              local sysEncoded = urlencode(sysName):gsub("%+", "%%20")
@@ -799,7 +791,7 @@ function startScraping()
              if data and #data > 0 then
                  local fileData = love.filesystem.newFileData(data, "scraper.png")
                  local img = love.graphics.newImage(fileData)
-                 table.insert(scraperResults, {
+                 table.insert(results, {
                      image = img,
                      screenshot = screenImg,
                      tempScreenPath = tempScreenPath,
@@ -808,7 +800,7 @@ function startScraping()
                      tempPath = tempImgPath
                  })
              else
-                 table.insert(scraperResults, {error=true, text="No encontrado (Requiere nombre exacto No-Intro)"})
+                 table.insert(results, {error=true, text="No encontrado (Requiere nombre exacto No-Intro)"})
              end
         end
 
@@ -824,7 +816,7 @@ function startScraping()
         
         if io.open(mockTemp, "r") then
             local img = love.graphics.newImage(mockTemp)
-            table.insert(scraperResults, {
+            table.insert(results, {
                 image = img,
                 description = "Esto es una descripción de prueba en modo Mock.",
                 region = "Mock Result (Test)",
@@ -832,8 +824,7 @@ function startScraping()
             })
         end
     end
-    
-    state = "SCRAPER_RESULTS"
+    return results
 end
 
 function findSaveFiles(item)
@@ -1043,10 +1034,8 @@ function performCleanupScan()
     end)
 end
 
-function saveSelectedArt()
-    local result = scraperResults[scraperSelection]
+function saveScrapeResult(item, result)
     if result and result.tempPath then
-        local item = files[selectedIndex]
         local baseName = item.name:gsub("%..-$", "")
         
         -- Asegurar directorio de destino
@@ -1089,6 +1078,55 @@ function saveSelectedArt()
             os.execute("cp '" .. result.tempScreenPath .. "' '" .. destScreen .. "'")
         end
     end
+end
+
+function startScraping()
+    local item = files[selectedIndex]
+    if not item then return end
+    
+    log("Starting interactive scrape for: " .. item.name)
+    
+    state = "SCRAPING_IN_PROGRESS"
+    love.graphics.present() -- Forzar dibujado
+    
+    -- Limpiar temporales
+    os.execute("rm -f /tmp/scraper_*.png")
+    
+    scraperResults = getScrapeResults(item)
+    scraperSelection = 1
+    state = "SCRAPER_RESULTS"
+end
+
+function performBatchScrape(items)
+    state = "BATCH_SCRAPING"
+    scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
+    
+    -- Limpiar temporales
+    os.execute("rm -f /tmp/scraper_*.png")
+    
+    scraperCoroutine = coroutine.create(function()
+        for i, item in ipairs(items) do
+            scraperProgress.current = i
+            scraperProgress.currentName = item.name
+            coroutine.yield()
+            
+            local results = getScrapeResults(item)
+            if results and #results > 0 and not results[1].error then
+                saveScrapeResult(item, results[1])
+                scraperProgress.successes = scraperProgress.successes + 1
+            else
+                scraperProgress.failures = scraperProgress.failures + 1
+            end
+        end
+        state = "LIST"
+        refreshFiles()
+    end)
+end
+
+function saveSelectedArt()
+    local result = scraperResults[scraperSelection]
+    local item = files[selectedIndex]
+    saveScrapeResult(item, result)
     
     state = "LIST"
     loadPreview()

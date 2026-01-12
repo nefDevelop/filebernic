@@ -297,6 +297,25 @@ local function drawScraperView()
     elseif state == "SCRAPING_IN_PROGRESS" then
         love.graphics.printf("Consultando bases de datos...", 0, h/2, w, "center")
 
+    elseif state == "BATCH_SCRAPING" then
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf("Scraping en Lote", 0, h/2 - 60, w, "center")
+        
+        love.graphics.setFont(fontMedium)
+        love.graphics.printf("Procesando: " .. scraperProgress.currentName, 0, h/2 - 20, w, "center")
+        
+        -- Barra de progreso
+        local barW = 400
+        local barX = (w - barW) / 2
+        love.graphics.setColor(theme.colors.placeholder_background)
+        love.graphics.rectangle("fill", barX, h/2 + 20, barW, 20)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", barX, h/2 + 20, barW * (scraperProgress.current / scraperProgress.total), 20)
+        
+        love.graphics.printf(scraperProgress.current .. " / " .. scraperProgress.total, 0, h/2 + 50, w, "center")
+        love.graphics.printf("Éxitos: " .. scraperProgress.successes .. " | Fallos: " .. scraperProgress.failures, 0, h/2 + 80, w, "center")
+
     elseif state == "SCRAPER_RESULTS" then
         love.graphics.setFont(fontMedium)
         love.graphics.printf("Resultados:", 20, 60, w, "left")
