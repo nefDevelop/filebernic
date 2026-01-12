@@ -342,6 +342,11 @@ local function drawScraperView()
                 if result.image then
                     local scale = math.min(thumbSize/result.image:getWidth(), thumbSize/result.image:getHeight())
                     love.graphics.draw(result.image, x + (thumbSize - result.image:getWidth()*scale)/2, listY + (thumbSize - result.image:getHeight()*scale)/2, 0, scale, scale)
+                elseif result.error then
+                    love.graphics.setColor(1, 0.4, 0.4)
+                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
+                    love.graphics.setFont(fontTitle)
+                    love.graphics.printf("!", x, listY + thumbSize/2 - 12, thumbSize, "center")
                 else
                     love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
                 end
@@ -350,6 +355,11 @@ local function drawScraperView()
             -- Vista previa del resultado seleccionado (Layout dividido)
             local sel = scraperResults[scraperSelection]
             if sel then
+                if sel.error then
+                    love.graphics.setColor(1, 0.4, 0.4)
+                    love.graphics.setFont(fontMedium)
+                    love.graphics.printf(sel.text or "Error", 40, 300, w - 80, "center")
+                else
                 local boxX, boxY, boxW, boxH = 40, 200, 160, 220
                 local screenX, screenY, screenW, screenH = 240, 200, 360, 200
                 local textX, textY, textW, textH = 40, 430, 560, 40
@@ -378,7 +388,12 @@ local function drawScraperView()
                 -- Info
                 love.graphics.setFont(fontSmall)
                 love.graphics.setColor(theme.colors.text_white)
-                love.graphics.printf(sel.description or "Sin descripción", textX, textY, textW, "left")
+                local infoText = sel.description or "Sin descripción"
+                if sel.source then
+                    infoText = "[" .. sel.source .. "] " .. infoText
+                end
+                love.graphics.printf(infoText, textX, textY, textW, "left")
+                end
             end
         end
     end

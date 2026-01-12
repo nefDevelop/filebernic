@@ -12,7 +12,7 @@ end
 systemName = ""
 romPath = ""
 config = {
-    scraperApi = "libretro", -- Opciones: "libretro", "screenscraper", "thegamesdb"
+    scraperApi = "all", -- Opciones: "all", "libretro", "screenscraper", "thegamesdb"
     screenscraper_devid = "",
     screenscraper_password = "",
     thegamesdb_apikey = ""
@@ -523,20 +523,22 @@ function getScrapeResults(item)
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
     local encodedName = urlencode(cleanName)
 
-    if scraperApi == "screenscraper" then
+    -- 1. ScreenScraper
+    if scraperApi == "all" or scraperApi == "screenscraper" then
     -- Configuración API ScreenScraper
     local devid = config.screenscraper_devid
     local devpassword = config.screenscraper_password
     local softname = "FileBernic"
     
+    local skipSS = false
     if devid == "" or devpassword == "" then
-        table.insert(results, {
-            error = true,
-            text = "Error: Faltan credenciales en data/config.json"
-        })
-        return results
+        if scraperApi == "screenscraper" then
+            table.insert(results, {error = true, text = "Error: Faltan credenciales SS"})
+        end
+        skipSS = true
     end
 
+    if not skipSS then
     -- Construir URL para buscar por nombre de archivo (romNom)
     local url = "https://www.screenscraper.fr/api2/jeuInfos.php?output=json&romNom=" .. encodedName
     if devid ~= "" then
@@ -636,26 +638,31 @@ function getScrapeResults(item)
                         description = description,
                         year = year,
                         region = region,
-                        tempPath = tempImgPath
+                        tempPath = tempImgPath,
+                        source = "ScreenScraper"
                     })
                 end
             end
             end
         end
     end
+    end
+    end
 
-    elseif scraperApi == "thegamesdb" then
+    -- 2. TheGamesDB
+    if scraperApi == "all" or scraperApi == "thegamesdb" then
         -- Configuración API TheGamesDB
         local apikey = config.thegamesdb_apikey
         
+        local skipTGDB = false
         if apikey == "" then
-            table.insert(results, {
-                error = true,
-                text = "Error: Falta API Key en data/config.json"
-            })
-            return results
+            if scraperApi == "thegamesdb" then
+                table.insert(results, {error = true, text = "Error: Falta API Key TGDB"})
+            end
+            skipTGDB = true
         end
 
+        if not skipTGDB then
         local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview,release_date&include=boxart,screenshot"
         log("TGDB Request: " .. url)
 
@@ -706,7 +713,8 @@ function getScrapeResults(item)
                                         description = game.overview or "Sin descripción.",
                                         year = year,
                                         region = game.game_title, -- Usamos el título como info
-                                        tempPath = tempImgPath
+                                        tempPath = tempImgPath,
+                                        source = "TheGamesDB"
                                     })
                                 end
                             end
@@ -715,8 +723,11 @@ function getScrapeResults(item)
                 end
             end
         end
+        end
+    end
 
-    elseif scraperApi == "libretro" then
+    -- 3. Libretro
+    if scraperApi == "all" or scraperApi == "libretro" then
         -- Repositorio de miniaturas de Libretro (Sin API Key, basado en nombres No-Intro)
         local libretroSystems = {
             gba = "Nintendo - Game Boy Advance",
@@ -752,59 +763,78 @@ function getScrapeResults(item)
         else
              -- Ajustar encoding para URL de Libretro (espacios como %20 en lugar de +)
              local sysEncoded = urlencode(sysName):gsub("%+", "%%20")
-             local nameEncoded = encodedName:gsub("%+", "%%20")
+             
+             -- Función local para intentar descargar de Libretro
+             local function tryLibretro(nameToTry, label)
+                 local nameEnc = urlencode(nameToTry):gsub("%+", "%%20")
+                 local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEnc .. ".png"
+                 log("Libretro Request ("..label.."): " .. url)
+                 
+                 local tempImgPath = "/tmp/scraper_libretro_" .. label:gsub(" ", "_") .. ".png"
+                 -- Usamos curl -v y capturamos stderr para ver la respuesta en el log
+                 local handle = io.popen("curl -v -s -L -f '" .. url .. "' -o " .. tempImgPath .. " 2>&1")
+                 local output = handle:read("*a")
+                 handle:close()
+                 log("Libretro Response ("..label.."): " .. (output or "nil"))
+                 
+                 -- Verificar si el archivo existe y tiene contenido
+                 local f = io.open(tempImgPath, "rb")
+                 local data = nil
+                 if f then
+                     data = f:read("*a")
+                     f:close()
+                 end
 
-             local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEncoded .. ".png"
-             log("Libretro Request: " .. url)
+                 if data and #data > 0 then
+                     -- Try to fetch snap (Screenshot)
+                     local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
+                     local tempScreenPath = "/tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png"
+                     local screenImg = nil
+                     os.execute("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
+                     
+                     local fSnap = io.open(tempScreenPath, "rb")
+                     if fSnap then
+                         local sData = fSnap:read("*a")
+                         fSnap:close()
+                         if sData and #sData > 0 then
+                             screenImg = love.graphics.newImage(love.filesystem.newFileData(sData, "snap.png"))
+                         end
+                     end
+
+                     local fileData = love.filesystem.newFileData(data, "scraper.png")
+                     local img = love.graphics.newImage(fileData)
+                     table.insert(results, {
+                         image = img,
+                         screenshot = screenImg,
+                         tempScreenPath = tempScreenPath,
+                         description = "Libretro no proporciona descripciones.",
+                         region = "Libretro ("..label..")",
+                         tempPath = tempImgPath,
+                         source = "Libretro"
+                     })
+                     return true
+                 end
+                 return false
+             end
              
-             local tempImgPath = "/tmp/scraper_libretro.png"
-             -- Usamos curl -v y capturamos stderr para ver la respuesta en el log
-             local handle = io.popen("curl -v -s -L -f '" .. url .. "' -o " .. tempImgPath .. " 2>&1")
-             local output = handle:read("*a")
-             handle:close()
-             log("Libretro Response: " .. (output or "nil"))
+             -- 1. Intento Exacto
+             local found = tryLibretro(cleanName, "Exacto")
              
-             -- Try to fetch snap (Screenshot)
-             local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEncoded .. ".png"
-             local tempScreenPath = "/tmp/scraper_libretro_snap.png"
-             local screenImg = nil
-             local hSnap = io.popen("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
-             hSnap:close()
-             
-             local fSnap = io.open(tempScreenPath, "rb")
-             if fSnap then
-                 local sData = fSnap:read("*a")
-                 fSnap:close()
-                 if sData and #sData > 0 then
-                     screenImg = love.graphics.newImage(love.filesystem.newFileData(sData, "snap.png"))
+             -- 2. Intento Limpio (sin paréntesis ni corchetes)
+             if not found then
+                 local clean = cleanName:gsub("%b()", ""):gsub("%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
+                 if clean ~= cleanName then
+                     found = tryLibretro(clean, "Limpio")
                  end
              end
              
-             -- Verificar si el archivo existe y tiene contenido
-             local f = io.open(tempImgPath, "rb")
-             local data = nil
-             if f then
-                 data = f:read("*a")
-                 f:close()
-             end
-
-             if data and #data > 0 then
-                 local fileData = love.filesystem.newFileData(data, "scraper.png")
-                 local img = love.graphics.newImage(fileData)
-                 table.insert(results, {
-                     image = img,
-                     screenshot = screenImg,
-                     tempScreenPath = tempScreenPath,
-                     description = "Libretro no proporciona descripciones.",
-                     region = "Libretro (Auto)",
-                     tempPath = tempImgPath
-                 })
-             else
-                 table.insert(results, {error=true, text="No encontrado (Requiere nombre exacto No-Intro)"})
+             if not found then
+                 table.insert(results, {error=true, text="Libretro: No encontrado", source="Libretro"})
              end
         end
+    end
 
-    elseif scraperApi == "mock" then
+    if scraperApi == "mock" then
         -- Modo de prueba sin API Key
         log("Mock Scraping: " .. item.name)
         

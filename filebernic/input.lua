@@ -282,8 +282,11 @@ local function keypressed(key)
             scraperSelection = math.min(#scraperResults, scraperSelection + 1)
             inputCooldown = 0.2
         elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
-            saveSelectedArt()
-            inputCooldown = 0.3
+            local sel = scraperResults[scraperSelection]
+            if sel and not sel.error then
+                saveSelectedArt()
+                inputCooldown = 0.3
+            end
         end
         return
     end
