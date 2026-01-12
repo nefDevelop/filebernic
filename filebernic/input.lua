@@ -71,13 +71,15 @@ local function keypressed(key)
     if currentItem and currentItem.empty then
         if key == "backspace" then -- Allow going back from an empty directory
             local parent = romPath:gsub("[^/]+/$", "")
-            if romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" then
-                 createMergedVirtualRoot()
-                 return
-            end
+            
+            -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            if romPath == cwd .. "/../Simulador_SD/" then
+            local simRoot = cwd .. "/../Simulador_SD/"
+            
+            if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
+               romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
+               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  createMergedVirtualRoot()
                  return
             end
@@ -605,13 +607,15 @@ local function keypressed(key)
             love.event.quit() -- Salir de la app desde el menú principal virtual
         else
             local parent = romPath:gsub("[^/]+/$", "")
-            if romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" then
-                 createMergedVirtualRoot()
-                 return
-            end
+            
+            -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            if romPath == cwd .. "/../Simulador_SD/" then
+            local simRoot = cwd .. "/../Simulador_SD/"
+            
+            if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
+               romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
+               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  createMergedVirtualRoot()
                  return
             end
