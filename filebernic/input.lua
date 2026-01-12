@@ -8,6 +8,13 @@ local function keypressed(key)
         return
     end
 
+    if showHelp then
+        if key == "backspace" or key == "b" or key == "escape" then
+            showHelp = false
+        end
+        return
+    end
+
     -- Search mode logic
     if state == "SEARCH" then
         if key == "up" then
@@ -86,6 +93,18 @@ local function keypressed(key)
 
     if state == "OPTIONS_MENU" then
         if key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
+            if menuTitle == "Seleccionar Versión" then
+                 local item = files[selectedIndex]
+                 if item and item.versions and item.versions[menuSelection] then
+                     local v = item.versions[menuSelection]
+                     lastPlayedRom = v.fullPath
+                     saveLastPlayed(lastPlayedRom)
+                     addToHistory(lastPlayedRom)
+                     launching = true
+                     launchTimer = 0
+                 end
+                 return
+            end
             if menuOptions[menuSelection] == "Borrar" then
                 if selectedFilesCount > 0 then
                     menuTitle = "Confirmar Borrado"
@@ -123,6 +142,15 @@ local function keypressed(key)
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
                 refreshFiles()
                 state = "LIST"
+            elseif menuOptions[menuSelection]:match("Modo:") then
+                launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
+                menuOptions[menuSelection] = "Modo: " .. launchMode
+                saveAppState()
+                if isVirtualRoot then
+                    createMergedVirtualRoot()
+                else
+                    refreshFiles()
+                end
             elseif menuOptions[menuSelection]:match("Ocultar vacíos") then
                 hideEmpty = not hideEmpty
                 menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
@@ -541,12 +569,36 @@ local function keypressed(key)
             end
         else
             -- Launch ROM
-            lastPlayedRom = isVirtualRoot and item.fullPath or romPath .. item.name
-            saveLastPlayed(lastPlayedRom)
-            addToHistory(lastPlayedRom)
-            -- Iniciamos secuencia de lanzamiento (verde -> espera -> salir)
-            launching = true
-            launchTimer = 0
+            local romToLaunch = nil
+            
+            if launchMode == "Juego Unico" and item.versions then
+                if #item.versions > 1 then
+                    state = "OPTIONS_MENU"
+                    menuAnim = 0
+                    menuTitle = "Seleccionar Versión"
+                    menuMessage = item.name
+                    menuOptions = {}
+                    for _, v in ipairs(item.versions) do
+                        table.insert(menuOptions, "Jugar: " .. v.name .. " (" .. v.sourceLabel .. ")")
+                    end
+                    menuSelection = 1
+                    inputCooldown = 0.3
+                    return
+                elseif #item.versions == 1 then
+                    romToLaunch = item.versions[1].fullPath
+                end
+            else
+                romToLaunch = isVirtualRoot and item.fullPath or romPath .. item.name
+            end
+            
+            if romToLaunch then
+                lastPlayedRom = romToLaunch
+                saveLastPlayed(lastPlayedRom)
+                addToHistory(lastPlayedRom)
+                -- Iniciamos secuencia de lanzamiento (verde -> espera -> salir)
+                launching = true
+                launchTimer = 0
+            end
         end
     elseif key == "backspace" then -- 'b' button
         if isVirtualRoot then
@@ -631,6 +683,7 @@ local function keypressed(key)
         menuMessage = ""
         menuSelection = 1
         menuOptions = {}
+        table.insert(menuOptions, "Modo: " .. launchMode)
         table.insert(menuOptions, "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula"))
         table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
         table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
@@ -669,6 +722,7 @@ local function gamepadpressed(joystick, button)
 end
 
 local function textinput(t)
+    if showHelp then return end
     if state == "SEARCH" then
         searchQuery = searchQuery .. t
         filterFiles()

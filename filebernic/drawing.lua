@@ -101,20 +101,35 @@ local function drawSideMenu()
     love.graphics.setFont(fontList)
     for i, option in ipairs(menuOptions) do
         local y = startY + (i-1) * 40
+        local labelColor, valueColor
+
         if i == menuSelection then
             love.graphics.setColor(theme.colors.selection_accent)
             love.graphics.rectangle("fill", contentX + 10, y - 5, w/2 - 20, 30, 5)
-            love.graphics.setColor(theme.colors.text_white)
+            labelColor = theme.colors.text_white
+            valueColor = theme.colors.text_white
         else
             if option:find("Borrar") then
-                love.graphics.setColor(1, 0.4, 0.4) -- Rojo suave
+                labelColor = {1, 0.4, 0.4} -- Rojo suave
             elseif option:find("Limpieza") then
-                love.graphics.setColor(0.8, 0.1, 0.1) -- Rojo oscuro
+                labelColor = {0.8, 0.1, 0.1} -- Rojo oscuro
             else
-                love.graphics.setColor(theme.colors.text_dim)
+                labelColor = theme.colors.text_dim
             end
+            valueColor = theme.colors.selection_accent -- Otro tono (Azul claro)
         end
-        love.graphics.print(option, contentX + 20, y)
+
+        local label, value = option:match("^(.-):%s*(.+)$")
+        if label and value then
+            love.graphics.setColor(labelColor)
+            love.graphics.print(label .. ":", contentX + 20, y)
+            love.graphics.setColor(valueColor)
+            local valW = fontList:getWidth(value)
+            love.graphics.print(value, contentX + w/2 - 20 - valW, y)
+        else
+            love.graphics.setColor(labelColor)
+            love.graphics.print(option, contentX + 20, y)
+        end
     end
 end
 
@@ -859,7 +874,17 @@ local function draw()
                 love.graphics.print(nameToDraw, 55, y)
             end
 
-            if label then
+            if launchMode == "Juego Unico" then
+                if currentSystemIcon then
+                    love.graphics.setColor(1, 1, 1)
+                    local iconH = 22
+                    local scale = iconH / currentSystemIcon:getHeight()
+                    local iconW = currentSystemIcon:getWidth() * scale
+                    local ix = sdColX + (sdColW - iconW) / 2
+                    local iy = y + (layout.rowHeight - iconH) / 2
+                    love.graphics.draw(currentSystemIcon, ix, iy, 0, scale, scale)
+                end
+            elseif label then
                 -- Colores distintivos para SD
                 if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
                 elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)

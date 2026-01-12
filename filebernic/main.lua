@@ -28,7 +28,7 @@ state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRA
 itemToDelete = nil
 lastPlayedRom = ""
 playedRoms = {}
-iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons = nil, nil, nil, nil, nil, nil
+iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon = nil, nil, nil, nil, nil, nil, nil
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
 inputCooldown = 0 -- Temporizador para evitar doble input
@@ -39,6 +39,7 @@ markPlayed = true
 pageSize = 13
 viewMode = "LIST" -- "LIST" or "GRID"
 gridCols = 4
+launchMode = "Folder" -- "Folder" or "Juego Unico"
 selectedFilesCount = 0
 theme = nil
 fontList, fontTitle, fontSmall, fontMedium = nil, nil, nil, nil
@@ -77,7 +78,7 @@ validExtensions = {
     -- Sega
     md=true, gen=true, smd=true, bin=true, mdx=true,
     sms=true, gg=true, sg=true,
-    cdi=true, gdi=true, elf=true, lst=true, dat=true,
+    cdi=true, gdi=true, elf=true,
     ["32x"]=true, ["68k"]=true, sgd=true, pco=true,
     -- Sony
     ps=true, pbp=true, chd=true, cue=true, iso=true, m3u=true, cbn=true, mdf=true, img=true,
@@ -93,12 +94,12 @@ validExtensions = {
     dsk=true, sna=true, kcr=true, tap=true, cdt=true, voc=true, cpr=true, -- Amstrad
     hex=true, arduboy=true, -- Arduboy
     ws=true, wsc=true, pc2=true, pcv2=true, -- WonderSwan
-    cbr=true, cbz=true, epub=true, pdf=true, -- Books
+    -- cbr=true, cbz=true, epub=true, pdf=true, -- Books
     exe=true, -- Cave Story / DOS / Ports
     chai=true, chailove=true, -- ChaiLove
     ch8=true, sc8=true, xo8=true, -- CHIP-8
     col=true, cv=true, ri=true, mx1=true, mx2=true, -- Coleco / MSX
-    adf=true, adz=true, dms=true, fdi=true, hdf=true, hdz=true, lha=true, slave=true, info=true, nrg=true, rp9=true, wrp=true, -- Amiga
+    adf=true, adz=true, dms=true, fdi=true, hdf=true, hdz=true, lha=true, slave=true, nrg=true, rp9=true, wrp=true, -- Amiga
     d64=true, d71=true, d80=true, d81=true, d82=true, g64=true, g41=true, x64=true, t64=true, p00=true, crt=true, d6z=true, d7z=true, d8z=true, g6z=true, g4z=true, x6z=true, vfl=true, vsf=true, nib=true, nbz=true, d2m=true, d4m=true, -- Commodore
     dosz=true, bat=true, ins=true, ima=true, jrc=true, tc=true, conf=true, -- DOS
     doom=true, -- Doom
@@ -116,7 +117,7 @@ validExtensions = {
     d88=true, u88=true, -- PC-8800
     d98=true, ["98d"]=true, fdd=true, ["2hd"]=true, tfd=true, ["88d"]=true, hdm=true, xdf=true, dup=true, hdi=true, thd=true, nhd=true, hdd=true, hdn=true, -- PC98
     pak=true, -- OpenBOR / Quake
-    p8=true, png=true, -- PICO-8
+    p8=true, -- PICO-8
     ldb=true, easyrpg=true, -- RPG Maker
     ngp=true, ngc=true, ngpc=true, npc=true, -- Neo Geo Pocket
     scummvm=true, -- ScummVM
@@ -253,6 +254,14 @@ function updateSystemPaths()
         muosTextPath = baseMuosPath .. systemName .. "/text/"
         muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
         -- Year is stored in text path with .year extension
+
+        -- Cargar icono del sistema
+        local iconPath = "assets/system/" .. systemName .. ".png"
+        if love.filesystem.getInfo(iconPath) then
+            currentSystemIcon = love.graphics.newImage(iconPath)
+        else
+            currentSystemIcon = nil
+        end
     end
 end
 
@@ -260,38 +269,72 @@ function refreshFiles()
     updateSystemPaths()
     files = {}
     selectedFilesCount = 0
-    -- Botón para subir nivel si no estamos en la raíz
-    local cwd = love.filesystem.getSource()
-    if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-    local simuladorSdRoot = cwd .. "/../Simulador_SD/"
-    if romPath ~= "" and romPath ~= simuladorSdRoot then
-        table.insert(files, {name = "..", isDir = true})
-    end
 
-    local fileMap = {}
+    local fileMap = {} -- Key: filename (Folder mode) or stem (Juego Unico mode)
 
     local function scan(path, label)
-        local handle = io.popen('ls -p "'..path..'"')
+        local handle
+        local isFind = false
+        
+        if launchMode == "Juego Unico" then
+            -- Búsqueda recursiva solo de archivos
+            handle = io.popen('find "'..path..'" -type f')
+            isFind = true
+        else
+            -- Listado estándar de directorio actual
+            handle = io.popen('ls -p "'..path..'"')
+        end
+
         if handle then
             for line in handle:lines() do
-                local isDirectory = line:sub(-1) == "/"
-                local cleanName = isDirectory and line:sub(1, -2) or line
+                local isDirectory = not isFind and (line:sub(-1) == "/")
+                local cleanName = isFind and line:match("([^/]+)$") or (isDirectory and line:sub(1, -2) or line)
+                local fullPath = isFind and line or (path .. line)
+
+                -- Filtrar archivos ocultos y asegurar nombre válido
+                if cleanName and cleanName:sub(1, 1) ~= "." then
                 local ext = cleanName:match("[^%.]+$")
                 if isDirectory or (ext and validExtensions[ext:lower()]) then
                     local skip = false
-                    if isDirectory and hideEmpty and not hasRoms(path .. line) then
+                    if isDirectory and hideEmpty and not hasRoms(fullPath) then
                         skip = true
                     end
 
                     if not skip then
-                        if fileMap[cleanName] then
-                            files[fileMap[cleanName]].sourceLabel = "SD½"
-                            files[fileMap[cleanName]].secondaryPath = path .. line
+                        local key = cleanName
+                        local stem = cleanName
+                        if not isDirectory and launchMode == "Juego Unico" then
+                            stem = cleanName:gsub("%.[^%.]+$", "")
+                            key = stem
+                        end
+
+                        if fileMap[key] then
+                            local idx = fileMap[key]
+                            local item = files[idx]
+                            
+                            if not isDirectory and launchMode == "Juego Unico" then
+                                -- Add as version
+                                table.insert(item.versions, {
+                                    name = cleanName,
+                                    fullPath = fullPath,
+                                    sourceLabel = label,
+                                    ext = ext
+                                })
+                                item.sourceLabel = "Multi"
+                            else
+                                files[idx].sourceLabel = "SD½"
+                                files[idx].secondaryPath = fullPath
+                            end
                         else
-                            table.insert(files, {name = cleanName, isDir = isDirectory, fullPath = path .. line, sourceLabel = label})
-                            fileMap[cleanName] = #files
+                            local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label}
+                            if not isDirectory and launchMode == "Juego Unico" then
+                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext}}
+                            end
+                            table.insert(files, newItem)
+                            fileMap[key] = #files
                         end
                     end
+                end
                 end
             end
             handle:close()
@@ -302,6 +345,12 @@ function refreshFiles()
     if secondaryPath then
         scan(secondaryPath, secondaryPath:find("/mnt/mmc") and "SD1" or (secondaryPath:find("/mnt/sdcard") and "SD2" or ""))
     end
+    
+    -- Sort files alphabetically
+    table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
+    
+    -- Ensure selectedIndex is within bounds
+    if selectedIndex > #files then selectedIndex = math.max(1, #files) end
     
     allFiles = {}
     for _, item in ipairs(files) do
@@ -1091,7 +1140,9 @@ function saveAppState()
             romPath = savedPath,
             selectedIndex = selectedIndex,
             hideEmpty = hideEmpty,
-            markPlayed = markPlayed
+            markPlayed = markPlayed,
+            viewMode = viewMode,
+            launchMode = launchMode
         }
         f:write(json.encode(stateToSave))
         f:close()
@@ -1289,6 +1340,7 @@ function love.load(arg)
             if loadedState.hideEmpty ~= nil then hideEmpty = loadedState.hideEmpty end
             if loadedState.markPlayed ~= nil then markPlayed = loadedState.markPlayed end
             if loadedState.viewMode then viewMode = loadedState.viewMode end
+            if loadedState.launchMode then launchMode = loadedState.launchMode end
             if loadedState.romPath then 
                 local p = loadedState.romPath
                 -- Restaurar ruta real desde virtual (ROMS/...)

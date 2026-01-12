@@ -40,6 +40,8 @@ local function update(dt)
         end
     end
 
+    if showHelp then return end
+
     -- Control de repetición de tecla manual para el scroll
     local is_down_pressed = love.keyboard.isDown('down') or (love.joystick.getJoystickCount() > 0 and love.joystick.getJoysticks()[1]:isGamepadDown('dpdown'))
     local is_up_pressed = love.keyboard.isDown('up') or (love.joystick.getJoystickCount() > 0 and love.joystick.getJoysticks()[1]:isGamepadDown('dpup'))
