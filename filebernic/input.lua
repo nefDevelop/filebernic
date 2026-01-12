@@ -1,5 +1,12 @@
 local function keypressed(key)
+    log("Key pressed: " .. key)
     if inputCooldown > 0 then return end
+
+    -- Global Help Toggle
+    if key == "f3" then
+        showHelp = not showHelp
+        return
+    end
 
     -- Search mode logic
     if state == "SEARCH" then
@@ -120,6 +127,10 @@ local function keypressed(key)
                 hideEmpty = not hideEmpty
                 menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
                 if isVirtualRoot then createMergedVirtualRoot() end
+            elseif menuOptions[menuSelection]:match("Vista:") then
+                viewMode = (viewMode == "LIST") and "GRID" or "LIST"
+                menuOptions[menuSelection] = "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula")
+                saveAppState()
             elseif menuOptions[menuSelection] == "Limpieza" then
                 state = "CLEANUP_MENU"
                 cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
@@ -172,6 +183,7 @@ local function keypressed(key)
     if state == "INFO_VIEW" then
         if key == "backspace" or key == "b" or key == "escape" then
             state = "LIST"
+            showHelp = false
             inputCooldown = 0.3
         end
         return
@@ -200,6 +212,7 @@ local function keypressed(key)
     if state == "SCRAPER_VIEW" then
         if key == "backspace" then -- 'b' button
             state = "LIST"
+            showHelp = false
             inputCooldown = 0.3
         elseif key == "return" or key == "kpenter" then -- 'a' button
             startScraping()
@@ -218,6 +231,7 @@ local function keypressed(key)
     if state == "SCRAPER_RESULTS" then
         if key == "backspace" then
             state = "SCRAPER_VIEW"
+            showHelp = false
             inputCooldown = 0.3
         elseif key == "left" then
             scraperSelection = math.max(1, scraperSelection - 1)
@@ -329,17 +343,23 @@ local function keypressed(key)
             end
         else
             -- Navegación en resultados
-            if key == "left" then
-                cleanupData.cursor.col = 1
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
-            elseif key == "right" then
+            if key == "f" then -- L1: Cycle columns
                 if cleanupData.cursor.col == 1 then
                     cleanupData.cursor.col = 2
                     cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
                 elseif cleanupData.cursor.col == 2 and #cleanupData.orphanedImages > 0 then
                     cleanupData.cursor.col = 3
                     cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphanedImages)
+                else
+                    cleanupData.cursor.col = 1
+                    cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
                 end
+            elseif key == "left" then -- Page Up (Pagination)
+                local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages
+                cleanupData.cursor.row = math.max(1, cleanupData.cursor.row - pageSize)
+            elseif key == "right" then -- Page Down (Pagination)
+                local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages
+                cleanupData.cursor.row = math.min(maxRows, cleanupData.cursor.row + pageSize)
             elseif key == "return" or key == "kpenter" then
                 -- Verificar si hay algo válido seleccionado para borrar
                 local valid = false
@@ -432,13 +452,57 @@ local function keypressed(key)
         return
     end
 
-    if key == "left" then 
-        selectedIndex = math.max(1, selectedIndex - pageSize)
+    if key == "pageup" then
+        if viewMode == "GRID" then
+            selectedIndex = math.max(1, selectedIndex - (gridCols * 3))
+        else
+            selectedIndex = math.max(1, selectedIndex - pageSize)
+        end
         pendingLoad = true
         inputCooldown = 0.2
         timer = 0
-    elseif key == "right" then 
-        selectedIndex = math.min(#files, selectedIndex + pageSize)
+    elseif key == "pagedown" then
+        if viewMode == "GRID" then
+            selectedIndex = math.min(#files, selectedIndex + (gridCols * 3))
+        else
+            selectedIndex = math.min(#files, selectedIndex + pageSize)
+        end
+        pendingLoad = true
+        inputCooldown = 0.2
+        timer = 0
+    end
+
+    if key == "left" then
+        if viewMode == "GRID" then
+            selectedIndex = math.max(1, selectedIndex - 1)
+        else
+            selectedIndex = math.max(1, selectedIndex - pageSize)
+        end
+        pendingLoad = true
+        inputCooldown = 0.2
+        timer = 0
+    elseif key == "right" then
+        if viewMode == "GRID" then
+            selectedIndex = math.min(#files, selectedIndex + 1)
+        else
+            selectedIndex = math.min(#files, selectedIndex + pageSize)
+        end
+        pendingLoad = true
+        inputCooldown = 0.2
+        timer = 0
+    elseif key == "up" and viewMode == "GRID" then
+        selectedIndex = math.max(1, selectedIndex - 4) -- Asumiendo 4 columnas
+        if selectedIndex > gridCols then
+            selectedIndex = selectedIndex - gridCols
+        end
+        pendingLoad = true
+        inputCooldown = 0.2
+        timer = 0
+    elseif key == "down" and viewMode == "GRID" then
+        selectedIndex = math.min(#files, selectedIndex + 4) -- Asumiendo 4 columnas
+        if selectedIndex + gridCols <= #files then
+            selectedIndex = selectedIndex + gridCols
+        end
         pendingLoad = true
         inputCooldown = 0.2
         timer = 0
@@ -567,6 +631,7 @@ local function keypressed(key)
         menuMessage = ""
         menuSelection = 1
         menuOptions = {}
+        table.insert(menuOptions, "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula"))
         table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
         table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
         table.insert(menuOptions, "Limpieza")
@@ -575,14 +640,15 @@ local function keypressed(key)
 end
 
 local function gamepadpressed(joystick, button)
+    log("Gamepad button pressed: " .. button)
     if button == "a" then
         keypressed("kpenter") -- Usamos kpenter para mayor compatibilidad
     elseif button == "b" then
         keypressed("backspace")
     elseif button == "y" then
-        keypressed("tab")
+        keypressed("tab") -- Physical Y (Left) -> Options
     elseif button == "x" then
-        keypressed("x")
+        keypressed("x") -- Physical X (Top) -> Select
     elseif button == "dpleft" then
         keypressed("left")
     elseif button == "dpright" then
@@ -592,9 +658,13 @@ local function gamepadpressed(joystick, button)
     elseif button == "start" then
         keypressed("f1")
     elseif button == "leftshoulder" then
-        keypressed("f")
+        keypressed("f") -- L1 -> Search
     elseif button == "triggerleft" then
-        keypressed("f2")
+        keypressed("f2") -- L2 -> Clear Filter
+    elseif button == "rightshoulder" then
+        keypressed("f3") -- R1 -> Help
+    elseif button == "triggerright" then
+        keypressed("f4") -- R2 -> Unused
     end
 end
 
