@@ -1,12 +1,5 @@
 local json = require "libs.dkjson"
--- Utility function to split a string by a delimiter
-function split(s, delimiter)
-    local result = {};
-    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
-        table.insert(result, match);
-    end
-    return result;
-end
+local utils = require "utils"
 
 -- Variables de configuración y estado
 systemName = ""
@@ -169,19 +162,7 @@ subsequentScrollDelay = 0.1
 keyHeld = nil -- ('up' o 'down')
 isVirtualRoot = false
 
-local function hasRoms(path)
-    local h = io.popen('ls -p "'..path..'"')
-    if not h then return false end
-    for l in h:lines() do
-        local ext = l:match("[^%.]+$")
-        if l:sub(-1) ~= "/" and ext and validExtensions[ext:lower()] then
-            h:close()
-            return true
-        end
-    end
-    h:close()
-    return false
-end
+local filesystem = require "filesystem"
 
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
 local systemVariants = {
@@ -289,32 +270,6 @@ function getSystemContentIcon(sysName)
         end
     end
     return nil
-end
-
-function updateSystemForFile(item)
-    local currentPath = item.fullPath or (romPath .. item.name)
-    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
-    
-    if detectedSystem and detectedSystem ~= systemName then
-        systemName = detectedSystem
-        
-        -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
-        -- Recalcular rutas de arte
-        local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
-        muosArtPath = baseMuosPath .. systemName .. "/box/"
-        muosTextPath = baseMuosPath .. systemName .. "/text/"
-        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-        return true
-    end
-    return false
 end
 
 function performBackgroundIndexing()
@@ -552,7 +507,7 @@ function createMergedVirtualRoot()
                     if line:sub(-1) == "/" then
                         local dirName = line:sub(1, -2)
                         if dirName ~= "BIOS" and dirName ~= "Saves" then
-                            if not hideEmpty or hasRoms(scanPath .. line) then
+                            if not hideEmpty or filesystem.hasRoms(scanPath .. line, validExtensions) then
                                 if dirMap[dirName] then
                                     files[dirMap[dirName]].sourceLabel = "SD½"
                                     files[dirMap[dirName]].secondaryPath = scanPath .. line
@@ -596,177 +551,6 @@ function createMergedVirtualRoot()
     loadPreview()
 end
 
-function updateSystemPaths()
-    local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
-    
-    if detectedSystem and detectedSystem ~= systemName then
-        systemName = detectedSystem
-        log("System detected: " .. systemName)
-        
-        local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
-        muosArtPath = baseMuosPath .. systemName .. "/box/"
-        muosTextPath = baseMuosPath .. systemName .. "/text/"
-        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-        -- Year is stored in text path with .year extension
-
-        -- Buscar grupo de variantes para el sistema detectado
-        local variants = {systemName}
-        local lowerName = systemName:lower()
-        
-        for _, group in ipairs(systemVariants) do
-            local match = false
-            for _, v in ipairs(group) do
-                if v:lower() == lowerName then
-                    match = true
-                    break
-                end
-            end
-            if match then
-                variants = group
-                log("Variant group found for: " .. systemName)
-                break
-            end
-        end
-
-        -- Cargar icono del sistema (probar todas las variantes)
-        currentSystemIcon = nil
-        for _, v in ipairs(variants) do
-            local path = "assets/systems/" .. v .. ".png"
-            if love.filesystem.getInfo(path) then
-                currentSystemIcon = love.graphics.newImage(path)
-                log("System icon found: " .. path)
-                break
-            end
-        end
-        if not currentSystemIcon then
-            log("System icon NOT found")
-        end
-
-        -- Cargar icono de contenido (ROM) (probar todas las variantes)
-        currentSystemContentIcon = nil
-        for _, v in ipairs(variants) do
-            local path = "assets/systems/" .. v .. "-content.png"
-            if love.filesystem.getInfo(path) then
-                currentSystemContentIcon = love.graphics.newImage(path)
-                log("Content icon found: " .. path)
-                break
-            end
-        end
-        if not currentSystemContentIcon then
-            log("Content icon NOT found")
-        end
-    end
-end
-
-function refreshFiles()
-    updateSystemPaths()
-    files = {}
-    selectedFilesCount = 0
-
-    local fileMap = {} -- Key: filename (Folder mode) or stem (Juego Unico mode)
-
-    local function scan(path, label)
-        local handle
-        local isFind = false
-        
-        if launchMode == "Juego Unico" then
-            -- Búsqueda recursiva solo de archivos
-            handle = io.popen('find "'..path..'" -type f')
-            isFind = true
-        else
-            -- Listado estándar de directorio actual
-            handle = io.popen('ls -p "'..path..'"')
-        end
-
-        if handle then
-            for line in handle:lines() do
-                local isDirectory = not isFind and (line:sub(-1) == "/")
-                local cleanName = isFind and line:match("([^/]+)$") or (isDirectory and line:sub(1, -2) or line)
-                local fullPath = isFind and line or (path .. line)
-
-                -- Filtrar archivos ocultos y asegurar nombre válido
-                if cleanName and cleanName:sub(1, 1) ~= "." then
-                local ext = cleanName:match("[^%.]+$")
-                if isDirectory or (ext and validExtensions[ext:lower()]) then
-                    local skip = false
-                    if isDirectory and hideEmpty and not hasRoms(fullPath) then
-                        skip = true
-                    end
-
-                    if not skip then
-                        local key = cleanName
-                        local stem = cleanName
-                        local system = nil
-
-                        if not isDirectory and launchMode == "Juego Unico" then
-                            stem = cleanName:gsub("%.[^%.]+$", "")
-                            key = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                            if key == "" then key = stem end
-                            system = fullPath:match("ROMS/([^/]+)/") or fullPath:match("Simulador_SD/([^/]+)/")
-                        end
-
-                        if fileMap[key] then
-                            local idx = fileMap[key]
-                            local item = files[idx]
-                            
-                            if not isDirectory and launchMode == "Juego Unico" then
-                                -- Add as version
-                                table.insert(item.versions, {
-                                    name = cleanName,
-                                    fullPath = fullPath,
-                                    sourceLabel = label,
-                                    ext = ext,
-                                    system = system
-                                })
-                                item.sourceLabel = "Multi"
-                            else
-                                files[idx].sourceLabel = "SD½"
-                                files[idx].secondaryPath = fullPath
-                            end
-                        else
-                            local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label}
-                            if not isDirectory and launchMode == "Juego Unico" then
-                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext, system = system}}
-                            end
-                            table.insert(files, newItem)
-                            fileMap[key] = #files
-                        end
-                    end
-                end
-                end
-            end
-            handle:close()
-        end
-    end
-
-    scan(romPath, romPath:find("/mnt/mmc") and "SD1" or (romPath:find("/mnt/sdcard") and "SD2" or ""))
-    if secondaryPath then
-        scan(secondaryPath, secondaryPath:find("/mnt/mmc") and "SD1" or (secondaryPath:find("/mnt/sdcard") and "SD2" or ""))
-    end
-    
-    -- Sort files alphabetically
-    table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
-    
-    -- Ensure selectedIndex is within bounds
-    if selectedIndex < 1 then selectedIndex = 1 end
-    if selectedIndex > #files then selectedIndex = math.max(1, #files) end
-    
-    allFiles = {}
-    for _, item in ipairs(files) do
-        table.insert(allFiles, item)
-    end
-
-    loadPreview()
-end
-
 function filterFiles()
     files = {}
     for _, item in ipairs(allFiles) do
@@ -775,17 +559,6 @@ function filterFiles()
         end
     end
     selectedIndex = 1
-end
-
--- Helper para codificar URL
-local function urlencode(str)
-    if (str) then
-        str = string.gsub (str, "\n", "\r\n")
-        str = string.gsub (str, "([^%w %-%_%.%~])",
-            function (c) return string.format ("%%%02X", string.byte(c)) end)
-        str = string.gsub (str, " ", "+")
-    end
-    return str
 end
 
 function loadConfig()
@@ -808,346 +581,7 @@ function loadConfig()
     scraperApi = config.scraperApi
 end
 
-function getScrapeResults(item)
-    local results = {}
-    updateSystemForFile(item)
-    
-    local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
-    local encodedName = urlencode(cleanName)
-
-    -- 1. ScreenScraper
-    if scraperApi == "all" or scraperApi == "screenscraper" then
-    -- Configuración API ScreenScraper
-    local devid = config.screenscraper_devid
-    local devpassword = config.screenscraper_password
-    local softname = "FileBernic"
-    
-    local skipSS = false
-    if devid == "" or devpassword == "" then
-        if scraperApi == "screenscraper" then
-            table.insert(results, {error = true, text = "Error: Faltan credenciales SS"})
-        end
-        skipSS = true
-    end
-
-    if not skipSS then
-    -- Construir URL para buscar por nombre de archivo (romNom)
-    local url = "https://www.screenscraper.fr/api2/jeuInfos.php?output=json&romNom=" .. encodedName
-    if devid ~= "" then
-        url = url .. "&devid=" .. devid .. "&devpassword=" .. devpassword .. "&softname=" .. softname
-    else
-        -- Intento sin credenciales (puede requerir softname registrado)
-        url = url .. "&softname=" .. softname
-    end
-
-    log("Scraping Request URL: " .. url)
-
-    -- Ejecutar curl
-    local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
-    local response = handle:read("*a")
-    handle:close()
-    log("Scraping Response: " .. (response or "nil"))
-
-    if response and response ~= "" then
-        if response:sub(1, 1) ~= "{" then
-            table.insert(results, {
-                error = true,
-                text = "API Error: " .. response
-            })
-        else
-            local data, pos, err = json.decode(response)
-            if data and data.response and data.response.jeu then
-            local game = data.response.jeu
-            -- ScreenScraper a veces devuelve un array o un objeto único
-            -- Aquí asumimos respuesta simple por nombre exacto o procesamos el primero
-            
-            -- Buscar imagen (boxart 2d o 3d)
-            local imageUrl = nil
-            local screenUrl = nil
-            local region = "Mundo"
-            local description = "Sin descripción."
-            local year = nil
-            
-            if game.synopsis then
-                if type(game.synopsis) == "table" and #game.synopsis > 0 then
-                    for _, s in ipairs(game.synopsis) do
-                        if s.langue == "es" then description = s.text break end
-                        if s.langue == "en" and description == "Sin descripción." then description = s.text end
-                    end
-                elseif type(game.synopsis) == "string" then
-                    description = game.synopsis
-                elseif type(game.synopsis) == "table" and game.synopsis.text then
-                    description = game.synopsis.text
-                end
-            end
-            
-            if game.dates then
-                for _, d in ipairs(game.dates) do
-                    if d.text then
-                        year = d.text:match("^(%d%d%d%d)")
-                        if year then break end
-                    end
-                end
-            end
-            
-            if game.medias and game.medias.media then
-                local medias = game.medias.media
-                if not medias[1] then medias = {medias} end
-                for _, media in ipairs(medias) do
-                    if media.type == "box-2d" or media.type == "box-3d" then
-                        imageUrl = media.url
-                        region = media.region or region
-                    elseif media.type == "ss" then
-                        screenUrl = media.url
-                    end
-                end
-            end
-
-            if imageUrl then
-                -- Descargar imagen temporal
-                local tempImgPath = "/tmp/scraper_temp.png"
-                os.execute("curl -s -L '" .. imageUrl .. "' -o " .. tempImgPath)
-                
-                local tempScreenPath = nil
-                local screenImg = nil
-                if screenUrl then
-                    tempScreenPath = "/tmp/scraper_temp_screen.png"
-                    os.execute("curl -s -L '" .. screenUrl .. "' -o " .. tempScreenPath)
-                    if love.filesystem.getInfo(tempScreenPath) or io.open(tempScreenPath, "r") then
-                         local sData = love.image.newImageData(tempScreenPath)
-                         screenImg = love.graphics.newImage(sData)
-                    end
-                end
-
-                -- Cargar en LÖVE
-                if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
-                    local imgData = love.image.newImageData(tempImgPath)
-                    local img = love.graphics.newImage(imgData)
-                    table.insert(results, {
-                        image = img,
-                        screenshot = screenImg,
-                        tempScreenPath = tempScreenPath,
-                        description = description,
-                        year = year,
-                        region = region,
-                        tempPath = tempImgPath,
-                        source = "ScreenScraper"
-                    })
-                end
-            end
-            end
-        end
-    end
-    end
-    end
-
-    -- 2. TheGamesDB
-    if scraperApi == "all" or scraperApi == "thegamesdb" then
-        -- Configuración API TheGamesDB
-        local apikey = config.thegamesdb_apikey
-        
-        local skipTGDB = false
-        if apikey == "" then
-            if scraperApi == "thegamesdb" then
-                table.insert(results, {error = true, text = "Error: Falta API Key TGDB"})
-            end
-            skipTGDB = true
-        end
-
-        if not skipTGDB then
-        local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview,release_date&include=boxart,screenshot"
-        log("TGDB Request: " .. url)
-
-        local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
-        local response = handle:read("*a")
-        handle:close()
-        log("TGDB Response: " .. (response or "nil"))
-
-        if response and response:sub(1, 1) == "{" then
-            local data = json.decode(response)
-            if data and data.data and data.data.games then
-                for _, game in ipairs(data.data.games) do
-                    local gameId = tostring(game.id)
-                    -- Buscar imagen en los datos incluidos (sideloaded)
-                    if data.include and data.include.boxart and data.include.boxart.data and data.include.boxart.data[gameId] then
-                        for _, art in ipairs(data.include.boxart.data[gameId]) do
-                            if art.side == "front" then
-                                local imageUrl = "https://cdn.thegamesdb.net/images/original/" .. art.filename
-                                local tempImgPath = "/tmp/scraper_tgdb_" .. gameId .. ".png"
-                                os.execute("curl -s -L '" .. imageUrl .. "' -o " .. tempImgPath)
-                                
-                                local year = nil
-                                if game.release_date then
-                                    year = game.release_date:match("^(%d%d%d%d)")
-                                end
-                                
-                                local screenImg = nil
-                                local tempScreenPath = nil
-                                if data.include.screenshot and data.include.screenshot.data and data.include.screenshot.data[gameId] then
-                                    local scr = data.include.screenshot.data[gameId][1]
-                                    if scr then
-                                        local screenUrl = "https://cdn.thegamesdb.net/images/original/" .. scr.filename
-                                        tempScreenPath = "/tmp/scraper_tgdb_scr_" .. gameId .. ".png"
-                                        os.execute("curl -s -L '" .. screenUrl .. "' -o " .. tempScreenPath)
-                                        if love.filesystem.getInfo(tempScreenPath) or io.open(tempScreenPath, "r") then
-                                            screenImg = love.graphics.newImage(tempScreenPath)
-                                        end
-                                    end
-                                end
-
-                                if love.filesystem.getInfo(tempImgPath) or io.open(tempImgPath, "r") then
-                                    local imgData = love.image.newImageData(tempImgPath)
-                                    local img = love.graphics.newImage(imgData)
-                                    table.insert(results, {
-                                        image = img,
-                                        screenshot = screenImg,
-                                        tempScreenPath = tempScreenPath,
-                                        description = game.overview or "Sin descripción.",
-                                        year = year,
-                                        region = game.game_title, -- Usamos el título como info
-                                        tempPath = tempImgPath,
-                                        source = "TheGamesDB"
-                                    })
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        end
-    end
-
-    -- 3. Libretro
-    if scraperApi == "all" or scraperApi == "libretro" then
-        -- Repositorio de miniaturas de Libretro (Sin API Key, basado en nombres No-Intro)
-        local libretroSystems = {
-            gba = "Nintendo - Game Boy Advance",
-            snes = "Nintendo - Super Nintendo Entertainment System",
-            sfc = "Nintendo - Super Nintendo Entertainment System",
-            nes = "Nintendo - Nintendo Entertainment System",
-            fc = "Nintendo - Nintendo Entertainment System",
-            gb = "Nintendo - Game Boy",
-            gbc = "Nintendo - Game Boy Color",
-            md = "Sega - Mega Drive - Genesis",
-            gen = "Sega - Mega Drive - Genesis",
-            ps = "Sony - PlayStation",
-            ps1 = "Sony - PlayStation",
-            psx = "Sony - PlayStation",
-            nds = "Nintendo - Nintendo DS",
-            n64 = "Nintendo - Nintendo 64",
-            sms = "Sega - Master System - Mark III",
-            gg = "Sega - Game Gear",
-            neogeo = "SNK - Neo Geo",
-            arcade = "MAME",
-            mame = "MAME",
-            fbneo = "MAME",
-            pce = "NEC - PC Engine",
-            ngp = "SNK - Neo Geo Pocket",
-            ngpc = "SNK - Neo Geo Pocket Color"
-        }
-        
-        local sysName = libretroSystems[systemName:lower()]
-        if not sysName then
-             local msg = "Sistema no mapeado en Libretro: " .. tostring(systemName)
-             log(msg)
-             table.insert(results, {error=true, text=msg})
-        else
-             -- Ajustar encoding para URL de Libretro (espacios como %20 en lugar de +)
-             local sysEncoded = urlencode(sysName):gsub("%+", "%%20")
-             
-             -- Función local para intentar descargar de Libretro
-             local function tryLibretro(nameToTry, label)
-                 local nameEnc = urlencode(nameToTry):gsub("%+", "%%20")
-                 local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEnc .. ".png"
-                 log("Libretro Request ("..label.."): " .. url)
-                 
-                 local tempImgPath = "/tmp/scraper_libretro_" .. label:gsub(" ", "_") .. ".png"
-                 -- Usamos curl -v y capturamos stderr para ver la respuesta en el log
-                 local handle = io.popen("curl -v -s -L -f '" .. url .. "' -o " .. tempImgPath .. " 2>&1")
-                 local output = handle:read("*a")
-                 handle:close()
-                 log("Libretro Response ("..label.."): " .. (output or "nil"))
-                 
-                 -- Verificar si el archivo existe y tiene contenido
-                 local f = io.open(tempImgPath, "rb")
-                 local data = nil
-                 if f then
-                     data = f:read("*a")
-                     f:close()
-                 end
-
-                 if data and #data > 0 then
-                     -- Try to fetch snap (Screenshot)
-                     local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
-                     local tempScreenPath = "/tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png"
-                     local screenImg = nil
-                     os.execute("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
-                     
-                     local fSnap = io.open(tempScreenPath, "rb")
-                     if fSnap then
-                         local sData = fSnap:read("*a")
-                         fSnap:close()
-                         if sData and #sData > 0 then
-                             screenImg = love.graphics.newImage(love.filesystem.newFileData(sData, "snap.png"))
-                         end
-                     end
-
-                     local fileData = love.filesystem.newFileData(data, "scraper.png")
-                     local img = love.graphics.newImage(fileData)
-                     table.insert(results, {
-                         image = img,
-                         screenshot = screenImg,
-                         tempScreenPath = tempScreenPath,
-                         description = "Libretro no proporciona descripciones.",
-                         region = "Libretro ("..label..")",
-                         tempPath = tempImgPath,
-                         source = "Libretro"
-                     })
-                     return true
-                 end
-                 return false
-             end
-             
-             -- 1. Intento Exacto
-             local found = tryLibretro(cleanName, "Exacto")
-             
-             -- 2. Intento Limpio (sin paréntesis ni corchetes)
-             if not found then
-                 local clean = cleanName:gsub("%b()", ""):gsub("%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                 if clean ~= cleanName then
-                     found = tryLibretro(clean, "Limpio")
-                 end
-             end
-             
-             if not found then
-                 table.insert(results, {error=true, text="Libretro: No encontrado", source="Libretro"})
-             end
-        end
-    end
-
-    if scraperApi == "mock" then
-        -- Modo de prueba sin API Key
-        log("Mock Scraping: " .. item.name)
-        
-        -- Usamos un asset existente como resultado falso
-        local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
-        local mockTemp = "/tmp/scraper_mock.png"
-        
-        os.execute("cp '" .. mockSrc .. "' " .. mockTemp)
-        
-        if io.open(mockTemp, "r") then
-            local img = love.graphics.newImage(mockTemp)
-            table.insert(results, {
-                image = img,
-                description = "Esto es una descripción de prueba en modo Mock.",
-                region = "Mock Result (Test)",
-                tempPath = mockTemp
-            })
-        end
-    end
-    return results
-end
+local scraper = require "scraper"
 
 function findSaveFiles(item)
     saveFiles = {}
@@ -1471,7 +905,7 @@ function startScraping()
     -- Limpiar temporales
     os.execute("rm -f /tmp/scraper_*.png")
     
-    scraperResults = getScrapeResults(item)
+    scraperResults = scraper.getScrapeResults(item, config, log, systemName)
     scraperSelection = 1
     state = "SCRAPER_RESULTS"
 end
@@ -1489,7 +923,7 @@ function performBatchScrape(items)
             scraperProgress.currentName = item.name
             coroutine.yield()
             
-            local results = getScrapeResults(item)
+            local results = scraper.getScrapeResults(item, config, log, systemName)
             if results and #results > 0 and not results[1].error then
                 saveScrapeResult(item, results[1])
                 scraperProgress.successes = scraperProgress.successes + 1
@@ -1498,7 +932,7 @@ function performBatchScrape(items)
             end
         end
         state = "LIST"
-        refreshFiles()
+        files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
     end)
 end
 
@@ -1526,7 +960,7 @@ function loadPreview()
     if not item or item.isDir then return end
     
     -- Asegurar que el sistema detectado corresponde al archivo seleccionado (para lista mixta)
-    updateSystemForFile(item)
+    systemName, muosArtPath, muosTextPath, muosPreviewPath = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
     
     local baseName = item.name:gsub("%..-$", "")
     
@@ -1797,7 +1231,7 @@ function love.load(arg)
     -- Handle screen resolution from launch script
     if arg[1] then
         local res = arg[1]
-        local parts = split(res, "x")
+        local parts = utils.split(res, "x")
         local w, h = tonumber(parts[1]), tonumber(parts[2])
         if w and h then
             love.window.setMode(w, h)
@@ -1960,7 +1394,7 @@ function love.load(arg)
     end
 
     if romPath ~= "" then
-        refreshFiles()
+        files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
         -- If romPath was from lastPlayedRom, try to find and set selectedIndex
         if lastPlayedRom and lastPlayedRom ~= "" and romPath == lastPlayedRom:match("(.*/)") then
             for i, item in ipairs(files) do
