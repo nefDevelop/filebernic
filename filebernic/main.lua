@@ -1105,20 +1105,37 @@ function findSaveFiles(item)
     saveManagerSelection = 1
     local baseName = item.name:gsub("%..-$", "")
     
+    -- Escapar caracteres especiales para el comando find (ej: corchetes)
+    local escapedName = baseName:gsub("([%[%]%*%?])", "\\%1")
+    
     -- Rutas comunes de guardado en muOS / RetroArch
-    local searchPaths = {
-        "/mnt/mmc/MUOS/save",
-        "/mnt/sdcard/MUOS/save",
-        "/mnt/mmc/MUOS/save/state",
-        "/mnt/sdcard/MUOS/save/state",
-        item.fullPath:match("(.*/)") -- Carpeta de la ROM
-    }
+    local searchPaths = {}
+    
+    if io.open("/mnt/mmc", "r") then
+        table.insert(searchPaths, "/mnt/mmc/MUOS/save")
+        table.insert(searchPaths, "/mnt/sdcard/MUOS/save")
+        table.insert(searchPaths, "/mnt/mmc/MUOS/save/state")
+        table.insert(searchPaths, "/mnt/sdcard/MUOS/save/state")
+    else
+        -- Fallback Simulador
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        local simPath = cwd .. "/../Simulador_SD/"
+        table.insert(searchPaths, simPath .. "MUOS/save")
+        table.insert(searchPaths, simPath .. "MUOS/save/state")
+    end
+    
+    if item.fullPath then
+        local romDir = item.fullPath:match("(.*/)")
+        if romDir then table.insert(searchPaths, romDir) end
+    end
     
     local foundMap = {}
 
     for _, path in ipairs(searchPaths) do
         -- Listar archivos que empiecen por el nombre de la ROM
-        local h = io.popen('find "'..path..'" -maxdepth 1 -name "'..baseName..'.*" 2>/dev/null')
+        local cmd = 'find "'..path..'" -maxdepth 1 -name "'..escapedName..'.*" 2>/dev/null'
+        local h = io.popen(cmd)
         if h then
             for line in h:lines() do
                 if line:match("%.srm$") or line:match("%.state") then

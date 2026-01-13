@@ -167,6 +167,29 @@ local function drawSideMenu()
             love.graphics.print(text, slideX + 20, textY)
         end
     end
+
+    -- Mostrar ruta en DELETE_MENU
+    if state == "DELETE_MENU" and itemToDelete then
+        local path = itemToDelete.fullPath or ""
+        local displayPath = path
+        if path:find("ROMS/") then
+            displayPath = path:match("ROMS/(.*)")
+        elseif path:find("Simulador_SD/") then
+            displayPath = path:match("Simulador_SD/(.*)")
+        end
+        
+        love.graphics.setFont(fontSmall)
+        love.graphics.setColor(theme.colors.text_dim)
+        
+        local textY = h - 45
+        local availableW = menuW - 40
+        
+        if fontSmall:getWidth(displayPath) > availableW then
+             love.graphics.printf(displayPath, slideX + 20, textY - fontSmall:getHeight(), availableW, "center")
+        else
+             love.graphics.printf(displayPath, slideX + 20, textY, availableW, "center")
+        end
+    end
 end
 
 local function drawHelpOverlay()
