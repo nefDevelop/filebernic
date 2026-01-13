@@ -95,7 +95,7 @@ local function drawSideMenu()
 
     -- Boxart en el fondo (Watermark)
     if state == "OPTIONS_MENU" and currentImage then
-        love.graphics.setColor(1, 1, 1, 0.25) -- Opacidad baja
+        love.graphics.setColor(1, 1, 1, 0.15) -- Opacidad levemente mayor
         local availW = menuW - 20
         local availH = h * 0.45 -- Max 45% de altura
         local scale = math.min(availW / currentImage:getWidth(), availH / currentImage:getHeight())
@@ -103,22 +103,92 @@ local function drawSideMenu()
         local imgW = currentImage:getWidth() * scale
         local imgH = currentImage:getHeight() * scale
         
-        love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, h - imgH - 10, 0, scale, scale)
+        love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, 20, 0, scale, scale)
     end
 
-    -- Título
-    love.graphics.setColor(theme.colors.text_white)
-    love.graphics.setFont(fontTitle)
-    love.graphics.printf(menuTitle, slideX + 20, 40, menuW - 40, "left")
-
-    -- Mensaje
+    -- Header (Título y Mensaje/Info)
+    local item = focusedItem or files[selectedIndex]
     local startY = 90
-    if menuMessage and menuMessage ~= "" then
-        love.graphics.setFont(fontMedium)
-        love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.printf(menuMessage, slideX + 20, 80, menuW - 40, "left")
-        local width, wrappedtext = fontMedium:getWrap(menuMessage, menuW - 40)
-        startY = 80 + (#wrappedtext * fontMedium:getHeight()) + 30
+    local isGameOptions = false
+    
+    if state == "OPTIONS_MENU" and item and (not item.isDir or focusedItem) then
+        -- Detectar si es el menú de opciones de un juego (no confirmación de borrado múltiple)
+        if (menuTitle:match("^Opciones") and menuMessage == item.name) then
+            isGameOptions = true
+        end
+    end
+
+    if isGameOptions then
+        -- Header Personalizado para Juego
+        local name = menuMessage
+        local mainName = name
+        local extraInfo = ""
+        
+        local pStart = name:find("%(")
+        if pStart then
+            mainName = name:sub(1, pStart - 1)
+            extraInfo = name:sub(pStart)
+        end
+        
+        local sysIcon = nil
+        local sysName = item.system
+        if not sysName and item.fullPath then
+             sysName = item.fullPath:match("ROMS/([^/]+)/") or item.fullPath:match("Simulador_SD/([^/]+)/")
+        end
+        if sysName then sysIcon = getSystemIcon(sysName) end
+        
+        local headerY = 25
+        local iconSize = 32
+        local textX = slideX + 20
+        
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(theme.colors.text_white)
+        
+        local availW = menuW - 40
+        local iconWidth = 0
+        local iconScale = 1
+        
+        if sysIcon then
+            iconScale = iconSize / sysIcon:getHeight()
+            iconWidth = sysIcon:getWidth() * iconScale
+            availW = availW - iconWidth - 10
+        end
+        
+        local _, wrappedMain = fontTitle:getWrap(mainName, availW)
+        for i, line in ipairs(wrappedMain) do
+            love.graphics.print(line, textX, headerY + (i-1)*fontTitle:getHeight())
+        end
+        
+        if sysIcon then
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.draw(sysIcon, slideX + menuW - 20 - iconWidth, headerY, 0, iconScale, iconScale)
+        end
+        
+        local mainH = #wrappedMain * fontTitle:getHeight()
+        local contentH = math.max(iconSize, mainH)
+        
+        if extraInfo ~= "" then
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(theme.colors.text_dim)
+            love.graphics.printf(extraInfo, slideX + 20, headerY + contentH + 5, menuW - 40, "left")
+            local _, wrappedExtra = fontSmall:getWrap(extraInfo, menuW - 40)
+            startY = headerY + contentH + 5 + (#wrappedExtra * fontSmall:getHeight()) + 20
+        else
+            startY = headerY + contentH + 20
+        end
+    else
+        -- Header Estándar
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.setFont(fontTitle)
+        love.graphics.printf(menuTitle, slideX + 20, 40, menuW - 40, "left")
+
+        if menuMessage and menuMessage ~= "" then
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_medium)
+            love.graphics.printf(menuMessage, slideX + 20, 80, menuW - 40, "left")
+            local width, wrappedtext = fontMedium:getWrap(menuMessage, menuW - 40)
+            startY = 80 + (#wrappedtext * fontMedium:getHeight()) + 30
+        end
     end
 
     -- Opciones

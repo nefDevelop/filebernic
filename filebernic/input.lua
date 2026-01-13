@@ -134,8 +134,7 @@ local function keypressed(key)
                      state = "INFO_VIEW"
                  elseif opt == "Scraper" then
                      state = "SCRAPER_VIEW"
-                 elseif opt == "Save Games" then
-                     findSaveFiles(focusedItem)
+                 elseif opt:match("Save Games") then
                      state = "SAVE_MANAGER"
                  elseif opt == "Borrar" then
                      local fullPath = focusedItem.fullPath
@@ -289,8 +288,7 @@ local function keypressed(key)
                     refreshFiles()
                     state = "LIST"
                 end
-            elseif menuOptions[menuSelection] == "Save Games" then
-                findSaveFiles(files[selectedIndex])
+            elseif menuOptions[menuSelection]:match("Save Games") then
                 state = "SAVE_MANAGER"
             end
             inputCooldown = 0.3
@@ -309,7 +307,8 @@ local function keypressed(key)
                  
                  menuTitle = "Opciones: " .. ver.name
                  menuMessage = ver.name
-                 menuOptions = {"Info", "Scraper", "Save Games", "Borrar"}
+                 findSaveFiles(ver)
+                 menuOptions = {"Info", "Scraper", "Save Games (" .. #saveFiles .. ")", "Borrar"}
                  menuSelection = 1
                  inputCooldown = 0.3
                  return
@@ -814,7 +813,8 @@ local function keypressed(key)
             end
             
             -- 3. Save Games
-            table.insert(menuOptions, "Save Games")
+            findSaveFiles(item)
+            table.insert(menuOptions, "Save Games (" .. #saveFiles .. ")")
             
             -- 4. Borrar (Al final)
             if item.sourceLabel == "SD½" then
