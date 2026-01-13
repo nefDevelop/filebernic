@@ -272,161 +272,6 @@ function getSystemContentIcon(sysName)
     return nil
 end
 
-function performBackgroundIndexing()
-    isIndexing = true
-    indexStateMessage = "Iniciando escaneo..."
-
-    indexCoroutine = coroutine.create(function()
-        local newIndex = {}
-        local fileMap = {} -- Key: stem -> index in newIndex
-        local romDirs = {}
-
-        local function scanRoot(rootPath)
-            if not io.open(rootPath, "r") then return end
-            table.insert(romDirs, rootPath)
-            
-            indexStateMessage = "Escaneando: " .. rootPath
-            coroutine.yield()
-
-            local h = io.popen('find "'..rootPath..'" -type f')
-            if h then
-                local count = 0
-                for fLine in h:lines() do
-                    count = count + 1
-                    if count % 100 == 0 then coroutine.yield() end -- Ceder control para no congelar
-
-                    local filename = fLine:match("([^/]+)$")
-                    if filename and filename:sub(1, 1) ~= "." then
-                        local ext = filename:match("[^%.]+$")
-                        if ext and validExtensions[ext:lower()] then
-                            local stem = filename:gsub("%.[^%.]+$", "")
-                            local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                            if groupKey == "" then groupKey = stem end
-                            
-                            local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
-
-                            if fileMap[groupKey] then
-                                local idx = fileMap[groupKey]
-                                local item = newIndex[idx]
-                                table.insert(item.versions, {
-                                    name = filename,
-                                    fullPath = fLine,
-                                    sourceLabel = sysName,
-                                    ext = ext,
-                                    system = sysName
-                                })
-                                item.sourceLabel = "Multi"
-                            else
-                                local newItem = {
-                                    name = groupKey,
-                                    isDir = false,
-                                    fullPath = fLine,
-                                    sourceLabel = sysName,
-                                    icon = nil, -- Iconos se cargan bajo demanda
-                                    versions = {{
-                                        name = filename,
-                                        fullPath = fLine,
-                                        sourceLabel = sysName,
-                                        ext = ext,
-                                        system = sysName
-                                    }}
-                                }
-                                table.insert(newIndex, newItem)
-                                fileMap[groupKey] = #newIndex
-                            end
-                        end
-                    end
-                end
-                h:close()
-            end
-        end
-
-        scanRoot("/mnt/mmc/ROMS/")
-        scanRoot("/mnt/sdcard/ROMS/")
-        -- Fallback Simulador
-        if #newIndex == 0 then
-            local cwd = love.filesystem.getSource()
-            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            scanRoot(cwd .. "/../Simulador_SD/")
-        end
-
-        indexStateMessage = "Ordenando y guardando..."
-        coroutine.yield()
-
-        table.sort(newIndex, function(a, b) return a.name:lower() < b.name:lower() end)
-        romIndex = newIndex
-
-        -- Guardar índice en archivo
-        local dataDir = love.filesystem.getSource() .. "/data"
-        os.execute("mkdir -p " .. dataDir)
-        local f = io.open(dataDir .. "/rom_index.json", "w")
-        if f then
-            f:write(json.encode(romIndex))
-            f:close()
-        end
-
-        -- Guardar timestamps de los directorios
-        local timestamps = {}
-        for _, dir in ipairs(romDirs) do
-            local h = io.popen('stat -c %Y "'..dir..'"')
-            if h then timestamps[dir] = h:read("*a"):gsub("%s+", "") h:close() end
-        end
-        local f_ts = io.open(dataDir .. "/rom_timestamps.json", "w")
-        if f_ts then
-            f_ts:write(json.encode(timestamps))
-            f_ts:close()
-        end
-
-        isIndexing = false
-        indexStateMessage = ""
-        
-        -- Si estamos en la vista de raíz virtual y modo juego único, refrescar
-        if isVirtualRoot and launchMode == "Juego Unico" then
-             createMergedVirtualRoot()
-        end
-    end)
-end
-
-function removeFromIndex(path)
-    if not romIndex then return end
-    local i = 1
-    while i <= #romIndex do
-        local item = romIndex[i]
-        local vIndex = 1
-        local changed = false
-        while vIndex <= #item.versions do
-            if item.versions[vIndex].fullPath == path then
-                table.remove(item.versions, vIndex)
-                changed = true
-            else
-                vIndex = vIndex + 1
-            end
-        end
-        
-        if changed then
-            if #item.versions == 0 then
-                table.remove(romIndex, i)
-            else
-                if #item.versions == 1 then
-                    item.sourceLabel = item.versions[1].sourceLabel
-                    item.fullPath = item.versions[1].fullPath
-                end
-                i = i + 1
-            end
-        else
-            i = i + 1
-        end
-    end
-    
-    -- Save index to disk to persist deletion
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/rom_index.json", "w")
-    if f then
-        f:write(json.encode(romIndex))
-        f:close()
-    end
-end
-
 function jumpToNextLetter()
     if #files == 0 then return end
     local current = files[selectedIndex].name:sub(1,1):upper()
@@ -471,85 +316,7 @@ function jumpToPrevLetter()
     jumpLetter = files[selectedIndex].name:sub(1,1):upper()
 end
 
-function createMergedVirtualRoot()
-    files = {}
-    isVirtualRoot = true
-    romPath = "" -- Not a real path in this view
-    secondaryPath = nil
-    selectedIndex = 1
-
-    if launchMode == "Juego Unico" then
-        if romIndex then
-            -- El índice está listo, úsalo.
-            files = {}
-            for _, item in ipairs(romIndex) do
-                -- Deep copy para evitar modificar el índice original con estados temporales (ej: .selected)
-                local copy = {}
-                for k, v in pairs(item) do copy[k] = v end
-                table.insert(files, copy)
-            end
-        else
-            -- El índice no está listo, se mostrará un mensaje de "cargando" en drawing.lua
-            -- Dejamos `files` vacío por ahora.
-        end
-
-    else
-        -- MODO CARPETA: Listar Sistemas (Comportamiento original)
-        local dirMap = {} 
-        local function scanAndAdd(scanPath, label)
-            local f = io.open(scanPath, "r")
-            if not f then return end
-            f:close()
-
-            local handle = io.popen('ls -p "'..scanPath..'"')
-            if handle then
-                for line in handle:lines() do
-                    if line:sub(-1) == "/" then
-                        local dirName = line:sub(1, -2)
-                        if dirName ~= "BIOS" and dirName ~= "Saves" then
-                            if not hideEmpty or filesystem.hasRoms(scanPath .. line, validExtensions) then
-                                if dirMap[dirName] then
-                                    files[dirMap[dirName]].sourceLabel = "SD½"
-                                    files[dirMap[dirName]].secondaryPath = scanPath .. line
-                                else
-                                    local icon = getSystemIcon(dirName)
-                                    table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
-                                    dirMap[dirName] = #files
-                                end
-                            end
-                        end
-                    end
-                end
-                handle:close()
-            end
-        end
-
-        scanAndAdd("/mnt/mmc/ROMS/", "SD1")
-        scanAndAdd("/mnt/sdcard/ROMS/", "SD2")
-
-        if #files == 0 then
-            local cwd = love.filesystem.getSource()
-            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            local simPath = cwd .. "/../Simulador_SD/"
-            local h = io.popen('ls -d "'..simPath..'"')
-            if h and h:read("*a") ~= "" then
-                table.insert(files, {name = "Simulador_SD", isDir = true, fullPath = simPath, sourceLabel = "SIM"})
-            end
-            scanAndAdd(simPath, "SIM")
-        end
-    end
-    
-    -- Sort files alphabetically by name
-    table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
-
-    -- Back up the full list
-    allFiles = {}
-    for _, item in ipairs(files) do
-        table.insert(allFiles, item)
-    end
-
-    loadPreview()
-end
+function updateSystemPaths()
 
 function filterFiles()
     files = {}
@@ -1154,51 +921,6 @@ function love.errorhandler(msg)
     end
 end
 
-function startIndexingProcess()
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local indexPath = dataDir .. "/rom_index.json"
-    local tsPath = dataDir .. "/rom_timestamps.json"
-
-    local indexFile = io.open(indexPath, "r")
-    local tsFile = io.open(tsPath, "r")
-
-    if not indexFile or not tsFile then
-        if indexFile then indexFile:close() end
-        if tsFile then tsFile:close() end
-        log("No index found. Starting background indexing.")
-        performBackgroundIndexing()
-        return
-    end
-
-    -- Si los archivos existen, comprobar timestamps
-    local needsReindex = false
-    local tsContent = tsFile:read("*a")
-    tsFile:close()
-    local savedTimestamps = json.decode(tsContent)
-
-    for dir, saved_ts in pairs(savedTimestamps) do
-        local h = io.popen('stat -c %Y "'..dir..'"')
-        if h then
-            local current_ts = h:read("*a"):gsub("%s+", "")
-            h:close()
-            if current_ts ~= saved_ts then
-                log("Change detected in " .. dir .. ". Re-indexing.")
-                needsReindex = true
-                break
-            end
-        end
-    end
-
-    if needsReindex then
-        performBackgroundIndexing()
-    else
-        log("Index is up to date. Loading from file.")
-        local indexContent = indexFile:read("*a")
-        indexFile:close()
-        romIndex = json.decode(indexContent)
-    end
-end
-
 function love.quit()
     saveAppState()
     
@@ -1404,8 +1126,10 @@ function love.load(arg)
                 end
             end
         end
+            loadPreview()
+        end
     else
-        createMergedVirtualRoot()
+        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -1441,5 +1165,5 @@ end
 love.load_final = love.load
 love.load = function(arg)
     love.load_final(arg)
-    startIndexingProcess()
+    romIndex = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, filesystem.createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
 end
