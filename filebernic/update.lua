@@ -19,6 +19,20 @@ local function update(dt)
         end
     end
 
+    if state == "BATCH_SCRAPING" and scraperCoroutine then
+        local status = coroutine.status(scraperCoroutine)
+        if status == "suspended" then
+            local ok, err = coroutine.resume(scraperCoroutine)
+            if not ok then
+                log("Scraper Coroutine Error: " .. tostring(err))
+                state = "LIST"
+            end
+        elseif status == "dead" then
+            scraperCoroutine = nil
+            state = "LIST"
+        end
+    end
+
     if launching then
         launchTimer = launchTimer + dt
         if launchTimer > 0.1 then -- Pequeña espera para ver el color verde

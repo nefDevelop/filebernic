@@ -297,6 +297,25 @@ local function drawScraperView()
     elseif state == "SCRAPING_IN_PROGRESS" then
         love.graphics.printf("Consultando bases de datos...", 0, h/2, w, "center")
 
+    elseif state == "BATCH_SCRAPING" then
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf("Scraping en Lote", 0, h/2 - 60, w, "center")
+        
+        love.graphics.setFont(fontMedium)
+        love.graphics.printf("Procesando: " .. scraperProgress.currentName, 0, h/2 - 20, w, "center")
+        
+        -- Barra de progreso
+        local barW = 400
+        local barX = (w - barW) / 2
+        love.graphics.setColor(theme.colors.placeholder_background)
+        love.graphics.rectangle("fill", barX, h/2 + 20, barW, 20)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", barX, h/2 + 20, barW * (scraperProgress.current / scraperProgress.total), 20)
+        
+        love.graphics.printf(scraperProgress.current .. " / " .. scraperProgress.total, 0, h/2 + 50, w, "center")
+        love.graphics.printf("Éxitos: " .. scraperProgress.successes .. " | Fallos: " .. scraperProgress.failures, 0, h/2 + 80, w, "center")
+
     elseif state == "SCRAPER_RESULTS" then
         love.graphics.setFont(fontMedium)
         love.graphics.printf("Resultados:", 20, 60, w, "left")
@@ -323,6 +342,11 @@ local function drawScraperView()
                 if result.image then
                     local scale = math.min(thumbSize/result.image:getWidth(), thumbSize/result.image:getHeight())
                     love.graphics.draw(result.image, x + (thumbSize - result.image:getWidth()*scale)/2, listY + (thumbSize - result.image:getHeight()*scale)/2, 0, scale, scale)
+                elseif result.error then
+                    love.graphics.setColor(1, 0.4, 0.4)
+                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
+                    love.graphics.setFont(fontTitle)
+                    love.graphics.printf("!", x, listY + thumbSize/2 - 12, thumbSize, "center")
                 else
                     love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
                 end
@@ -331,6 +355,11 @@ local function drawScraperView()
             -- Vista previa del resultado seleccionado (Layout dividido)
             local sel = scraperResults[scraperSelection]
             if sel then
+                if sel.error then
+                    love.graphics.setColor(1, 0.4, 0.4)
+                    love.graphics.setFont(fontMedium)
+                    love.graphics.printf(sel.text or "Error", 40, 300, w - 80, "center")
+                else
                 local boxX, boxY, boxW, boxH = 40, 200, 160, 220
                 local screenX, screenY, screenW, screenH = 240, 200, 360, 200
                 local textX, textY, textW, textH = 40, 430, 560, 40
@@ -359,7 +388,12 @@ local function drawScraperView()
                 -- Info
                 love.graphics.setFont(fontSmall)
                 love.graphics.setColor(theme.colors.text_white)
-                love.graphics.printf(sel.description or "Sin descripción", textX, textY, textW, "left")
+                local infoText = sel.description or "Sin descripción"
+                if sel.source then
+                    infoText = "[" .. sel.source .. "] " .. infoText
+                end
+                love.graphics.printf(infoText, textX, textY, textW, "left")
+                end
             end
         end
     end
@@ -724,7 +758,7 @@ local function drawGrid(w, h)
             love.graphics.draw(item.gridImage, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
-            local icon = item.isDir and iconFolder or iconRom
+            local icon = item.isDir and iconFolder or (currentSystemContentIcon or iconRom)
             local iconScale = 0.5
             local ix = x + (cellW - icon:getWidth()*iconScale)/2 -- Centrado en celda
             local iy = y + 15
@@ -824,13 +858,13 @@ local function draw()
         if i == selectedIndex then
             -- Cursor gris claro
             love.graphics.setColor(0.9, 0.9, 0.9)
-            love.graphics.rectangle("fill", 15, y - 4, layout.selWidth, layout.selHeight, 4)
+            love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
             -- Texto e iconos en negro
             love.graphics.setColor(0, 0, 0)
         else
             if isLastPlayed and markPlayed then
                 love.graphics.setColor(theme.colors.list_played_unselected)
-                love.graphics.rectangle("fill", 15, y - 4, layout.selWidth, layout.selHeight, 4)
+                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
             end
             love.graphics.setColor(theme.colors.text_medium)
         end
@@ -844,7 +878,15 @@ local function draw()
                 love.graphics.setColor(theme.colors.selection_accent)
             end
             
-            love.graphics.draw(item.isDir and iconFolder or iconRom, 25, y, 0, layout.iconScale, layout.iconScale)
+            local iconToDraw = item.isDir and iconFolder or (currentSystemContentIcon or iconRom)
+            local drawScale = layout.iconScale
+            
+            if iconToDraw == currentSystemContentIcon then
+                drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
+            end
+            
+            local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
+            love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
             
             -- Calcular etiqueta SD
             local label = item.sourceLabel
@@ -867,11 +909,14 @@ local function draw()
                 nameToDraw = nameToDraw .. "..."
             end
             
+            -- Centrar el texto verticalmente en la fila
+            local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
+            
             if i == selectedIndex then
-                love.graphics.print(nameToDraw, 55, y)
-                love.graphics.print(nameToDraw, 56, y)
+                love.graphics.print(nameToDraw, 55, textY)
+                love.graphics.print(nameToDraw, 56, textY)
             else
-                love.graphics.print(nameToDraw, 55, y)
+                love.graphics.print(nameToDraw, 55, textY)
             end
 
             if launchMode == "Juego Unico" then
