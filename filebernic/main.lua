@@ -62,6 +62,11 @@ searchQuery = ""
 parentMenuData = nil
 focusedItem = nil
 allFiles = {}
+-- Indexing
+romIndex = nil
+isIndexing = false
+indexStateMessage = ""
+indexCoroutine = nil
 -- Virtual Keyboard
 keyboardGrid = {
     {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
@@ -247,7 +252,12 @@ function getSystemIcon(sysName)
     return nil
 end
 
+local systemContentIconCache = {}
+
 function getSystemContentIcon(sysName)
+    if not sysName then return nil end
+    if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
+
     local variants = {sysName}
     local lowerName = sysName:lower()
     
@@ -268,7 +278,9 @@ function getSystemContentIcon(sysName)
     for _, v in ipairs(variants) do
         local path = "assets/systems/" .. v .. "-content.png"
         if love.filesystem.getInfo(path) then
-            return love.graphics.newImage(path)
+            local img = love.graphics.newImage(path)
+            systemContentIconCache[sysName] = img
+            return img
         end
     end
     return nil
@@ -300,71 +312,67 @@ function updateSystemForFile(item)
     return false
 end
 
-function createMergedVirtualRoot()
-    files = {}
-    isVirtualRoot = true
-    romPath = "" -- Not a real path in this view
-    secondaryPath = nil
-    selectedIndex = 1
+function performBackgroundIndexing()
+    isIndexing = true
+    indexStateMessage = "Iniciando escaneo..."
 
-    if launchMode == "Juego Unico" then
-        -- MODO ÚNICO GLOBAL: Escanear TODOS los juegos de TODOS los sistemas
-        local fileMap = {} -- Key: stem -> index in files
-        
+    indexCoroutine = coroutine.create(function()
+        local newIndex = {}
+        local fileMap = {} -- Key: stem -> index in newIndex
+        local romDirs = {}
+
         local function scanRoot(rootPath)
-            local h = io.popen('ls -p "'..rootPath..'"')
+            if not io.open(rootPath, "r") then return end
+            table.insert(romDirs, rootPath)
+            
+            indexStateMessage = "Escaneando: " .. rootPath
+            coroutine.yield()
+
+            local h = io.popen('find "'..rootPath..'" -type f')
             if h then
-                for line in h:lines() do
-                    if line:sub(-1) == "/" then
-                        local sysName = line:sub(1, -2)
-                        if sysName ~= "BIOS" and sysName ~= "Saves" then
-                            local sysPath = rootPath .. line
-                            -- Escaneo recursivo dentro del sistema
-                            local h2 = io.popen('find "'..sysPath..'" -type f')
-                            if h2 then
-                                for fLine in h2:lines() do
-                                    local filename = fLine:match("([^/]+)$")
-                                    if filename and filename:sub(1, 1) ~= "." then
-                                        local ext = filename:match("[^%.]+$")
-                                        if ext and validExtensions[ext:lower()] then
-                                            local stem = filename:gsub("%.[^%.]+$", "")
-                                            local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                                            if groupKey == "" then groupKey = stem end
-                                            local icon = getSystemIcon(sysName)
-                                            
-                                            if fileMap[groupKey] then
-                                                local idx = fileMap[groupKey]
-                                                local item = files[idx]
-                                                table.insert(item.versions, {
-                                                    name = filename,
-                                                    fullPath = fLine,
-                                                    sourceLabel = sysName, -- Usamos el nombre del sistema como etiqueta
-                                                    ext = ext,
-                                                    system = sysName
-                                                })
-                                                item.sourceLabel = "Multi"
-                                            else
-                                                local newItem = {
-                                                    name = groupKey,
-                                                    isDir = false,
-                                                    fullPath = fLine,
-                                                    sourceLabel = sysName,
-                                                    icon = nil,
-                                                    versions = {{
-                                                        name = filename,
-                                                        fullPath = fLine,
-                                                        sourceLabel = sysName,
-                                                        ext = ext,
-                                                        system = sysName
-                                                    }}
-                                                }
-                                                table.insert(files, newItem)
-                                                fileMap[groupKey] = #files
-                                            end
-                                        end
-                                    end
-                                end
-                                h2:close()
+                local count = 0
+                for fLine in h:lines() do
+                    count = count + 1
+                    if count % 100 == 0 then coroutine.yield() end -- Ceder control para no congelar
+
+                    local filename = fLine:match("([^/]+)$")
+                    if filename and filename:sub(1, 1) ~= "." then
+                        local ext = filename:match("[^%.]+$")
+                        if ext and validExtensions[ext:lower()] then
+                            local stem = filename:gsub("%.[^%.]+$", "")
+                            local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
+                            if groupKey == "" then groupKey = stem end
+                            
+                            local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
+
+                            if fileMap[groupKey] then
+                                local idx = fileMap[groupKey]
+                                local item = newIndex[idx]
+                                table.insert(item.versions, {
+                                    name = filename,
+                                    fullPath = fLine,
+                                    sourceLabel = sysName,
+                                    ext = ext,
+                                    system = sysName
+                                })
+                                item.sourceLabel = "Multi"
+                            else
+                                local newItem = {
+                                    name = groupKey,
+                                    isDir = false,
+                                    fullPath = fLine,
+                                    sourceLabel = sysName,
+                                    icon = nil, -- Iconos se cargan bajo demanda
+                                    versions = {{
+                                        name = filename,
+                                        fullPath = fLine,
+                                        sourceLabel = sysName,
+                                        ext = ext,
+                                        system = sysName
+                                    }}
+                                }
+                                table.insert(newIndex, newItem)
+                                fileMap[groupKey] = #newIndex
                             end
                         end
                     end
@@ -375,13 +383,110 @@ function createMergedVirtualRoot()
 
         scanRoot("/mnt/mmc/ROMS/")
         scanRoot("/mnt/sdcard/ROMS/")
-        
         -- Fallback Simulador
-        if #files == 0 then
+        if #newIndex == 0 then
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            local simPath = cwd .. "/../Simulador_SD/"
-            scanRoot(simPath)
+            scanRoot(cwd .. "/../Simulador_SD/")
+        end
+
+        indexStateMessage = "Ordenando y guardando..."
+        coroutine.yield()
+
+        table.sort(newIndex, function(a, b) return a.name:lower() < b.name:lower() end)
+        romIndex = newIndex
+
+        -- Guardar índice en archivo
+        local dataDir = love.filesystem.getSource() .. "/data"
+        os.execute("mkdir -p " .. dataDir)
+        local f = io.open(dataDir .. "/rom_index.json", "w")
+        if f then
+            f:write(json.encode(romIndex))
+            f:close()
+        end
+
+        -- Guardar timestamps de los directorios
+        local timestamps = {}
+        for _, dir in ipairs(romDirs) do
+            local h = io.popen('stat -c %Y "'..dir..'"')
+            if h then timestamps[dir] = h:read("*a"):gsub("%s+", "") h:close() end
+        end
+        local f_ts = io.open(dataDir .. "/rom_timestamps.json", "w")
+        if f_ts then
+            f_ts:write(json.encode(timestamps))
+            f_ts:close()
+        end
+
+        isIndexing = false
+        indexStateMessage = ""
+        
+        -- Si estamos en la vista de raíz virtual y modo juego único, refrescar
+        if isVirtualRoot and launchMode == "Juego Unico" then
+             createMergedVirtualRoot()
+        end
+    end)
+end
+
+function removeFromIndex(path)
+    if not romIndex then return end
+    local i = 1
+    while i <= #romIndex do
+        local item = romIndex[i]
+        local vIndex = 1
+        local changed = false
+        while vIndex <= #item.versions do
+            if item.versions[vIndex].fullPath == path then
+                table.remove(item.versions, vIndex)
+                changed = true
+            else
+                vIndex = vIndex + 1
+            end
+        end
+        
+        if changed then
+            if #item.versions == 0 then
+                table.remove(romIndex, i)
+            else
+                if #item.versions == 1 then
+                    item.sourceLabel = item.versions[1].sourceLabel
+                    item.fullPath = item.versions[1].fullPath
+                end
+                i = i + 1
+            end
+        else
+            i = i + 1
+        end
+    end
+    
+    -- Save index to disk to persist deletion
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/rom_index.json", "w")
+    if f then
+        f:write(json.encode(romIndex))
+        f:close()
+    end
+end
+
+function createMergedVirtualRoot()
+    files = {}
+    isVirtualRoot = true
+    romPath = "" -- Not a real path in this view
+    secondaryPath = nil
+    selectedIndex = 1
+
+    if launchMode == "Juego Unico" then
+        if romIndex then
+            -- El índice está listo, úsalo.
+            files = {}
+            for _, item in ipairs(romIndex) do
+                -- Deep copy para evitar modificar el índice original con estados temporales (ej: .selected)
+                local copy = {}
+                for k, v in pairs(item) do copy[k] = v end
+                table.insert(files, copy)
+            end
+        else
+            -- El índice no está listo, se mostrará un mensaje de "cargando" en drawing.lua
+            -- Dejamos `files` vacío por ahora.
         end
 
     else
@@ -1065,28 +1170,60 @@ function deleteGameMedia(romPath)
 end
 
 function performCleanupScan()
-    cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false }
+    cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false, currentFile = "" }
     
     cleanupCoroutine = coroutine.create(function()
         local romNames = {} -- Para huérfanos: nombre base -> true
         local romsByStem = {} -- Para duplicados: nombre base -> lista de archivos
         local romsBySystem = {} -- Para imágenes huérfanas: system -> stem -> true
 
-        local function scanAndRegister(path, locationLabel)
-            local h = io.popen('find "'..path..'" -type f')
+        local totalFiles = 0
+        local scannedFiles = 0
+        local find_exclude_str = [[-not -path "*.svn*" -not -name "*.png" -not -name "*.jpg" -not -name "*.jpeg" -not -name "*.txt" -not -name "*.pdf" -not -name "*.db"]]
+
+        local function countFiles(path)
+            if not io.open(path, "r") then return end
+            local cmd = 'find "'..path..'" -type f ' .. find_exclude_str .. ' | wc -l'
+            local h = io.popen(cmd)
             if h then
-                local count = 0
+                local count = tonumber(h:read("*a"))
+                h:close()
+                if count then totalFiles = totalFiles + count end
+            end
+        end
+
+        -- 1. Contar todos los archivos primero para una barra de progreso precisa
+        countFiles("/mnt/mmc/ROMS")
+        countFiles("/mnt/sdcard/ROMS")
+        -- Fallback para simulador
+        if totalFiles == 0 then
+            local cwd = love.filesystem.getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            countFiles(cwd .. "/../Simulador_SD/")
+        end
+        coroutine.yield()
+
+        local function scanAndRegister(path, locationLabel)
+            if not io.open(path, "r") then return end
+            local cmd = 'find "'..path..'" -type f ' .. find_exclude_str
+            local h = io.popen(cmd)
+            if h then
                 for line in h:lines() do
-                    count = count + 1
-                    if count % 50 == 0 then coroutine.yield() end
+                    scannedFiles = scannedFiles + 1
+                    cleanupData.progress = totalFiles > 0 and (scannedFiles / totalFiles * 0.8) or 0 -- Escaneo de ROMs es el 80% del trabajo
+
+                    if scannedFiles % 20 == 0 then
+                        cleanupData.currentFile = line:match("([^/]+)$")
+                        coroutine.yield()
+                    end
                     
                     local filename = line:match("([^/]+)$")
                     if filename then
                         local ext = filename:match("[^%.]+$")
                         if ext then
                             local extLower = ext:lower()
-                            -- Excluir imágenes y states de la búsqueda de duplicados
-                            if validExtensions[extLower] and extLower ~= "png" and extLower ~= "jpg" and extLower ~= "jpeg" and extLower ~= "state" then
+                            -- La comprobación aquí es redundante por el `find` pero la dejamos como doble seguro
+                            if validExtensions[extLower] and extLower ~= "state" then
                                 local stem = filename:gsub("%..-$", "")
                                 romNames[stem] = true
                                 
@@ -1115,14 +1252,18 @@ function performCleanupScan()
         end
 
         scanAndRegister("/mnt/mmc/ROMS", "SD1")
-        cleanupData.progress = 0.4
-        coroutine.yield()
-        
         scanAndRegister("/mnt/sdcard/ROMS", "SD2")
-        cleanupData.progress = 0.7
-        coroutine.yield()
+        -- Fallback para simulador
+        if scannedFiles == 0 then
+            local cwd = love.filesystem.getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            scanAndRegister(cwd .. "/../Simulador_SD/", "SIM")
+        end
 
         -- 2. Buscar Save States Huérfanos
+        cleanupData.currentFile = "Buscando save states..."
+        cleanupData.progress = 0.85
+        coroutine.yield()
         local savePaths = {"/mnt/mmc/MUOS/save", "/mnt/sdcard/MUOS/save"}
         for _, path in ipairs(savePaths) do
             local h = io.popen('find "'..path..'" -name "*.state*"')
@@ -1146,6 +1287,8 @@ function performCleanupScan()
         coroutine.yield()
 
         -- 3. Procesar Duplicados
+        cleanupData.currentFile = "Analizando duplicados..."
+        coroutine.yield()
         for stem, list in pairs(romsByStem) do
             if #list > 1 then
                 for _, item in ipairs(list) do
@@ -1168,6 +1311,8 @@ function performCleanupScan()
         coroutine.yield()
 
         -- 4. Buscar Imágenes Huérfanas
+        cleanupData.currentFile = "Buscando imágenes huérfanas..."
+        coroutine.yield()
         local catalogueBase = "/mnt/mmc/MUOS/info/catalogue/"
         if not io.open("/mnt/mmc", "r") then
             local cwd = love.filesystem.getSource()
@@ -1509,6 +1654,51 @@ function love.errorhandler(msg)
     end
 end
 
+function startIndexingProcess()
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local indexPath = dataDir .. "/rom_index.json"
+    local tsPath = dataDir .. "/rom_timestamps.json"
+
+    local indexFile = io.open(indexPath, "r")
+    local tsFile = io.open(tsPath, "r")
+
+    if not indexFile or not tsFile then
+        if indexFile then indexFile:close() end
+        if tsFile then tsFile:close() end
+        log("No index found. Starting background indexing.")
+        performBackgroundIndexing()
+        return
+    end
+
+    -- Si los archivos existen, comprobar timestamps
+    local needsReindex = false
+    local tsContent = tsFile:read("*a")
+    tsFile:close()
+    local savedTimestamps = json.decode(tsContent)
+
+    for dir, saved_ts in pairs(savedTimestamps) do
+        local h = io.popen('stat -c %Y "'..dir..'"')
+        if h then
+            local current_ts = h:read("*a"):gsub("%s+", "")
+            h:close()
+            if current_ts ~= saved_ts then
+                log("Change detected in " .. dir .. ". Re-indexing.")
+                needsReindex = true
+                break
+            end
+        end
+    end
+
+    if needsReindex then
+        performBackgroundIndexing()
+    else
+        log("Index is up to date. Loading from file.")
+        local indexContent = indexFile:read("*a")
+        indexFile:close()
+        romIndex = json.decode(indexContent)
+    end
+end
+
 function love.quit()
     saveAppState()
     
@@ -1644,7 +1834,9 @@ function love.load(arg)
             if loadedState.markPlayed ~= nil then markPlayed = loadedState.markPlayed end
             if loadedState.viewMode then viewMode = loadedState.viewMode end
             if loadedState.launchMode then launchMode = loadedState.launchMode end
-            if loadedState.romPath then 
+            if launchMode == "Juego Unico" then
+                romPath = "" -- Forzar raíz virtual en Modo Único
+            elseif loadedState.romPath then 
                 local p = loadedState.romPath
                 -- Restaurar ruta real desde virtual (ROMS/...)
                 if p:match("^ROMS/") then
@@ -1692,7 +1884,7 @@ function love.load(arg)
     end
 
     -- Determine initial view: app_state.json -> lastPlayedRom -> createMergedVirtualRoot
-    if romPath == "" then -- If romPath wasn't loaded from app_state.json
+    if romPath == "" and launchMode ~= "Juego Unico" then -- Solo auto-navegar a carpeta en Modo Carpeta
         if lastPlayedRom and lastPlayedRom ~= "" then
             playedRoms[lastPlayedRom] = true -- Ensure the last played is marked
             romPath = lastPlayedRom:match("(.*/)")
@@ -1713,6 +1905,26 @@ function love.load(arg)
         end
     else
         createMergedVirtualRoot()
+        -- En Modo Único, buscar y seleccionar el último juego en la lista global
+        if lastPlayedRom and lastPlayedRom ~= "" then
+             local found = false
+             for i, item in ipairs(files) do
+                 if item.fullPath == lastPlayedRom then
+                     selectedIndex = i
+                     found = true
+                 elseif item.versions then
+                     for _, v in ipairs(item.versions) do
+                         if v.fullPath == lastPlayedRom then
+                             selectedIndex = i
+                             found = true
+                             break
+                         end
+                     end
+                 end
+                 if found then break end
+             end
+             loadPreview()
+        end
     end
 
     -- Load modules
@@ -1721,5 +1933,12 @@ function love.load(arg)
     local input = require "input"
     love.keypressed = input.keypressed
     love.gamepadpressed = input.gamepadpressed
+    love.joystickpressed = input.joystickpressed
     love.textinput = input.textinput
+end
+
+love.load_final = love.load
+love.load = function(arg)
+    love.load_final(arg)
+    startIndexingProcess()
 end

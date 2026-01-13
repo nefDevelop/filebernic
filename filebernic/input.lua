@@ -1,5 +1,4 @@
 local function keypressed(key)
-    log("Key pressed: " .. key)
     if inputCooldown > 0 then return end
 
     -- Modal Help Menu Logic
@@ -7,6 +6,8 @@ local function keypressed(key)
         -- Close with the same help button (f3/R1) or the back button (B)
         if key == "f3" or key == "backspace" or key == "b" or key == "escape" then
             showHelp = false
+            inputCooldown = 0.2 -- Evita que la pulsación de B también salga del menú subyacente
+            return -- Salir inmediatamente para que no se procese nada más
         end
         -- Block all other inputs while help is visible
         return
@@ -16,6 +17,28 @@ local function keypressed(key)
     if key == "f3" then
         showHelp = true
         return
+    end
+
+    if key == "f1" then -- Start button
+        if state == "OPTIONS_MENU" and menuTitle == "Configuración" then
+            state = "LIST"
+            inputCooldown = 0.3
+            return
+        elseif state == "LIST" then
+            state = "OPTIONS_MENU"
+            menuAnim = 0
+            menuTitle = "Configuración"
+            menuMessage = ""
+            menuSelection = 1
+            menuOptions = {}
+            table.insert(menuOptions, "Modo: " .. launchMode)
+            table.insert(menuOptions, "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula"))
+            table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
+            table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
+            table.insert(menuOptions, "Limpieza")
+            inputCooldown = 0.3
+            return
+        end
     end
 
     -- Search mode logic
@@ -115,9 +138,19 @@ local function keypressed(key)
                  elseif opt == "Borrar" then
                      local fullPath = focusedItem.fullPath
                      deleteGameMedia(fullPath)
-                     os.remove(fullPath)
+                     local success, err = os.remove(fullPath)
+                     if success then
+                         log("Archivo borrado con éxito: " .. fullPath)
+                         if romIndex then removeFromIndex(fullPath) end
+                     else
+                         log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                     end
                      if playedRoms[fullPath] then playedRoms[fullPath] = nil saveHistory() end
-                     refreshFiles()
+                     if isVirtualRoot and launchMode == "Juego Unico" then
+                         createMergedVirtualRoot()
+                     else
+                         refreshFiles()
+                     end
                      state = "LIST"
                      parentMenuData = nil
                      focusedItem = nil
@@ -145,7 +178,7 @@ local function keypressed(key)
                     menuOptions = {"Borrar", "Cancelar"}
                     menuSelection = 2
                     state = "DELETE_MENU"
-                elseif not isVirtualRoot and files[selectedIndex] and (not files[selectedIndex].isDir or files[selectedIndex].name ~= "..") then
+                elseif (not isVirtualRoot or launchMode == "Juego Unico") and files[selectedIndex] and (not files[selectedIndex].isDir or files[selectedIndex].name ~= "..") then
                     itemToDelete = files[selectedIndex]
                     menuTitle = "Confirmar Borrado"
                     menuMessage = "¿Borrar este archivo?\n" .. itemToDelete.name
@@ -172,17 +205,37 @@ local function keypressed(key)
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
                 deleteGameMedia(pathToDelete)
-                os.remove(pathToDelete)
+                local success, err = os.remove(pathToDelete)
+                if success then
+                    log("Archivo borrado con éxito: " .. pathToDelete)
+                    if romIndex then removeFromIndex(pathToDelete) end
+                else
+                    log("Error al borrar archivo: " .. pathToDelete .. " - " .. tostring(err))
+                end
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
-                refreshFiles()
+                if isVirtualRoot and launchMode == "Juego Unico" then
+                    createMergedVirtualRoot()
+                else
+                    refreshFiles()
+                end
                 state = "LIST"
             elseif menuOptions[menuSelection] == "Borrar de SD2" then
                 local item = files[selectedIndex]
                 local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
                 deleteGameMedia(pathToDelete)
-                os.remove(pathToDelete)
+                local success, err = os.remove(pathToDelete)
+                if success then
+                    log("Archivo borrado con éxito: " .. pathToDelete)
+                    if romIndex then removeFromIndex(pathToDelete) end
+                else
+                    log("Error al borrar archivo: " .. pathToDelete .. " - " .. tostring(err))
+                end
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
-                refreshFiles()
+                if isVirtualRoot and launchMode == "Juego Unico" then
+                    createMergedVirtualRoot()
+                else
+                    refreshFiles()
+                end
                 state = "LIST"
             elseif menuOptions[menuSelection]:match("Modo:") then
                 launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
@@ -398,7 +451,8 @@ local function keypressed(key)
                     if cleanupData.cursor.row == 1 then
                         -- Borrar TODOS
                         for _, orphan in ipairs(cleanupData.orphans) do
-                            os.remove(orphan.fullPath)
+                            local success, err = os.remove(orphan.fullPath)
+                            if success then log("Cleanup: Borrado " .. orphan.fullPath) else log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
                         end
                         cleanupData.orphans = {}
                     else
@@ -406,7 +460,8 @@ local function keypressed(key)
                         local idx = cleanupData.cursor.row - 1
                         local orphan = cleanupData.orphans[idx]
                         if orphan then
-                            os.remove(orphan.fullPath)
+                            local success, err = os.remove(orphan.fullPath)
+                            if success then log("Cleanup: Borrado " .. orphan.fullPath) else log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
                             table.remove(cleanupData.orphans, idx)
                             if cleanupData.cursor.row > #cleanupData.orphans + 1 then
                                 cleanupData.cursor.row = math.max(1, #cleanupData.orphans + 1)
@@ -418,7 +473,8 @@ local function keypressed(key)
                     local idx = cleanupData.cursor.row
                     local item = cleanupData.orphanedImages[idx]
                     if item then
-                        os.remove(item.fullPath)
+                        local success, err = os.remove(item.fullPath)
+                        if success then log("Cleanup: Borrado " .. item.fullPath) else log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) end
                         -- También borrar preview/text/year si existen?
                         -- Por ahora solo borramos el archivo listado (boxart)
                         table.remove(cleanupData.orphanedImages, idx)
@@ -432,7 +488,13 @@ local function keypressed(key)
                     local idx = cleanupData.cursor.row
                     local item = cleanupData.duplicates[idx]
                     if item then
-                        os.remove(item.fullPath)
+                        local success, err = os.remove(item.fullPath)
+                        if success then 
+                            log("Cleanup: Borrado " .. item.fullPath) 
+                            if romIndex then removeFromIndex(item.fullPath) end
+                        else 
+                            log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) 
+                        end
                         table.remove(cleanupData.duplicates, idx)
                         
                         if cleanupData.cursor.row > #cleanupData.duplicates then
@@ -502,27 +564,48 @@ local function keypressed(key)
                 if selectedFilesCount > 0 then
                     for _, item in ipairs(files) do
                         if item.selected then
-                            local fullPath = romPath .. item.name
+                            local fullPath = item.fullPath or (romPath .. item.name)
                             deleteGameMedia(fullPath)
-                            os.remove(fullPath)
+                            local success, err = os.remove(fullPath)
+                            if success then
+                                log("Archivo borrado con éxito: " .. fullPath)
+                                if romIndex then removeFromIndex(fullPath) end
+                            else
+                                log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                            end
                             if playedRoms[fullPath] then
                                 playedRoms[fullPath] = nil
                             end
                         end
                     end
                     saveHistory()
-                    refreshFiles()
+                    if isVirtualRoot and launchMode == "Juego Unico" then
+                        createMergedVirtualRoot()
+                    else
+                        refreshFiles()
+                    end
                     itemToDelete = nil
                 elseif itemToDelete then
-                    deleteGameMedia(romPath .. itemToDelete.name)
-                    os.remove(romPath .. itemToDelete.name)
-                    if playedRoms[romPath .. itemToDelete.name] then
-                        playedRoms[romPath .. itemToDelete.name] = nil
+                    local fullPath = itemToDelete.fullPath or (romPath .. itemToDelete.name)
+                    deleteGameMedia(fullPath)
+                    local success, err = os.remove(fullPath)
+                    if success then
+                        log("Archivo borrado con éxito: " .. fullPath)
+                        if romIndex then removeFromIndex(fullPath) end
+                    else
+                        log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                    end
+                    if playedRoms[fullPath] then
+                        playedRoms[fullPath] = nil
                         saveHistory()
                     end
                     -- Deselect to avoid errors, then refresh
                     selectedIndex = math.max(1, selectedIndex - 1)
-                    refreshFiles()
+                    if isVirtualRoot and launchMode == "Juego Unico" then
+                        createMergedVirtualRoot()
+                    else
+                        refreshFiles()
+                    end
                     itemToDelete = nil
                 end
             end
@@ -587,41 +670,7 @@ local function keypressed(key)
         timer = 0
     end
 
-    if key == "left" then
-        if viewMode == "GRID" then
-            selectedIndex = math.max(1, selectedIndex - 1)
-        else
-            selectedIndex = math.max(1, selectedIndex - pageSize)
-        end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0
-    elseif key == "right" then
-        if viewMode == "GRID" then
-            selectedIndex = math.min(#files, selectedIndex + 1)
-        else
-            selectedIndex = math.min(#files, selectedIndex + pageSize)
-        end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0
-    elseif key == "up" and viewMode == "GRID" then
-        selectedIndex = math.max(1, selectedIndex - 4) -- Asumiendo 4 columnas
-        if selectedIndex > gridCols then
-            selectedIndex = selectedIndex - gridCols
-        end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0
-    elseif key == "down" and viewMode == "GRID" then
-        selectedIndex = math.min(#files, selectedIndex + 4) -- Asumiendo 4 columnas
-        if selectedIndex + gridCols <= #files then
-            selectedIndex = selectedIndex + gridCols
-        end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0
-    elseif key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then -- 'a' button (Start envía return, lo ignoramos si hay gamepad)
+    if key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then -- 'a' button (Start envía return, lo ignoramos si hay gamepad)
         if #files == 0 then return end
         local item = files[selectedIndex]
         if item.isDir then
@@ -670,7 +719,8 @@ local function keypressed(key)
                         table.insert(menuOptions, {
                             text = v.name,
                             icon = icon,
-                            system = v.system
+                            system = v.system,
+                            played = playedRoms[v.fullPath]
                         })
                     end
                     menuSelection = 1
@@ -694,6 +744,7 @@ local function keypressed(key)
         end
     elseif key == "backspace" then -- 'b' button
         if isVirtualRoot then
+            inputCooldown = 0.2 -- Prevent phantom input when actionless
             return -- No hacer nada si ya estamos en la raíz virtual
         else
             local parent = romPath:gsub("[^/]+/$", "")
@@ -731,7 +782,7 @@ local function keypressed(key)
 
             state = "OPTIONS_MENU"
             menuAnim = 0
-            menuTitle = "Opciones de Archivo"
+            menuTitle = "Opciones:"
             if selectedFilesCount > 0 then
                 menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
             else
@@ -778,24 +829,10 @@ local function keypressed(key)
                 selectedFilesCount = selectedFilesCount - 1
             end
         end
-    elseif key == "f1" then -- Start button
-        state = "OPTIONS_MENU"
-        menuAnim = 0
-        menuTitle = "Configuración"
-        menuMessage = ""
-        menuSelection = 1
-        menuOptions = {}
-        table.insert(menuOptions, "Modo: " .. launchMode)
-        table.insert(menuOptions, "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula"))
-        table.insert(menuOptions, "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"))
-        table.insert(menuOptions, "Marcar Jugado: " .. (markPlayed and "Si" or "No"))
-        table.insert(menuOptions, "Limpieza")
-        inputCooldown = 0.3
     end
 end
 
 local function gamepadpressed(joystick, button)
-    log("Gamepad button pressed: " .. button)
     if button == "a" then
         keypressed("kpenter") -- Usamos kpenter para mayor compatibilidad
     elseif button == "b" then
@@ -823,6 +860,19 @@ local function gamepadpressed(joystick, button)
     end
 end
 
+local function joystickpressed(joystick, button)
+    -- Fallback para botones que no se detectan como Gamepad (L1/R1/L2 a veces)
+    -- Mapeo común en dispositivos Anbernic/muOS: 4=L1, 5=R1, 6=L2
+    if button == 4 then
+        if joystick:isGamepadDown("a") then return end -- Evita conflicto si A es el botón 4
+        keypressed("f") -- L1 -> Buscar
+    elseif button == 5 then
+        keypressed("f3") -- R1 -> Ayuda
+    elseif button == 6 then
+        keypressed("f2") -- L2 -> Limpiar Filtro
+    end
+end
+
 local function textinput(t)
     if showHelp then return end
     if state == "SEARCH" then
@@ -834,5 +884,6 @@ end
 return {
     keypressed = keypressed,
     gamepadpressed = gamepadpressed,
+    joystickpressed = joystickpressed,
     textinput = textinput
 }
