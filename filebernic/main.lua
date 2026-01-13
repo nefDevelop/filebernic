@@ -42,12 +42,17 @@ gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"
 selectedFilesCount = 0
 theme = nil
-fontList, fontTitle, fontSmall, fontMedium = nil, nil, nil, nil
+fontList, fontTitle, fontSmall, fontMedium, fontHuge = nil, nil, nil, nil, nil
 menuOptions = {"Borrar"}
 menuSelection = 1
 menuTitle = ""
 menuMessage = ""
 showHelp = false
+closingMenu = false
+closingHelp = false
+fastScrollTimer = 0
+jumpLetter = ""
+jumpPanelAnim = 0
 helpData = {}
 menuAnim = 0
 saveFiles = {}
@@ -465,6 +470,50 @@ function removeFromIndex(path)
         f:write(json.encode(romIndex))
         f:close()
     end
+end
+
+function jumpToNextLetter()
+    if #files == 0 then return end
+    local current = files[selectedIndex].name:sub(1,1):upper()
+    for i = selectedIndex + 1, #files do
+        local c = files[i].name:sub(1,1):upper()
+        if c ~= current then
+            selectedIndex = i
+            jumpLetter = c
+            return
+        end
+    end
+    selectedIndex = #files
+    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
+end
+
+function jumpToPrevLetter()
+    if #files == 0 then return end
+    local current = files[selectedIndex].name:sub(1,1):upper()
+    local prevLetterIdx = nil
+    for i = selectedIndex - 1, 1, -1 do
+        local c = files[i].name:sub(1,1):upper()
+        if c ~= current then
+            prevLetterIdx = i
+            break
+        end
+    end
+    
+    if prevLetterIdx then
+        local targetChar = files[prevLetterIdx].name:sub(1,1):upper()
+        for i = prevLetterIdx - 1, 1, -1 do
+            local c = files[i].name:sub(1,1):upper()
+            if c ~= targetChar then
+                selectedIndex = i + 1
+                jumpLetter = targetChar
+                return
+            end
+        end
+        selectedIndex = 1
+    else
+        selectedIndex = 1
+    end
+    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
 end
 
 function createMergedVirtualRoot()
@@ -1796,6 +1845,7 @@ function love.load(arg)
     fontTitle = theme.fonts.title
     fontSmall = theme.fonts.small
     fontMedium = theme.fonts.medium
+    fontHuge = theme.fonts.huge
 
     -- Define Help Data
     helpData = {

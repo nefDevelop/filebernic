@@ -40,6 +40,7 @@ if love.filesystem.getInfo(font_path) then
         title = love.graphics.newFont(font_path, 24),
         small = love.graphics.newFont(font_path, 14), -- Increased size for better readability
         medium = love.graphics.newFont(font_path, 16),
+        huge = love.graphics.newFont(font_path, 84),
     }
 else
     -- Fallback to default font if the custom one is not found
@@ -48,6 +49,7 @@ else
         title = love.graphics.newFont(24),
         small = love.graphics.newFont(12),
         medium = love.graphics.newFont(16),
+        huge = love.graphics.newFont(84),
     }
 end
 

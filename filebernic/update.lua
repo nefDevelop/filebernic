@@ -4,7 +4,12 @@ local function update(dt)
     if state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" or showHelp then
         menuAnim = math.min(1, menuAnim + dt * 8)
     else
-        menuAnim = 0
+        menuAnim = math.max(0, menuAnim - dt * 8)
+    end
+
+    if menuAnim == 0 then
+        closingMenu = false
+        closingHelp = false
     end
 
     if cleanupData.scanning and cleanupCoroutine then
@@ -84,12 +89,18 @@ local function update(dt)
             keyHeld = 'down'
             scrollTimer = initialScrollDelay
             moved = true
+            fastScrollTimer = 0
             moveDir = 'down'
         else
             -- Tecla mantenida
             scrollTimer = scrollTimer - dt
+            fastScrollTimer = fastScrollTimer + dt
             if scrollTimer <= 0 then
-                scrollTimer = subsequentScrollDelay
+                if fastScrollTimer > 2 then
+                    scrollTimer = 0.5 -- Velocidad de salto entre letras
+                else
+                    scrollTimer = subsequentScrollDelay
+                end
                 moved = true
                 moveDir = 'down'
             end
@@ -100,12 +111,18 @@ local function update(dt)
             keyHeld = 'up'
             scrollTimer = initialScrollDelay
             moved = true
+            fastScrollTimer = 0
             moveDir = 'up'
         else
             -- Tecla mantenida
             scrollTimer = scrollTimer - dt
+            fastScrollTimer = fastScrollTimer + dt
             if scrollTimer <= 0 then
-                scrollTimer = subsequentScrollDelay
+                if fastScrollTimer > 2 then
+                    scrollTimer = 0.5 -- Velocidad de salto entre letras
+                else
+                    scrollTimer = subsequentScrollDelay
+                end
                 moved = true
                 moveDir = 'up'
             end
@@ -140,12 +157,33 @@ local function update(dt)
         end
     else
         keyHeld = nil
+        fastScrollTimer = 0
+    end
+
+    if fastScrollTimer > 2 then
+        if files[selectedIndex] then
+            local name = files[selectedIndex].name
+            if name and name ~= "" then 
+                local l = name:sub(1,1):upper()
+                if l ~= jumpLetter then
+                    jumpLetter = l
+                end
+            end
+        end
+        jumpPanelAnim = math.min(1, jumpPanelAnim + dt * 6)
+    else
+        jumpPanelAnim = math.max(0, jumpPanelAnim - dt * 6)
+        if jumpPanelAnim == 0 then
+            jumpLetter = ""
+        end
     end
 
     if moved then
         if state == "LIST" then
             if moveDir == 'down' then
-                if viewMode == "GRID" then
+                if fastScrollTimer > 2 then
+                    jumpToNextLetter()
+                elseif viewMode == "GRID" then
                     if selectedIndex + gridCols <= #files then
                         selectedIndex = selectedIndex + gridCols
                     end
@@ -153,7 +191,9 @@ local function update(dt)
                     selectedIndex = math.min(#files, selectedIndex + 1)
                 end
             elseif moveDir == 'up' then
-                if viewMode == "GRID" then
+                if fastScrollTimer > 2 then
+                    jumpToPrevLetter()
+                elseif viewMode == "GRID" then
                     if selectedIndex > gridCols then
                         selectedIndex = selectedIndex - gridCols
                     end

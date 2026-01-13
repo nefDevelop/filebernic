@@ -6,6 +6,7 @@ local function keypressed(key)
         -- Close with the same help button (f3/R1) or the back button (B)
         if key == "f3" or key == "backspace" or key == "b" or key == "escape" then
             showHelp = false
+            closingHelp = true
             inputCooldown = 0.2 -- Evita que la pulsación de B también salga del menú subyacente
             return -- Salir inmediatamente para que no se procese nada más
         end
@@ -22,6 +23,7 @@ local function keypressed(key)
     if key == "f1" then -- Start button
         if state == "OPTIONS_MENU" and menuTitle == "Configuración" then
             state = "LIST"
+            closingMenu = true
             inputCooldown = 0.3
             return
         elseif state == "LIST" then
@@ -314,6 +316,7 @@ local function keypressed(key)
              elseif not parentMenuData then
                  -- Cerrar menú si no estamos en sub-menú (comportamiento normal)
                  state = "LIST"
+                 closingMenu = true
                  inputCooldown = 0.3
              end
         elseif key == "backspace" or key == "tab" then
@@ -327,6 +330,7 @@ local function keypressed(key)
                  inputCooldown = 0.3
             else
                 state = "LIST"
+                closingMenu = true
                 inputCooldown = 0.3
             end
         end
@@ -361,6 +365,7 @@ local function keypressed(key)
             inputCooldown = 0.3
         elseif key == "backspace" or key == "x" or key == "escape" then
             state = "SCRAPER_VIEW"
+            closingMenu = true
             inputCooldown = 0.3
         end
         return
@@ -611,10 +616,12 @@ local function keypressed(key)
             end
             inputCooldown = 0.3
             state = "LIST"
+            closingMenu = true
         elseif key == "backspace" then -- Cancel
             itemToDelete = nil
             inputCooldown = 0.3
             state = "LIST"
+            closingMenu = true
         end
         return
     end

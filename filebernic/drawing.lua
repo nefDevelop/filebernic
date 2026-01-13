@@ -93,6 +93,19 @@ local function drawSideMenu()
     love.graphics.setColor(theme.colors.side_menu_separator)
     love.graphics.line(slideX, 0, slideX, h)
 
+    -- Boxart en el fondo (Watermark)
+    if state == "OPTIONS_MENU" and currentImage then
+        love.graphics.setColor(1, 1, 1, 0.25) -- Opacidad baja
+        local availW = menuW - 20
+        local availH = h * 0.45 -- Max 45% de altura
+        local scale = math.min(availW / currentImage:getWidth(), availH / currentImage:getHeight())
+        
+        local imgW = currentImage:getWidth() * scale
+        local imgH = currentImage:getHeight() * scale
+        
+        love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, h - imgH - 10, 0, scale, scale)
+    end
+
     -- Título
     love.graphics.setColor(theme.colors.text_white)
     love.graphics.setFont(fontTitle)
@@ -193,7 +206,7 @@ local function drawSideMenu()
 end
 
 local function drawHelpOverlay()
-    if not showHelp then return end
+    if not showHelp and not closingHelp then return end
     local w, h = love.graphics.getDimensions()
     
     -- Animación (Slide in)
@@ -885,6 +898,42 @@ local function drawGrid(w, h)
     end
 end
 
+local function drawJumpLetter()
+    if jumpPanelAnim <= 0 or jumpLetter == "" then return end
+    
+    local w, h = love.graphics.getDimensions()
+    
+    -- Animación de deslizamiento (Slide in/out) usando jumpPanelAnim (0 a 1)
+    local t = jumpPanelAnim
+    local ease = 1 - (1 - t)^3 -- Cubic ease out
+    local slide = (1 - ease) * 140
+    
+    local panelW = 120
+    local panelH = 120
+    local x = w - panelW + slide
+    local y = h - 160 -- Encima de la barra de estado
+    
+    -- Fondo del panel
+    love.graphics.setColor(0.15, 0.15, 0.17, 0.9)
+    love.graphics.rectangle("fill", x, y, panelW + 10, panelH, 10)
+    love.graphics.setColor(theme.colors.selection_accent)
+    love.graphics.rectangle("line", x, y, panelW + 10, panelH, 10)
+
+    -- Letra grande
+    love.graphics.setFont(fontHuge)
+
+    local scale = 1
+    local textW = fontHuge:getWidth(jumpLetter)
+    local textH = fontHuge:getHeight()
+    
+    local drawX = x + panelW / 2
+    local drawY = y + panelH / 2
+
+    -- Letra blanca con opacidad
+    love.graphics.setColor(1, 1, 1, 0.85)
+    love.graphics.print(jumpLetter, drawX, drawY, 0, scale, scale, textW / 2, textH / 2)
+end
+
 local function draw()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
@@ -895,7 +944,7 @@ local function draw()
         else
             drawScraperView()
         end
-        if state == "SCRAPER_OPTIONS" then
+        if state == "SCRAPER_OPTIONS" or closingMenu then
             drawSideMenu()
         end
         drawHelpOverlay()
@@ -1158,12 +1207,15 @@ local function draw()
     end
     end
 
-    if state == "OPTIONS_MENU" or state == "DELETE_MENU" then
+    if state == "OPTIONS_MENU" or state == "DELETE_MENU" or closingMenu then
         drawSideMenu()
     end
 
     -- Barra de estado
     drawBottomBar()
+    
+    -- Dibujar panel de letra al final para que quede encima de todo
+    drawJumpLetter()
 
     -- Draw Search UI if active
     if state == "SEARCH" then
