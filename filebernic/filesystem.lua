@@ -40,6 +40,389 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
     return systemName, muosArtPath, muosTextPath, muosPreviewPath
 end
 
+function M.deleteGameMedia(romPath)
+    local system = romPath:match("ROMS/([^/]+)/")
+    if not system then return end
+    
+    local filename = romPath:match("([^/]+)$")
+    local baseName = filename:gsub("%..-$", "")
+    
+    -- Base path for catalogue (usually on SD1 in muOS)
+    local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
+    if not io.open("/mnt/mmc", "r") then
+        -- Simulator fallback
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        cataloguePath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
+    end
+    
+    local artPath = cataloguePath .. system .. "/box/" .. baseName .. ".png"
+    local textPath = cataloguePath .. system .. "/text/" .. baseName .. ".txt"
+    local yearPath = cataloguePath .. system .. "/text/" .. baseName .. ".year"
+    local prevPath = cataloguePath .. system .. "/preview/" .. baseName .. ".png"
+    
+    os.remove(artPath)
+    os.remove(textPath)
+    os.remove(yearPath)
+    os.remove(prevPath)
+end
+
+function M.resolveSecondary(item)
+    if item.secondaryPath then return item.secondaryPath end
+    
+    local otherSD = ""
+    if item.fullPath:find("/mnt/mmc") then
+        otherSD = "/mnt/sdcard"
+    elseif item.fullPath:find("/mnt/sdcard") then
+        otherSD = "/mnt/mmc"
+    else
+        return nil
+    end
+    
+    local system = item.fullPath:match("ROMS/([^/]+)/")
+    if not system then return nil end
+    
+    local secondary = otherSD .. "/ROMS/" .. system .. "/" .. item.name
+    
+    if io.open(secondary, "r") then
+        return secondary
+    end
+    return nil
+end
+
+function M.getTargetSDPath(item, config)
+    local targetSD = config.copyToSD2 and "sdcard" or "mmc"
+    if item.sourceLabel == "SD1" then
+        targetSD = "sdcard"
+    elseif item.sourceLabel == "SD2" then
+        targetSD = "mmc"
+    end
+    return "/mnt/" .. targetSD
+end
+
+function M.saveHistory(playedRoms)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/played_roms.txt", "w")
+    if f then
+        for path, _ in pairs(playedRoms) do
+            f:write(path .. "\n")
+        end
+        f:close()
+    end
+end
+
+function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
+    if result and result.tempPath then
+        local baseName = item.name:gsub("%..-$", "")
+        
+        -- Asegurar directorio de destino
+        os.execute("mkdir -p '" .. muosArtPath .. "'")
+        
+        -- Mover archivo temporal a destino final
+        local destPath = muosArtPath .. baseName .. ".png"
+        log("Saving boxart to: " .. destPath)
+        os.execute("cp '" .. result.tempPath .. "' '" .. destPath .. "'")
+        
+        -- Guardar descripción
+        if result.description then
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
+            local txtPath = muosTextPath .. baseName .. ".txt"
+            log("Saving description to: " .. txtPath)
+            local f = io.open(txtPath, "w")
+            if f then
+                f:write(result.description)
+                f:close()
+            end
+        end
+        
+        -- Guardar año
+        if result.year then
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
+            local yearPath = muosTextPath .. baseName .. ".year"
+            log("Saving year to: " .. yearPath)
+            local f = io.open(yearPath, "w")
+            if f then
+                f:write(result.year)
+                f:close()
+            end
+        end
+        
+        -- Guardar screenshot (si existe carpeta preview)
+        if result.tempScreenPath and muosPreviewPath ~= "" then
+            os.execute("mkdir -p '" .. muosPreviewPath .. "'")
+            local destScreen = muosPreviewPath .. baseName .. ".png"
+            log("Saving preview to: " .. destScreen)
+            os.execute("cp '" .. result.tempScreenPath .. "' '" .. destScreen .. "'")
+        end
+    end
+end
+
+function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getSource, io_open, coroutine_create, coroutine_yield, table_insert, table_sort)
+    cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false, currentFile = "" }
+    
+    local cleanupCoroutine = coroutine_create(function()
+        local romNames = {} -- Para huérfanos: nombre base -> true
+        local romsByStem = {} -- Para duplicados: nombre base -> lista de archivos
+        local romsBySystem = {} -- Para imágenes huérfanas: system -> stem -> true
+
+        local totalFiles = 0
+        local scannedFiles = 0
+        local find_exclude_str = [[-not -path "*.svn*" -not -name "*.png" -not -name "*.jpg" -not -name "*.jpeg" -not -name "*.txt" -not -name "*.pdf" -not -name "*.db"]]
+
+        local function countFiles(path)
+            if not io_open(path, "r") then return end
+            local cmd = 'find "'..path..'" -type f ' .. find_exclude_str .. ' | wc -l'
+            local h = io.popen(cmd)
+            if h then
+                local count = tonumber(h:read("*a"))
+                h:close()
+                if count then totalFiles = totalFiles + count end
+            end
+        end
+
+        -- 1. Contar todos los archivos primero para una barra de progreso precisa
+        countFiles("/mnt/mmc/ROMS")
+        countFiles("/mnt/sdcard/ROMS")
+        -- Fallback para simulador
+        if totalFiles == 0 then
+            local cwd = love_filesystem_getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            countFiles(cwd .. "/../Simulador_SD/")
+        end
+        coroutine_yield()
+
+        local function scanAndRegister(path, locationLabel)
+            if not io_open(path, "r") then return end
+            local cmd = 'find "'..path..'" -type f ' .. find_exclude_str
+            local h = io.popen(cmd)
+            if h then
+                for line in h:lines() do
+                    scannedFiles = scannedFiles + 1
+                    cleanupData.progress = totalFiles > 0 and (scannedFiles / totalFiles * 0.8) or 0 -- Escaneo de ROMs es el 80% del trabajo
+
+                    if scannedFiles % 20 == 0 then
+                        cleanupData.currentFile = line:match("([^/]+)$")
+                        coroutine_yield()
+                    end
+                    
+                    local filename = line:match("([^/]+)$")
+                    if filename then
+                        local ext = filename:match("[^%.]+$")
+                        if ext then
+                            local extLower = ext:lower()
+                            -- La comprobación aquí es redundante por el `find` pero la dejamos como doble seguro
+                            if validExtensions[extLower] and extLower ~= "state" then
+                                local stem = filename:gsub("%..-$", "")
+                                romNames[stem] = true
+                                
+                                if not romsByStem[stem] then romsByStem[stem] = {} end
+                                
+                                local system = line:match("ROMS/([^/]+)/") or "UNK"
+                                
+                                table_insert(romsByStem[stem], {
+                                    name = stem,
+                                    filename = filename,
+                                    fullPath = line,
+                                    system = system,
+                                    location = locationLabel
+                                })
+
+                                if system ~= "UNK" then
+                                    if not romsBySystem[system] then romsBySystem[system] = {} end
+                                    romsBySystem[system][stem] = true
+                                end
+                            end
+                        end
+                    end
+                end
+                h:close()
+            end
+        end
+
+        scanAndRegister("/mnt/mmc/ROMS", "SD1")
+        scanAndRegister("/mnt/sdcard/ROMS", "SD2")
+        -- Fallback para simulador
+        if scannedFiles == 0 then
+            local cwd = love_filesystem_getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            scanAndRegister(cwd .. "/../Simulador_SD/", "SIM")
+        end
+
+        -- 2. Buscar Save States Huérfanos
+        cleanupData.currentFile = "Buscando save states..."
+        cleanupData.progress = 0.85
+        coroutine_yield()
+        local savePaths = {"/mnt/mmc/MUOS/save", "/mnt/sdcard/MUOS/save"}
+        for _, path in ipairs(savePaths) do
+            local h = io.popen('find "'..path..'" -name "*.state*"')
+            if h then
+                for line in h:lines() do
+                    local name = line:match("([^/]+)$")
+                    local base = name:gsub("%.state.*$", "")
+                    if not romNames[base] then
+                        table_insert(cleanupData.orphans, {
+                            name = name,
+                            fullPath = line,
+                            location = line:find("/mnt/mmc") and "SD1" or "SD2"
+                        })
+                    end
+                end
+                h:close()
+            end
+        end
+        
+        cleanupData.progress = 0.9
+        coroutine_yield()
+
+        -- 3. Procesar Duplicados
+        cleanupData.currentFile = "Analizando duplicados..."
+        coroutine_yield()
+        for stem, list in pairs(romsByStem) do
+            if #list > 1 then
+                for _, item in ipairs(list) do
+                    table_insert(cleanupData.duplicates, item)
+                end
+            end
+        end
+
+        table_sort(cleanupData.duplicates, function(a, b)
+            if a.name == b.name then
+                if a.system == b.system then
+                    return a.location < b.location
+                end
+                return a.system < b.system
+            end
+            return a.name < b.name
+        end)
+
+        cleanupData.progress = 0.95
+        coroutine_yield()
+
+        -- 4. Buscar Imágenes Huérfanas
+        cleanupData.currentFile = "Buscando imágenes huérfanas..."
+        coroutine_yield()
+        local catalogueBase = "/mnt/mmc/MUOS/info/catalogue/"
+        if not io_open("/mnt/mmc", "r") then
+            local cwd = love_filesystem_getSource()
+            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+            catalogueBase = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
+        end
+
+        for system, stems in pairs(romsBySystem) do
+            local boxPath = catalogueBase .. system .. "/box"
+            local h = io.popen('find "'..boxPath..'" -maxdepth 1 -name "*.png" 2>/dev/null')
+            if h then
+                for line in h:lines() do
+                    local filename = line:match("([^/]+)$")
+                    local stem = filename:gsub("%..-$", "")
+                    if not stems[stem] then
+                        table_insert(cleanupData.orphanedImages, {
+                            name = filename,
+                            fullPath = line,
+                            system = system,
+                            type = "Image"
+                        })
+                    end
+                end
+                h:close()
+            end
+            coroutine_yield()
+        end
+
+        cleanupData.progress = 1.0
+        cleanupData.scanning = false
+        cleanupData.scanned = true
+    end)
+    return cleanupData, cleanupCoroutine
+end
+
+function M.deleteGameMedia(romPath)
+    local system = romPath:match("ROMS/([^/]+)/")
+    if not system then return end
+    
+    local filename = romPath:match("([^/]+)$")
+    local baseName = filename:gsub("%..-$", "")
+    
+    -- Base path for catalogue (usually on SD1 in muOS)
+    local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
+    if not io.open("/mnt/mmc", "r") then
+        -- Simulator fallback
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        cataloguePath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
+    end
+    
+    local artPath = cataloguePath .. system .. "/box/" .. baseName .. ".png"
+    local textPath = cataloguePath .. system .. "/text/" .. baseName .. ".txt"
+    local yearPath = cataloguePath .. system .. "/text/" .. baseName .. ".year"
+    local prevPath = cataloguePath .. system .. "/preview/" .. baseName .. ".png"
+    
+    os.remove(artPath)
+    os.remove(textPath)
+    os.remove(yearPath)
+    os.remove(prevPath)
+end
+
+function M.findSaveFiles(item)
+    local saveFiles = {}
+    local saveManagerSelection = 1
+    local baseName = item.name:gsub("%..-$", "")
+    
+    -- Escapar caracteres especiales para el comando find (ej: corchetes)
+    local escapedName = baseName:gsub("([%[%]%*%?])", "\\%1")
+    
+    -- Rutas comunes de guardado en muOS / RetroArch
+    local searchPaths = {}
+    
+    if io.open("/mnt/mmc", "r") then
+        table.insert(searchPaths, "/mnt/mmc/MUOS/save")
+        table.insert(searchPaths, "/mnt/sdcard/MUOS/save")
+        table.insert(searchPaths, "/mnt/mmc/MUOS/save/state")
+        table.insert(searchPaths, "/mnt/sdcard/MUOS/save/state")
+    else
+        -- Fallback Simulador
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        local simPath = cwd .. "/../Simulador_SD/"
+        table.insert(searchPaths, simPath .. "MUOS/save")
+        table.insert(searchPaths, simPath .. "MUOS/save/state")
+    end
+    
+    if item.fullPath then
+        local romDir = item.fullPath:match("(.*/)")
+        if romDir then table.insert(searchPaths, romDir) end
+    end
+    
+    local foundMap = {}
+
+    for _, path in ipairs(searchPaths) do
+        -- Listar archivos que empiecen por el nombre de la ROM
+        local cmd = 'find "'..path..'" -maxdepth 1 -name "'..escapedName..'.*" 2>/dev/null'
+        local h = io.popen(cmd)
+        if h then
+            for line in h:lines() do
+                if line:match("%.srm$") or line:match("%.state") then
+                    if not foundMap[line] then
+                        foundMap[line] = true
+                        local location = "UNK"
+                        if line:find("/mnt/mmc") then location = "SD1"
+                        elseif line:find("/mnt/sdcard") then location = "SD2" end
+                        
+                        table.insert(saveFiles, {
+                            name = line:match("([^/]+)$"),
+                            fullPath = line,
+                            location = location,
+                            type = line:match("%.srm$") and "SaveRAM" or "State"
+                        })
+                    end
+                end
+            end
+            h:close()
+        end
+    end
+    return saveFiles, saveManagerSelection
+end
+
 function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource, io_open, log, performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json_encode, os_execute, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
     local dataDir = love_filesystem_getSource() .. "/data"
     local indexPath = dataDir .. "/rom_index.json"
