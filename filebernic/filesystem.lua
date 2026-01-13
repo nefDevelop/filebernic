@@ -67,6 +67,15 @@ function M.deleteGameMedia(romPath)
     os.remove(prevPath)
 end
 
+function M.saveLastPlayed(path)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/last_played.txt", "w")
+    if f then
+        f:write(path)
+        f:close()
+    end
+end
+
 function M.resolveSecondary(item)
     if item.secondaryPath then return item.secondaryPath end
     

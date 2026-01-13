@@ -462,16 +462,6 @@ function loadPreview()
     end
 end
 
-function saveLastPlayed(path)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    os.execute("mkdir -p " .. dataDir)
-    local f = io.open(dataDir .. "/last_played.txt", "w")
-    if f then
-        f:write(path)
-        f:close()
-    end
-end
-
 function addToHistory(path)
     if playedRoms[path] then return end
     playedRoms[path] = true
