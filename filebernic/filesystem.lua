@@ -1,4 +1,5 @@
 local M = {}
+local utils = require "utils"
 
 function M.hasRoms(path, validExtensions)
     local h = io.popen('ls -p "'..path..'"')
@@ -545,10 +546,6 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
             if h then
                 local count = 0
                 for fLine in h:lines() do
-                    count = count + 1
-                    if count % 50 == 0 then
-                        coroutine_yield(fLine:match("([^/]+)$") or "...")
-                    end -- Ceder control para no congelar
 
                     local filename = fLine:match("([^/]+)$")
                     if filename and filename:sub(1, 1) ~= "." then
@@ -557,6 +554,11 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
                             local stem = filename:gsub("%.[^%.]+$", "")
                             local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
                             if groupKey == "" then groupKey = stem end
+                            
+                            count = count + 1
+                            if count % 20 == 0 then
+                                coroutine_yield(filename)
+                            end
                             
                             local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
 
@@ -608,7 +610,6 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
         coroutine_yield("Ordenando y guardando...")
 
         table_sort(newIndex, function(a, b) return a.name:lower() < b.name:lower() end)
-        romIndex = newIndex
 
         -- Guardar índice en archivo
         local dataDir = love_filesystem_getSource() .. "/data"
@@ -631,18 +632,12 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
             f_ts:close()
         end
 
-        isIndexing = false
-        indexStateMessage = ""
-        
-        -- Si estamos en la vista de raíz virtual y modo juego único, refrescar
-        if isVirtualRoot and launchMode == "Juego Unico" then
-             createMergedVirtualRoot()
-        end
+        return newIndex
     end)
     return isIndexing, indexStateMessage, romIndex, indexCoroutine
 end
 
-function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
+function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect)
     files = {}
     isVirtualRoot = true
     romPath = "" -- Not a real path in this view
@@ -713,13 +708,25 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     -- Sort files alphabetically by name
     table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
 
+    -- After sorting, find the item to select
+    if pathToSelect then
+        local systemToSelect = pathToSelect:match("ROMS/([^/]+)/") or pathToSelect:match("Simulador_SD/([^/]+)/")
+        if systemToSelect then
+            for i, item in ipairs(files) do
+                if item.name == systemToSelect then
+                    selectedIndex = i
+                    break
+                end
+            end
+        end
+    end
+
     -- Back up the full list
     allFiles = {}
     for _, item in ipairs(files) do
         table.insert(allFiles, item)
     end
 
-    loadPreview()
     return files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles
 end
 
@@ -749,7 +756,7 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
     return systemName, muosArtPath, muosTextPath, muosPreviewPath
 end
 
-function M.updateSystemPaths(systemName, romPath, systemVariants, log, love_graphics_newImage)
+function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
     local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
     
     local muosArtPath = ""
@@ -777,23 +784,8 @@ function M.updateSystemPaths(systemName, romPath, systemVariants, log, love_grap
         -- Year is stored in text path with .year extension
 
         -- Buscar grupo de variantes para el sistema detectado
-        local variants = {systemName}
-        local lowerName = systemName:lower()
-        
-        for _, group in ipairs(systemVariants) do
-            local match = false
-            for _, v in ipairs(group) do
-                if v:lower() == lowerName then
-                    match = true
-                    break
-                end
-            end
-            if match then
-                variants = group
-                log("Variant group found for: " .. systemName)
-                break
-            end
-        end
+        local variants = utils.getSystemVariants(systemName)
+        log("Variant group found for: " .. systemName)
 
         -- Cargar icono del sistema (probar todas las variantes)
         for _, v in ipairs(variants) do
@@ -824,7 +816,7 @@ function M.updateSystemPaths(systemName, romPath, systemVariants, log, love_grap
     return systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon
 end
 
-function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
+function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles)
     updateSystemPaths()
     files = {}
     selectedFilesCount = 0
@@ -922,7 +914,6 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
         table.insert(allFiles, item)
     end
 
-    loadPreview()
     return files, selectedFilesCount, selectedIndex, allFiles
 end
 

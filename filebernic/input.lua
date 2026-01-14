@@ -120,7 +120,7 @@ local function keypressed(key)
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 createMergedVirtualRoot()
+                 createMergedVirtualRoot(romPath)
                  inputCooldown = 0.3
                  return
             end
@@ -150,12 +150,13 @@ local function keypressed(key)
                      local fullPath = focusedItem.fullPath
                      deleteGameMedia(fullPath)
                      local success, err = os.remove(fullPath)
-                     if success then
-                         log("Archivo borrado con éxito: " .. fullPath)
-                         if romIndex then removeFromIndex(fullPath) end
+                     if not success then
+                         log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                      else
-                         log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                         log("Archivo borrado con éxito: " .. fullPath)
                      end
+                     -- Always update internal state
+                     if romIndex then removeFromIndex(fullPath) end
                      if playedRoms[fullPath] then playedRoms[fullPath] = nil saveHistory() end
                      if isVirtualRoot and launchMode == "Juego Unico" then
                          createMergedVirtualRoot()
@@ -217,12 +218,12 @@ local function keypressed(key)
                 local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
                 deleteGameMedia(pathToDelete)
                 local success, err = os.remove(pathToDelete)
-                if success then
-                    log("Archivo borrado con éxito: " .. pathToDelete)
-                    if romIndex then removeFromIndex(pathToDelete) end
+                if not success then
+                    log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
                 else
-                    log("Error al borrar archivo: " .. pathToDelete .. " - " .. tostring(err))
+                    log("Archivo borrado con éxito: " .. pathToDelete)
                 end
+                if romIndex then removeFromIndex(pathToDelete) end
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
                 if isVirtualRoot and launchMode == "Juego Unico" then
                     createMergedVirtualRoot()
@@ -235,12 +236,12 @@ local function keypressed(key)
                 local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
                 deleteGameMedia(pathToDelete)
                 local success, err = os.remove(pathToDelete)
-                if success then
-                    log("Archivo borrado con éxito: " .. pathToDelete)
-                    if romIndex then removeFromIndex(pathToDelete) end
+                if not success then
+                    log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
                 else
-                    log("Error al borrar archivo: " .. pathToDelete .. " - " .. tostring(err))
+                    log("Archivo borrado con éxito: " .. pathToDelete)
                 end
+                if romIndex then removeFromIndex(pathToDelete) end
                 if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
                 if isVirtualRoot and launchMode == "Juego Unico" then
                     createMergedVirtualRoot()
@@ -336,6 +337,8 @@ local function keypressed(key)
                 state = "LIST"
                 closingMenu = true
                 inputCooldown = 0.3
+                focusedItem = nil
+                loadPreview()
             end
         end
         return
@@ -576,12 +579,12 @@ local function keypressed(key)
                             local fullPath = item.fullPath or (romPath .. item.name)
                             deleteGameMedia(fullPath)
                             local success, err = os.remove(fullPath)
-                            if success then
-                                log("Archivo borrado con éxito: " .. fullPath)
-                                if romIndex then removeFromIndex(fullPath) end
+                            if not success then
+                                log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                             else
-                                log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                                log("Archivo borrado con éxito: " .. fullPath)
                             end
+                            if romIndex then removeFromIndex(fullPath) end
                             if playedRoms[fullPath] then
                                 playedRoms[fullPath] = nil
                             end
@@ -598,12 +601,12 @@ local function keypressed(key)
                     local fullPath = itemToDelete.fullPath or (romPath .. itemToDelete.name)
                     deleteGameMedia(fullPath)
                     local success, err = os.remove(fullPath)
-                    if success then
-                        log("Archivo borrado con éxito: " .. fullPath)
-                        if romIndex then removeFromIndex(fullPath) end
+                    if not success then
+                        log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                     else
-                        log("Error al borrar archivo: " .. fullPath .. " - " .. tostring(err))
+                        log("Archivo borrado con éxito: " .. fullPath)
                     end
+                    if romIndex then removeFromIndex(fullPath) end
                     if playedRoms[fullPath] then
                         playedRoms[fullPath] = nil
                         saveHistory()
@@ -770,7 +773,7 @@ local function keypressed(key)
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 createMergedVirtualRoot()
+                 createMergedVirtualRoot(romPath)
                  inputCooldown = 0.3
                  return
             end
@@ -785,68 +788,73 @@ local function keypressed(key)
         love.event.quit() -- The script will handle the rest
     elseif key == "tab" then -- 'Y' button
         local item = files[selectedIndex]
-        if item and not item.isDir then
-            -- En modo único, si hay versiones, el menú de opciones está dentro de la selección de versión
-            if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
-                -- Open the version selection menu, same as 'A'
+        if item then
+            if item.isDir then
+                -- Es una carpeta, no hacer nada para evitar comportamientos extraños.
+                inputCooldown = 0.2
+            else
+                -- Es un archivo, abrir menú de opciones.
+                if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
+                    -- Open the version selection menu, same as 'A'
+                    state = "OPTIONS_MENU"
+                    menuAnim = 0
+                    menuTitle = "Seleccionar Versión"
+                    menuMessage = item.name
+                    menuOptions = {}
+                    for _, v in ipairs(item.versions) do
+                        local icon = getSystemContentIcon(v.system)
+                        table.insert(menuOptions, {
+                            text = v.name,
+                            icon = icon,
+                            system = v.system,
+                            played = playedRoms[v.fullPath]
+                        })
+                    end
+                    menuSelection = 1
+                    inputCooldown = 0.3
+                    return
+                end
+
                 state = "OPTIONS_MENU"
                 menuAnim = 0
-                menuTitle = "Seleccionar Versión"
-                menuMessage = item.name
-                menuOptions = {}
-                for _, v in ipairs(item.versions) do
-                    local icon = getSystemContentIcon(v.system)
-                    table.insert(menuOptions, {
-                        text = v.name,
-                        icon = icon,
-                        system = v.system,
-                        played = playedRoms[v.fullPath]
-                    })
+                menuTitle = "Opciones:"
+                if selectedFilesCount > 0 then
+                    menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
+                else
+                    menuMessage = item.name
                 end
                 menuSelection = 1
-                inputCooldown = 0.3
-                return
-            end
-
-            state = "OPTIONS_MENU"
-            menuAnim = 0
-            menuTitle = "Opciones:"
-            if selectedFilesCount > 0 then
-                menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
-            else
-                menuMessage = item.name
-            end
-            menuSelection = 1
-            
-            menuOptions = {}
-            -- 1. Info (Solo individual)
-            if selectedFilesCount <= 1 then
-                table.insert(menuOptions, "Info")
-            end
-            table.insert(menuOptions, "Scraper")
-            
-            -- 2. Copiar / Mover
-            if item.sourceLabel ~= "SD½" then
-                local _, targetLabel = getTargetSDPath(item.fullPath)
-                if targetLabel then
-                    table.insert(menuOptions, "Copiar a " .. targetLabel)
-                    table.insert(menuOptions, "Mover a " .. targetLabel)
+                
+                menuOptions = {}
+                -- 1. Info (Solo individual)
+                if selectedFilesCount <= 1 then
+                    table.insert(menuOptions, "Info")
                 end
+                table.insert(menuOptions, "Scraper")
+                
+                -- 2. Copiar / Mover
+                if item.sourceLabel ~= "SD½" then
+                    local _, targetLabel = getTargetSDPath(item.fullPath)
+                    if targetLabel then
+                        table.insert(menuOptions, "Copiar a " .. targetLabel)
+                        table.insert(menuOptions, "Mover a " .. targetLabel)
+                    end
+                end
+                
+                -- 3. Save Games
+                findSaveFiles(item)
+                table.insert(menuOptions, "Save Games (" .. #saveFiles .. ")")
+                
+                -- 4. Borrar (Al final)
+                if item.sourceLabel == "SD½" then
+                    table.insert(menuOptions, "Borrar de SD1")
+                    table.insert(menuOptions, "Borrar de SD2")
+                else
+                    table.insert(menuOptions, "Borrar")
+                end
+                
+                inputCooldown = 0.3
             end
-            
-            -- 3. Save Games
-            findSaveFiles(item)
-            table.insert(menuOptions, "Save Games (" .. #saveFiles .. ")")
-            
-            -- 4. Borrar (Al final)
-            if item.sourceLabel == "SD½" then
-                table.insert(menuOptions, "Borrar de SD1")
-                table.insert(menuOptions, "Borrar de SD2")
-            else
-                table.insert(menuOptions, "Borrar")
-            end
-            
-            inputCooldown = 0.3
         end
     elseif key == "x" then
         if launchMode ~= "Juego Unico" then

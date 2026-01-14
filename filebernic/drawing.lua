@@ -215,7 +215,8 @@ local function drawSideMenu()
         
         -- 7. Preparar y dibujar el nuevo subtítulo
         local regionInfo = extraInfo:gsub("%.[^%.]+$", "") -- quitar extensión
-        local newSubtitle = (sysName or "Sistema Desconocido") .. " " .. regionInfo
+        local displayName = utils.getSystemDisplayName(sysName)
+        local newSubtitle = (displayName or "Sistema Desconocido") .. " " .. regionInfo
         
         if newSubtitle:gsub("%s+", "") ~= "" then
             love.graphics.setFont(fontSmall)
@@ -376,6 +377,89 @@ local function drawHelpOverlay()
     end
 end
 
+local function drawMediaDetailContent(currentItem, showSearchButton)
+    local w, h = love.graphics.getDimensions()
+
+    -- 1. Extraer datos del subtítulo
+    local regionInfo = ""
+    local pStart = currentItem.name:find("%(")
+    if pStart then
+        regionInfo = currentItem.name:sub(pStart)
+    end
+
+    local sysName = currentItem.system
+    if not sysName and currentItem.fullPath then
+         sysName = currentItem.fullPath:match("ROMS/([^/]+)/") or currentItem.fullPath:match("Simulador_SD/([^/]+)/")
+    end
+    if not sysName and currentItem.name then
+        local ext = currentItem.name:match("%.([^%.]+)$")
+        if ext then sysName = ext:upper() end
+    end
+    
+    local displayName = utils.getSystemDisplayName(sysName)
+    local subtitle = (displayName or "Desconocido") .. " " .. regionInfo
+
+    -- 2. Dibujar Subtítulo
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.text_dim)
+    love.graphics.printf(subtitle, 0, 55, w, "center")
+
+    -- 3. Layout de imágenes
+    local contentY = 100
+    local imagesY = contentY + fontMedium:getHeight() + 5
+    local availableH = h - imagesY - 40 - 120 -- Restar espacio para barra inferior y descripción
+    
+    local spacing = 20
+    local coverW, screenW = 0, 0
+    local coverScale, screenScale = 1, 1
+
+    if currentImage then
+        coverScale = availableH / currentImage:getHeight()
+        coverW = currentImage:getWidth() * coverScale
+    end
+    if currentScreenshot then
+        screenScale = availableH / currentScreenshot:getHeight()
+        screenW = currentScreenshot:getWidth() * screenScale
+    end
+
+    local totalW = coverW + (currentImage and currentScreenshot and spacing or 0) + screenW
+    local startX = (w - totalW) / 2
+    
+    love.graphics.setFont(fontMedium)
+    
+    if currentImage then
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.printf("Frontal", startX, contentY, coverW, "center")
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(currentImage, startX, imagesY, 0, coverScale, coverScale)
+    end
+    
+    if currentScreenshot then
+        local drawX = startX + (currentImage and (coverW + spacing) or 0)
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.printf("Screen", drawX, contentY, screenW, "center")
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(currentScreenshot, drawX, imagesY, 0, screenScale, screenScale)
+    end
+
+    -- 4. Dibujar Descripción
+    local textY = imagesY + availableH + 15
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.text_medium)
+    local infoTitle = "Info"
+    if currentYear and currentYear ~= "" then infoTitle = infoTitle .. " (" .. currentYear .. ")" end
+    love.graphics.print(infoTitle, 20, textY)
+    love.graphics.setFont(fontSmall)
+    love.graphics.setColor(theme.colors.text_dim)
+    local descText = (currentDescription and currentDescription ~= "") and currentDescription or "Sin información."
+    love.graphics.printf(descText, 20, textY + 25, w - 40, "left")
+
+    if not currentImage and not currentScreenshot and descText == "Sin información." then
+        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.printf("No hay imágenes ni información disponible.", 0, h/2, w, "center")
+    end
+end
+
 local function drawInfoView()
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
@@ -383,55 +467,20 @@ local function drawInfoView()
     local currentItem = focusedItem or files[selectedIndex]
     if not currentItem then return end
 
-    -- Título
+    -- 1. Extraer datos
+    local mainName = currentItem.name:gsub("%s*$", "")
+    local pStart = mainName:find("%(")
+    if pStart then
+        mainName = mainName:sub(1, pStart - 1):gsub("%s*$", "")
+    end
+
+    -- Dibujar Título
     love.graphics.setFont(fontTitle)
     love.graphics.setColor(theme.colors.text_white)
-    love.graphics.printf(currentItem.name, 0, 20, w, "center")
+    love.graphics.printf(mainName, 0, 20, w, "center")
 
-    -- Layout dividido: Frontal (Izq), Screen (Der), Info (Abajo)
-    local boxX, boxY, boxW, boxH = 40, 70, 200, 260
-    local screenX, screenY, screenW, screenH = 280, 70, 320, 200
-    local textX, textY, textW, textH = 280, 280, 320, 180
-    
-    -- 1. Frontal (Boxart)
-    love.graphics.setColor(theme.colors.text_medium)
-    love.graphics.print("Frontal", boxX, boxY - 20)
-    if currentImage then
-        love.graphics.setColor(theme.colors.text_white)
-        local scale = math.min(boxW/currentImage:getWidth(), boxH/currentImage:getHeight())
-        love.graphics.draw(currentImage, boxX + (boxW - currentImage:getWidth()*scale)/2, boxY + (boxH - currentImage:getHeight()*scale)/2, 0, scale, scale)
-    else
-        love.graphics.setColor(theme.colors.placeholder_background)
-        love.graphics.rectangle("line", boxX, boxY, boxW, boxH)
-        love.graphics.printf("No Imagen", boxX, boxY + boxH/2 - 10, boxW, "center")
-    end
-
-    -- 2. Screen (Screenshot)
-    love.graphics.setColor(theme.colors.text_medium)
-    love.graphics.print("Screen", screenX, screenY - 20)
-    if currentScreenshot then
-        love.graphics.setColor(theme.colors.text_white)
-        local scale = math.min(screenW/currentScreenshot:getWidth(), screenH/currentScreenshot:getHeight())
-        love.graphics.draw(currentScreenshot, screenX + (screenW - currentScreenshot:getWidth()*scale)/2, screenY + (screenH - currentScreenshot:getHeight()*scale)/2, 0, scale, scale)
-    else
-        love.graphics.setColor(theme.colors.placeholder_background)
-        love.graphics.rectangle("line", screenX, screenY, screenW, screenH)
-        love.graphics.printf("No Preview", screenX, screenY + screenH/2 - 10, screenW, "center")
-    end
-
-    -- 3. Info (Description + Year)
-    love.graphics.setColor(theme.colors.text_medium)
-    local infoTitle = "Info"
-    if currentYear then infoTitle = infoTitle .. " (" .. currentYear .. ")" end
-    love.graphics.print(infoTitle, textX, textY - 20)
-    
-    love.graphics.setColor(theme.colors.text_dim)
-    love.graphics.setFont(fontSmall)
-    if currentDescription and currentDescription ~= "" then
-        love.graphics.printf(currentDescription, textX, textY, textW, "left")
-    else
-        love.graphics.printf("Sin información.", textX, textY, textW, "left")
-    end
+    -- Dibujar contenido
+    drawMediaDetailContent(currentItem, false)
 
     -- Hint de volver
     drawBottomBar()
@@ -450,54 +499,15 @@ local function drawScraperView()
     love.graphics.printf("Scraper: " .. currentItem.name, 0, 15, w, "center")
 
     if state == "SCRAPER_VIEW" then
-        -- Layout dividido: Frontal (Izq), Screen (Der), Info (Abajo)
-        local boxX, boxY, boxW, boxH = 40, 80, 200, 260
-        local screenX, screenY, screenW, screenH = 280, 100, 320, 200
-        local textX, textY, textW, textH = 280, 320, 320, 70
-        
-        -- 1. Frontal (Boxart)
-        love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.print("Frontal", boxX, boxY - 20)
-        if currentImage then
-            love.graphics.setColor(theme.colors.text_white)
-            local scale = math.min(boxW/currentImage:getWidth(), boxH/currentImage:getHeight())
-            love.graphics.draw(currentImage, boxX + (boxW - currentImage:getWidth()*scale)/2, boxY + (boxH - currentImage:getHeight()*scale)/2, 0, scale, scale)
-        else
-            love.graphics.setColor(theme.colors.placeholder_background)
-            love.graphics.rectangle("line", boxX, boxY, boxW, boxH)
-            love.graphics.printf("No Imagen", boxX, boxY + boxH/2 - 10, boxW, "center")
-        end
-
-        -- 2. Screen (Screenshot)
-        love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.print("Screen", screenX, screenY - 20)
-        if currentScreenshot then
-            love.graphics.setColor(theme.colors.text_white)
-            local scale = math.min(screenW/currentScreenshot:getWidth(), screenH/currentScreenshot:getHeight())
-            love.graphics.draw(currentScreenshot, screenX + (screenW - currentScreenshot:getWidth()*scale)/2, screenY + (screenH - currentScreenshot:getHeight()*scale)/2, 0, scale, scale)
-        else
-            love.graphics.setColor(theme.colors.placeholder_background)
-            love.graphics.rectangle("line", screenX, screenY, screenW, screenH)
-            love.graphics.printf("No Preview", screenX, screenY + screenH/2 - 10, screenW, "center")
-        end
-
-        -- 3. Info (Description)
-        love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.print("Info", textX, textY - 20)
-        love.graphics.setColor(theme.colors.text_dim)
-        love.graphics.setFont(fontSmall)
-        if currentDescription and currentDescription ~= "" then
-            love.graphics.printf(currentDescription, textX, textY, textW, "left")
-        else
-            love.graphics.printf("Sin información.", textX, textY, textW, "left")
-        end
+        -- Usar la nueva función de dibujado de contenido
+        drawMediaDetailContent(currentItem, true)
 
         -- Botón de Scrapear
         love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.selection_accent)
-        love.graphics.rectangle("fill", w/2 - 100, 410, 200, 40, 5)
+        love.graphics.rectangle("fill", w/2 - 100, h - 80, 200, 40, 5)
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf("Buscar Datos", w/2 - 100, 420, 200, "center")
+        love.graphics.printf("Buscar Datos", 0, h - 70, w, "center")
 
     elseif state == "SCRAPING_IN_PROGRESS" then
         love.graphics.printf("Consultando bases de datos...", 0, h/2, w, "center")
@@ -1103,11 +1113,33 @@ local function draw()
     local sdColW = 40
     local sdColX = layout.scrollbarX - sdColW - 5
     
-    -- Columna Preview (izquierda de SD)
-    local previewBoxW = 200 -- Reducido para evitar exceso de espacio
-    local previewBoxX = sdColX - previewBoxW - 10
-    
     local showPreview = (currentImage ~= nil or currentScreenshot ~= nil)
+    local previewBoxW = 200 -- Valor por defecto
+    
+    if showPreview then
+        local maxPreviewW = w * 0.5
+        local availableH = h - layout.listY - 40 -- Espacio vertical disponible
+        
+        local ar1 = currentImage and (currentImage:getWidth() / currentImage:getHeight()) or 0
+        local ar2 = currentScreenshot and (currentScreenshot:getWidth() / currentScreenshot:getHeight()) or 0
+        local padding = (currentImage and currentScreenshot) and 15 or 0
+        
+        local calculatedW = maxPreviewW
+        
+        if currentImage and currentScreenshot then
+            local combinedInvAr = (1/ar1) + (1/ar2)
+            calculatedW = (availableH - padding) / combinedInvAr
+        elseif currentImage then
+             calculatedW = availableH * ar1
+        elseif currentScreenshot then
+             calculatedW = availableH * ar2
+        end
+        
+        previewBoxW = math.min(maxPreviewW, calculatedW)
+        previewBoxW = math.max(100, previewBoxW) -- Mínimo razonable
+    end
+
+    local previewBoxX = sdColX - previewBoxW - 10
 
     if showPreview then
         layout.selWidth = previewBoxX - 20 -- Ajustar lista al espacio restante
@@ -1317,21 +1349,17 @@ local function draw()
 
         -- Boxart (Frontal)
         if currentImage then
-            local boxMaxH = 165
-            local scale = math.min(previewBoxW/currentImage:getWidth(), boxMaxH/currentImage:getHeight())
+            local scale = previewBoxW / currentImage:getWidth()
             love.graphics.setColor(theme.colors.text_white)
             local imgW = currentImage:getWidth() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
             love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
             previewY = previewY + (currentImage:getHeight() * scale) + 15
-        else
-            previewY = previewY + 180
         end
 
         -- Screenshot (Pantalla)
         if currentScreenshot then
-            local screenMaxH = 125
-            local scale = math.min(previewBoxW/currentScreenshot:getWidth(), screenMaxH/currentScreenshot:getHeight())
+            local scale = previewBoxW / currentScreenshot:getWidth()
             love.graphics.setColor(theme.colors.text_white)
             local imgW = currentScreenshot:getWidth() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
@@ -1407,10 +1435,10 @@ local function draw()
 
     -- Indicador de indexación en segundo plano
     if isIndexing then
-        love.graphics.setFont(fontSmall)
-        love.graphics.setColor(theme.colors.selection_accent)
-        local text = "Indexando en segundo plano..."
-        love.graphics.print(text, w - fontSmall:getWidth(text) - 5, 5)
+        -- Punto parpadeante
+        local alpha = math.abs(math.sin(love.timer.getTime() * 5))
+        love.graphics.setColor(theme.colors.selection_accent[1], theme.colors.selection_accent[2], theme.colors.selection_accent[3], alpha)
+        love.graphics.circle("fill", w - 20, 20, 6)
     end
 
     drawHelpOverlay()

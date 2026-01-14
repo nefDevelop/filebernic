@@ -1,5 +1,5 @@
 local json = require "libs.dkjson"
-local utils = require "utils"
+utils = require "utils"
 
 -- Variables de configuración y estado
 systemName = ""
@@ -164,70 +164,9 @@ isVirtualRoot = false
 
 filesystem = require "filesystem"
 
--- Grupos de variantes de nombres de sistemas (para buscar iconos)
-local systemVariants = {
-    -- Nintendo
-    {"GBA", "gba", "Game Boy Advance", "Nintendo - Game Boy Advance"},
-    {"SNES", "snes", "sfc", "Super Nintendo", "Super Famicom", "Nintendo - Super Nintendo Entertainment System"},
-    {"NES", "nes", "fc", "Nintendo Entertainment System", "Famicom", "Nintendo - Nintendo Entertainment System"},
-    {"GB", "gb", "Game Boy", "Nintendo - Game Boy"},
-    {"GBC", "gbc", "Game Boy Color", "Nintendo - Game Boy Color"},
-    {"N64", "n64", "Nintendo 64", "Nintendo - Nintendo 64"},
-    {"NDS", "nds", "Nintendo DS", "Nintendo - Nintendo DS"},
-    {"VB", "vb", "Virtual Boy"},
-    {"POKEMINI", "pokemini", "Pokemon Mini"},
-    -- Sega
-    {"MD", "md", "gen", "Genesis", "Mega Drive", "Sega - Mega Drive - Genesis"},
-    {"SMS", "sms", "Master System", "Sega - Master System - Mark III"},
-    {"GG", "gg", "Game Gear", "Sega - Game Gear"},
-    {"SEGACD", "cd", "Sega CD", "Mega CD"},
-    {"32X", "32x", "Sega 32X"},
-    {"DC", "dc", "Dreamcast", "Sega - Dreamcast"},
-    {"SATURN", "saturn", "Sega - Saturn"},
-    -- Sony
-    {"PS", "ps", "ps1", "psx", "PlayStation", "Sony - PlayStation"},
-    {"PSP", "psp", "PlayStation Portable", "Sony - PlayStation Portable"},
-    -- Arcade / SNK
-    {"MAME", "mame", "arcade", "fbneo"},
-    {"NEOGEO", "neogeo", "SNK - Neo Geo"},
-    {"NGP", "ngp", "Neo Geo Pocket"},
-    {"NGPC", "ngpc", "Neo Geo Pocket Color"},
-    -- NEC
-    {"PCE", "pce", "PC Engine", "TurboGrafx-16", "NEC - PC Engine - TurboGrafx 16"},
-    {"PCECD", "pcecd", "PC Engine CD"},
-    -- Atari
-    {"ATARI2600", "a2600", "Atari 2600", "a26"},
-    {"ATARI7800", "a7800", "Atari 7800", "a78"},
-    {"LYNX", "lynx", "Atari Lynx"},
-    -- Others
-    {"WS", "ws", "WonderSwan"},
-    {"WSC", "wsc", "WonderSwan Color"},
-    {"PICO8", "pico8", "p8"},
-    {"DOS", "dos", "MS-DOS"},
-    {"AMIGA", "amiga", "Commodore Amiga"},
-    {"C64", "c64", "Commodore 64"},
-    {"MSX", "msx", "msx1", "msx2"},
-    {"SCUMMVM", "scummvm"},
-    {"OPENBOR", "openbor"}
-}
-
 function getSystemIcon(sysName)
-    local variants = {sysName}
-    local lowerName = sysName:lower()
-    
-    for _, group in ipairs(systemVariants) do
-        local match = false
-        for _, v in ipairs(group) do
-            if v:lower() == lowerName then
-                match = true
-                break
-            end
-        end
-        if match then
-            variants = group
-            break
-        end
-    end
+    if not sysName then return nil end
+    local variants = utils.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
         local path = "assets/systems/" .. v .. ".png"
@@ -243,23 +182,7 @@ local systemContentIconCache = {}
 function getSystemContentIcon(sysName)
     if not sysName then return nil end
     if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
-
-    local variants = {sysName}
-    local lowerName = sysName:lower()
-    
-    for _, group in ipairs(systemVariants) do
-        local match = false
-        for _, v in ipairs(group) do
-            if v:lower() == lowerName then
-                match = true
-                break
-            end
-        end
-        if match then
-            variants = group
-            break
-        end
-    end
+    local variants = utils.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
         local path = "assets/systems/" .. v .. "-content.png"
@@ -317,15 +240,17 @@ function jumpToPrevLetter()
 end
 
 function updateSystemPaths()
-    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, systemVariants, log, love.graphics.newImage)
+    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.graphics.newImage)
 end
 
 function refreshFiles()
-    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
+    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles)
+    loadPreview()
 end
 
-function createMergedVirtualRoot()
-    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
+function createMergedVirtualRoot(pathToSelect)
+    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect)
+    loadPreview()
 end
 
 function getTargetSDPath(path)
@@ -342,7 +267,7 @@ end
 
 function removeFromIndex(path)
     if romIndex then
-        romIndex = filesystem.removeFromIndex(path, romIndex)
+        romIndex = filesystem.removeFromIndex(path, romIndex, json.encode, love.filesystem.getSource, io.open)
     end
 end
 
@@ -803,7 +728,7 @@ function love.load(arg)
     end
 
     if romPath ~= "" then
-        files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
+        refreshFiles()
         -- If romPath was from lastPlayedRom, try to find and set selectedIndex
         if lastPlayedRom and lastPlayedRom ~= "" and romPath == lastPlayedRom:match("(.*/)") then
             for i, item in ipairs(files) do
@@ -813,9 +738,9 @@ function love.load(arg)
                 end
             end
         end
-            loadPreview()
+        loadPreview()
     else
-        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
+        createMergedVirtualRoot()
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -834,7 +759,9 @@ function love.load(arg)
                  end
                  if found then break end
              end
-             loadPreview()
+             if found then
+                loadPreview()
+             end
         end
     end
 
