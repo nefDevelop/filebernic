@@ -15,6 +15,66 @@ function M.hasRoms(path, validExtensions)
     return false
 end
 
+-- Helper para escapar caracteres XML
+local function escapeXML(s)
+    if not s then return "" end
+    s = s:gsub("&", "&amp;")
+    s = s:gsub("<", "&lt;")
+    s = s:gsub(">", "&gt;")
+    s = s:gsub("\"", "&quot;")
+    s = s:gsub("'", "&apos;")
+    return s
+end
+
+-- Función para actualizar gamelist.xml
+local function updateGamelistXML(romPath, metadata, action)
+    local dir = romPath:match("(.*/)")
+    if not dir then return end
+    local filename = romPath:match("([^/]+)$")
+    local xmlPath = dir .. "gamelist.xml"
+    
+    local content = ""
+    local f = io.open(xmlPath, "r")
+    if f then
+        content = f:read("*all")
+        f:close()
+    else
+        if action == "delete" then return end -- No hay nada que borrar
+        content = "<?xml version=\"1.0\"?>\n<gameList>\n</gameList>"
+    end
+    
+    local relPath = "./" .. filename
+    local escapedPath = relPath:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    
+    local games = {}
+    -- Iterar sobre juegos existentes y filtrar el actual
+    for game in content:gmatch("<game>(.-)</game>") do
+        if not game:find("<path>%s*" .. escapedPath .. "%s*</path>") then
+            table.insert(games, "<game>" .. game .. "</game>")
+        end
+    end
+    
+    if action == "add" and metadata then
+        local name = metadata.name or filename:gsub("%..-$", "")
+        local entry = "  <game>\n"
+        entry = entry .. "    <path>" .. relPath .. "</path>\n"
+        entry = entry .. "    <name>" .. escapeXML(name) .. "</name>\n"
+        if metadata.image then entry = entry .. "    <image>" .. escapeXML(metadata.image) .. "</image>\n" end
+        if metadata.desc then entry = entry .. "    <desc>" .. escapeXML(metadata.desc) .. "</desc>\n" end
+        if metadata.year then entry = entry .. "    <releasedate>" .. metadata.year .. "0101T000000</releasedate>\n" end
+        entry = entry .. "  </game>"
+        table.insert(games, entry)
+    end
+    
+    local f = io.open(xmlPath, "w")
+    if f then
+        f:write("<?xml version=\"1.0\"?>\n<gameList>\n")
+        for _, g in ipairs(games) do f:write(g .. "\n") end
+        f:write("</gameList>")
+        f:close()
+    end
+end
+
 function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
     local currentPath = item.fullPath or (romPath .. item.name)
     local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
@@ -66,6 +126,9 @@ function M.deleteGameMedia(romPath)
     os.remove(textPath)
     os.remove(yearPath)
     os.remove(prevPath)
+    
+    -- Eliminar entrada de gamelist.xml
+    updateGamelistXML(romPath, nil, "delete")
 end
 
 function M.addToHistory(path, playedRoms)
@@ -136,6 +199,7 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         
         -- Mover archivo temporal a destino final
         local destPath = muosArtPath .. baseName .. ".png"
+        local finalImagePath = destPath -- Guardamos ruta absoluta para el XML
         log("Saving boxart to: " .. destPath)
         os.execute("cp '" .. result.tempPath .. "' '" .. destPath .. "'")
         
@@ -170,6 +234,15 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
             log("Saving preview to: " .. destScreen)
             os.execute("cp '" .. result.tempScreenPath .. "' '" .. destScreen .. "'")
         end
+        
+        -- Actualizar gamelist.xml
+        local meta = {
+            name = baseName, -- O usar result.name si el scraper lo devolviera
+            desc = result.description,
+            year = result.year,
+            image = finalImagePath
+        }
+        updateGamelistXML(item.fullPath or (item.name), meta, "add")
     end
 end
 
@@ -350,33 +423,6 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
         cleanupData.scanned = true
     end)
     return cleanupData, cleanupCoroutine
-end
-
-function M.deleteGameMedia(romPath)
-    local system = romPath:match("ROMS/([^/]+)/")
-    if not system then return end
-    
-    local filename = romPath:match("([^/]+)$")
-    local baseName = filename:gsub("%..-$", "")
-    
-    -- Base path for catalogue (usually on SD1 in muOS)
-    local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
-    if not io.open("/mnt/mmc", "r") then
-        -- Simulator fallback
-        local cwd = love.filesystem.getSource()
-        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-        cataloguePath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
-    end
-    
-    local artPath = cataloguePath .. system .. "/box/" .. baseName .. ".png"
-    local textPath = cataloguePath .. system .. "/text/" .. baseName .. ".txt"
-    local yearPath = cataloguePath .. system .. "/text/" .. baseName .. ".year"
-    local prevPath = cataloguePath .. system .. "/preview/" .. baseName .. ".png"
-    
-    os.remove(artPath)
-    os.remove(textPath)
-    os.remove(yearPath)
-    os.remove(prevPath)
 end
 
 function M.findSaveFiles(item)
