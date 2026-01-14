@@ -27,13 +27,21 @@ local function update(dt)
     if isIndexing and indexCoroutine then
         local status = coroutine.status(indexCoroutine)
         if status == "suspended" then
-            local ok, err = coroutine.resume(indexCoroutine)
+            local ok, msg = coroutine.resume(indexCoroutine)
             if not ok then
-                log("Index Coroutine Error: " .. tostring(err))
+                log("Index Coroutine Error: " .. tostring(msg))
                 isIndexing = false
+            elseif type(msg) == "string" and msg ~= "" then
+                indexStateMessage = msg
             end
         elseif status == "dead" then
             indexCoroutine = nil
+            isIndexing = false
+            indexStateMessage = ""
+            -- After indexing, if in Juego Unico mode, we need to refresh the list.
+            if launchMode == "Juego Unico" and isVirtualRoot then
+                createMergedVirtualRoot()
+            end
         end
     end
 

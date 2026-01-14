@@ -851,7 +851,7 @@ end
 love.load_final = love.load
 love.load = function(arg)
     love.load_final(arg)
-    romIndex = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
+    romIndex, isIndexing, indexStateMessage, indexCoroutine = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
     -- After index is loaded/started, if we are in Juego Unico mode and the list is empty, refresh it.
     if launchMode == "Juego Unico" and isVirtualRoot and romIndex and #files == 0 then
         createMergedVirtualRoot()

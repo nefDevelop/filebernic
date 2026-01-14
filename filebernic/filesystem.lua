@@ -442,6 +442,7 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
     local dataDir = love_filesystem_getSource() .. "/data"
     local indexPath = dataDir .. "/rom_index.json"
     local tsPath = dataDir .. "/rom_timestamps.json"
+    local indexCoroutine = nil
 
     local indexFile = io_open(indexPath, "r")
     local tsFile = io_open(tsPath, "r")
@@ -451,7 +452,7 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
         if tsFile then tsFile:close() end
         log("No index found. Starting background indexing.")
         isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-        return romIndex
+        return romIndex, isIndexing, indexStateMessage, indexCoroutine
     end
 
     -- Si los archivos existen, comprobar timestamps
@@ -538,15 +539,16 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
             if not io_open(rootPath, "r") then return end
             table_insert(romDirs, rootPath)
             
-            indexStateMessage = "Escaneando: " .. rootPath
-            coroutine_yield()
+            coroutine_yield("Escaneando: " .. rootPath)
 
             local h = io.popen('find "'..rootPath..'" -type f')
             if h then
                 local count = 0
                 for fLine in h:lines() do
                     count = count + 1
-                    if count % 100 == 0 then coroutine_yield() end -- Ceder control para no congelar
+                    if count % 50 == 0 then
+                        coroutine_yield(fLine:match("([^/]+)$") or "...")
+                    end -- Ceder control para no congelar
 
                     local filename = fLine:match("([^/]+)$")
                     if filename and filename:sub(1, 1) ~= "." then
@@ -603,8 +605,7 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
             scanRoot(cwd .. "/../Simulador_SD/")
         end
 
-        indexStateMessage = "Ordenando y guardando..."
-        coroutine_yield()
+        coroutine_yield("Ordenando y guardando...")
 
         table_sort(newIndex, function(a, b) return a.name:lower() < b.name:lower() end)
         romIndex = newIndex

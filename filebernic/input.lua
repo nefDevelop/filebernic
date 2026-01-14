@@ -1,6 +1,16 @@
 local function keypressed(key)
     if inputCooldown > 0 then return end
 
+    -- Si se está mostrando la pantalla de indexación, bloquear casi toda la entrada.
+    if launchMode == "Juego Unico" and isVirtualRoot and not romIndex then
+        if key == "escape" then -- Botón 'select' para salir
+            log("Select button pressed during indexing, quitting application.")
+            love.event.quit()
+        end
+        -- Bloquear cualquier otra tecla
+        return
+    end
+
     -- Modal Help Menu Logic
     if showHelp then
         -- Close with the same help button (f3/R1) or the back button (B)
