@@ -73,6 +73,7 @@ local function drawSideMenu()
     local isGameOptions = false
     local mainName = ""
     local sysIcon = nil
+    local sysName = nil -- Declarar aquí para que sea visible en toda la función
     local iconWidth = 0
     local iconSize = 32 -- Tamaño original del icono
 
@@ -85,15 +86,7 @@ local function drawSideMenu()
             mainName = name:sub(1, pStart - 1):gsub("%s*$", "") -- Quitar espacios finales
         end
         
-        local sysName = item.system
-        if not sysName and item.fullPath then
-             sysName = item.fullPath:match("ROMS/([^/]+)/") or item.fullPath:match("Simulador_SD/([^/]+)/")
-        end
-        -- Fallback: Usar extensión si no se detecta sistema por carpeta
-        if not sysName and item.name then
-            local ext = item.name:match("%.([^%.]+)$")
-            if ext then sysName = ext:upper() end
-        end
+        sysName = utils.getSystemNameForItem(item)
 
         if sysName then sysIcon = getSystemIcon(sysName) end
         
@@ -118,7 +111,8 @@ local function drawSideMenu()
         coverSpace = 80 -- 70px ancho estimado + 10px padding
     end
     local titleRequiredW = isGameOptions and (fontTitle:getWidth(mainName) + (iconWidth > 0 and (iconWidth + 10) or 0) + 40 + coverSpace) or 0
-    local menuW = math.min(w * 0.8, math.max(300, optionsMaxW + 60, titleRequiredW))
+    local extraWidth = parentMenuData and 50 or 0 -- Hacer más ancho si es un submenú para efecto de solapado
+    local menuW = math.min(w * 0.8, math.max(300, optionsMaxW + 60, titleRequiredW) + extraWidth)
 
     local menuX = w - menuW
     local slideX = menuX + (menuW * (1 - ease))
@@ -158,6 +152,7 @@ local function drawSideMenu()
         -- Header Personalizado para Juego
         local name = menuMessage
         local mainName = name:gsub("%s*$", "")
+        mainName = mainName:gsub("%.[^%.]+$", "") -- Quitar extensión del título
         local extraInfo = ""
         
         local pStart = name:find("%(")
@@ -387,15 +382,7 @@ local function drawMediaDetailContent(currentItem, showSearchButton)
         regionInfo = currentItem.name:sub(pStart)
     end
 
-    local sysName = currentItem.system
-    if not sysName and currentItem.fullPath then
-         sysName = currentItem.fullPath:match("ROMS/([^/]+)/") or currentItem.fullPath:match("Simulador_SD/([^/]+)/")
-    end
-    if not sysName and currentItem.name then
-        local ext = currentItem.name:match("%.([^%.]+)$")
-        if ext then sysName = ext:upper() end
-    end
-    
+    local sysName = utils.getSystemNameForItem(currentItem)
     local displayName = utils.getSystemDisplayName(sysName)
     local subtitle = (displayName or "Desconocido") .. " " .. regionInfo
 
@@ -473,6 +460,7 @@ local function drawInfoView()
     if pStart then
         mainName = mainName:sub(1, pStart - 1):gsub("%s*$", "")
     end
+    mainName = mainName:gsub("%.[^%.]+$", "") -- Quitar extensión
 
     -- Dibujar Título
     love.graphics.setFont(fontTitle)

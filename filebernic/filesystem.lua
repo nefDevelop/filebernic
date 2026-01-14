@@ -821,6 +821,9 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
     files = {}
     selectedFilesCount = 0
 
+    local lowerRomPath = romPath:lower()
+    local currentSystem = lowerRomPath:match("roms/([^/]+)/") or lowerRomPath:match("simulador_sd/([^/]+)/")
+
     local fileMap = {} -- Key: filename (Folder mode) or stem (Juego Unico mode)
 
     local function scan(path, label)
@@ -882,7 +885,7 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
                                 files[idx].secondaryPath = fullPath
                             end
                         else
-                            local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label}
+                            local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label, system = not isDirectory and currentSystem or nil}
                             if not isDirectory and launchMode == "Juego Unico" then
                                 newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext, system = system}}
                             end

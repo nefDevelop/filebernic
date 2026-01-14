@@ -171,7 +171,7 @@ local function keypressed(key)
                  return
             end
 
-            if menuTitle == "Seleccionar Versión" then
+            if menuTitle == "Versión" then
                  local item = files[selectedIndex]
                  if item and item.versions and item.versions[menuSelection] then
                      local v = item.versions[menuSelection]
@@ -304,7 +304,7 @@ local function keypressed(key)
             end
             inputCooldown = 0.3
         elseif key == "tab" then
-             if menuTitle == "Seleccionar Versión" then
+             if menuTitle == "Versión" then
                  local item = files[selectedIndex]
                  local ver = item.versions[menuSelection]
                  
@@ -725,7 +725,7 @@ local function keypressed(key)
                 if #item.versions > 1 then
                     state = "OPTIONS_MENU"
                     menuAnim = 0
-                    menuTitle = "Seleccionar Versión"
+                    menuTitle = "Versión"
                     menuMessage = item.name
                     menuOptions = {}
                     for _, v in ipairs(item.versions) do
@@ -791,14 +791,15 @@ local function keypressed(key)
         if item then
             if item.isDir then
                 -- Es una carpeta, no hacer nada para evitar comportamientos extraños.
-                inputCooldown = 0.2
+                inputCooldown = 0.2 -- Evita que se abra el menú si se suelta rápido y se detecta otra pulsación
+                return
             else
                 -- Es un archivo, abrir menú de opciones.
                 if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
                     -- Open the version selection menu, same as 'A'
                     state = "OPTIONS_MENU"
                     menuAnim = 0
-                    menuTitle = "Seleccionar Versión"
+                    menuTitle = "Versión"
                     menuMessage = item.name
                     menuOptions = {}
                     for _, v in ipairs(item.versions) do

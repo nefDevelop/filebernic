@@ -69,6 +69,31 @@ function M.getSystemDisplayName(sysName)
     return sysName
 end
 
+function M.getSystemNameForItem(item)
+    if not item then return nil end
+
+    -- 1. Check pre-assigned system property
+    if item.system and item.system ~= "UNK" then
+        return item.system
+    end
+
+    -- 2. Try to detect from full path (case-insensitive)
+    if item.fullPath then
+        local lowerPath = item.fullPath:lower()
+        local fromPath = lowerPath:match("roms/([^/]+)/") or lowerPath:match("simulador_sd/([^/]+)/")
+        if fromPath then return fromPath end
+    else
+    end
+
+    -- 3. Fallback to extension
+    if item.name then
+        local ext = item.name:match("%.([^%.]+)$")
+        if ext then return ext:lower() end
+    end
+
+    return nil
+end
+
 -- Utility function to split a string by a delimiter
 function M.split(s, delimiter)
     local result = {};
