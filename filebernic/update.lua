@@ -1,6 +1,62 @@
 local function update(dt)
+    loader:update()
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     
+    -- Lógica para actualizar las variables de previsualización de forma asíncrona
+    local item = focusedItem
+    if not item then
+        if #files == 0 then
+            -- Clear all previews if no files
+            currentImage = nil
+            currentScreenshot = nil
+            currentYear = nil
+            currentDescription = ""
+            currentSystemIcon = nil
+            currentSystemContentIcon = nil
+            return -- Exit early if no files
+        end
+        item = files[selectedIndex]
+    end
+
+    if item and not item.isDir then
+        local baseName = item.name:gsub("%..-$", "")
+        local itemSystemName = utils.getSystemNameForItem(item)
+        
+        if itemSystemName then
+            local artPathForSystem = filesystem.getArtPathForSystem(itemSystemName)
+            local textPathForSystem = artPathForSystem:gsub("/box/", "/text/")
+            local previewPathForSystem = artPathForSystem:gsub("/box/", "/preview/")
+
+            -- Actualizar currentImage (Boxart)
+            local imgFile = artPathForSystem .. baseName .. ".png"
+            local loadedImage = loader:getImage(imgFile)
+            if loadedImage then
+                currentImage = loadedImage
+            end
+
+            -- Actualizar currentScreenshot
+            local scrFile = previewPathForSystem .. baseName .. ".png"
+            local loadedScreenshot = loader:getImage(scrFile)
+            if loadedScreenshot then
+                currentScreenshot = loadedScreenshot
+            end
+
+            -- Actualizar currentDescription
+            local txtFile = textPathForSystem .. baseName .. ".txt"
+            local loadedDescription = loader:getText(txtFile)
+            if loadedDescription then
+                currentDescription = loadedDescription
+            end
+
+            -- Actualizar currentYear
+            local yearFile = textPathForSystem .. baseName .. ".year"
+            local loadedYear = loader:getText(yearFile)
+            if loadedYear then
+                currentYear = loadedYear
+            end
+        end
+    end
+
     if state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" or showHelp then
         menuAnim = math.min(1, menuAnim + dt * 8)
     else
@@ -76,14 +132,7 @@ local function update(dt)
         return
     end
 
-    if pendingLoad then
-        timer = timer + dt
-        if timer >= delay then
-            loadPreview()
-            pendingLoad = false
-            timer = 0
-        end
-    end
+    -- Remover lógica de pendingLoad y timer
 
     if showHelp then return end
 
@@ -226,8 +275,9 @@ local function update(dt)
                     selectedIndex = math.min(#files, selectedIndex + pageSize)
                 end
             end
-            pendingLoad = true
-            timer = 0
+            -- Cuando cambia la selección, limpiamos las vistas previas y solicitamos nuevas
+            -- Esto ya lo maneja loadPreview() y el loader.
+            loadPreview()
         elseif state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" then
             if moveDir == 'down' then
                 menuSelection = menuSelection + 1

@@ -957,31 +957,29 @@ local function drawGrid(w, h)
         
         local contentWidth = cellW - 10
 
-        -- Cargar imagen si no se ha intentado
-        if not item.isDir and not item.gridImage and not item.triedGridImage then
-            item.triedGridImage = true
+        local imageToDraw = nil
+        if not item.isDir then
             local base = item.name:gsub("%..-$", "")
-            local path = muosArtPath .. base .. ".png"
-            local f = io.open(path, "rb")
-            if f then
-                local data = f:read("*a")
-                f:close()
-                if data then
-                    local success, img = pcall(function() return love.graphics.newImage(love.filesystem.newFileData(data, "cover.png")) end)
-                    if success then item.gridImage = img end
-                end
+            
+            -- Determinar la ruta de la carátula correcta para el item (considerando virtual root)
+            local systemForItem = utils.getSystemNameForItem(item)
+            local artPathForItem = filesystem.getArtPathForSystem(systemForItem)
+
+            if artPathForItem then
+                local path = artPathForItem .. base .. ".png"
+                imageToDraw = loader:getImage(path)
             end
         end
 
         -- Dibujar imagen o icono
-        if item.gridImage then
+        if imageToDraw then
             love.graphics.setColor(1, 1, 1)
-            local scale = math.min(contentWidth / item.gridImage:getWidth(), (cellH - 50) / item.gridImage:getHeight())
-            local imgW = item.gridImage:getWidth() * scale
-            local imgH = item.gridImage:getHeight() * scale
+            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50) / imageToDraw:getHeight())
+            local imgW = imageToDraw:getWidth() * scale
+            local imgH = imageToDraw:getHeight() * scale
             local ix = x + 5 + (contentWidth - imgW) / 2
             local iy = y + 10 + ((cellH - 50) - imgH) / 2
-            love.graphics.draw(item.gridImage, ix, iy, 0, scale, scale)
+            love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
             local icon = item.icon or (item.isDir and iconFolder)
@@ -1063,6 +1061,192 @@ local function drawJumpLetter()
     -- Letra blanca con opacidad
     love.graphics.setColor(1, 1, 1, 0.85)
     love.graphics.print(jumpLetter, drawX, drawY, 0, scale, scale, textW / 2, textH / 2)
+end
+
+local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
+    if viewMode == "GRID" then
+        drawGrid(w, h)
+        -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado
+        if files[selectedIndex] then
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_white)
+            love.graphics.printf(files[selectedIndex].name, 10, h - 55, w - 20, "center")
+        end
+    else
+        -- Lista de Archivos
+        love.graphics.setFont(fontList)
+        local startLine = math.max(1, selectedIndex - 7)
+        for i = startLine, math.min(#files, startLine + pageSize) do
+            local y = layout.listY + (i - startLine) * layout.rowHeight
+            local item = files[i]
+            
+            -- Verificar si es el último juego jugado
+            local checkPath = item.fullPath or (romPath .. item.name)
+            local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
+            
+            if i == selectedIndex then
+                -- Cursor gris claro
+                love.graphics.setColor(0.9, 0.9, 0.9)
+                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
+                -- Texto e iconos en negro
+                love.graphics.setColor(0, 0, 0)
+            else
+                if isLastPlayed and markPlayed then
+                    love.graphics.setColor(theme.colors.list_played_unselected)
+                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
+                end
+                love.graphics.setColor(theme.colors.text_medium)
+            end
+
+            
+            if item.empty then
+                love.graphics.setColor(theme.colors.text_disabled)
+                love.graphics.printf(item.name, 55, y, layout.selWidth - 10, "left")
+            else
+                if item.selected then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                end
+                
+                local iconToDraw = item.icon or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
+                local drawScale = layout.iconScale
+                
+                if iconToDraw == currentSystemContentIcon or iconToDraw == item.icon then
+                    drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
+                end
+                
+                local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
+                love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
+                
+                local availableWidth
+                if launchMode == "Juego Unico" then
+                    local systems = {}
+                    local seen = {}
+                    if item.versions then
+                        for _, v in ipairs(item.versions) do
+                            if v.system and not seen[v.system] then
+                                seen[v.system] = true
+                                table.insert(systems, v.system)
+                            end
+                        end
+                    end
+                    local iconSize = 20
+                    local spacing = 2
+                    local totalW = #systems * (iconSize + spacing) - spacing
+                    if totalW < 0 then totalW = 0 end
+                    
+                    local startX = layout.scrollbarX - totalW - 5
+                    availableWidth = startX - 55 - 10
+                else
+                    -- Calcular etiqueta SD
+                    local label = item.sourceLabel
+                    if not label then
+                        if romPath:find("/mnt/mmc") then label = "SD1"
+                        elseif romPath:find("/mnt/sdcard") then label = "SD2" end
+                    end
+                    
+                    local labelWidth = 0
+                    if label then labelWidth = fontList:getWidth(label) end
+                    
+                    -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(5)
+                    availableWidth = layout.selWidth - 55 - labelWidth - 5
+                end
+
+                local nameToDraw = item.name
+                
+                if fontList:getWidth(nameToDraw) > availableWidth then
+                    while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
+                        nameToDraw = nameToDraw:sub(1, -2)
+                    end
+                    nameToDraw = nameToDraw .. "..."
+                end
+                
+                -- Centrar el texto verticalmente en la fila
+                local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
+                
+                if i == selectedIndex then
+                    love.graphics.print(nameToDraw, 55, textY)
+                    love.graphics.print(nameToDraw, 56, textY)
+                else
+                    love.graphics.print(nameToDraw, 55, textY)
+                end
+
+                if launchMode == "Juego Unico" then
+                    -- Dibujar iconos de sistemas apilados a la derecha
+                    local systems = {}
+                    local seen = {}
+                    if item.versions then
+                        for _, v in ipairs(item.versions) do
+                            if v.system and not seen[v.system] then
+                                seen[v.system] = true
+                                table.insert(systems, v.system)
+                            end
+                        end
+                    end
+                    
+                    local iconSize = 20
+                    local spacing = 2
+                    local totalW = #systems * (iconSize + spacing) - spacing
+                    local startX = layout.scrollbarX - totalW - 5
+                    
+                    for idx, sys in ipairs(systems) do
+                        local icon = getSystemIcon(sys)
+                        if icon then
+                            love.graphics.setColor(1, 1, 1)
+                            local scale = iconSize / icon:getHeight()
+                            love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
+                        end
+                    end
+                else
+                    local label = item.sourceLabel
+                    if not label then
+                        if romPath:find("/mnt/mmc") then label = "SD1"
+                        elseif romPath:find("/mnt/sdcard") then label = "SD2" end
+                    end
+                    if label then
+                    -- Colores distintivos para SD
+                    if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
+                    elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
+                    elseif label == "SD½" then love.graphics.setColor(0.8, 0.5, 1)
+                    else love.graphics.setColor(theme.colors.text_dim) end
+
+                    if i == selectedIndex then
+                        -- Oscurecer un poco para contraste sobre fondo claro
+                        local r, g, b = love.graphics.getColor()
+                        love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
+                    end
+                    love.graphics.printf(label, sdColX, y, sdColW, "center")
+                    end
+                end
+            end
+        end
+    end
+
+    -- Scrollbar
+    drawScrollbar()
+
+    -- Columna de Vista Previa (Boxart + Screenshot)
+    if showPreview then
+        local previewY = layout.listY
+
+        -- Boxart (Frontal)
+        if currentImage then
+            local scale = previewBoxW / currentImage:getWidth()
+            love.graphics.setColor(theme.colors.text_white)
+            local imgW = currentImage:getWidth() * scale
+            local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
+            previewY = previewY + (currentImage:getHeight() * scale) + 15
+        end
+
+        -- Screenshot (Pantalla)
+        if currentScreenshot then
+            local scale = previewBoxW / currentScreenshot:getWidth()
+            love.graphics.setColor(theme.colors.text_white)
+            local imgW = currentScreenshot:getWidth() * scale
+            local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
+        end
+    end
 end
 
 local function draw()
@@ -1171,190 +1355,7 @@ local function draw()
         return
     end
 
-    if viewMode == "GRID" then
-        drawGrid(w, h)
-        -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado
-        if files[selectedIndex] then
-            love.graphics.setFont(fontMedium)
-            love.graphics.setColor(theme.colors.text_white)
-            love.graphics.printf(files[selectedIndex].name, 10, h - 55, w - 20, "center")
-        end
-    else
-
-    -- Lista de Archivos
-    love.graphics.setFont(fontList)
-    local startLine = math.max(1, selectedIndex - 7)
-    for i = startLine, math.min(#files, startLine + pageSize) do
-        local y = layout.listY + (i - startLine) * layout.rowHeight
-        local item = files[i]
-        
-        -- Verificar si es el último juego jugado
-        local checkPath = item.fullPath or (romPath .. item.name)
-        local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
-        
-        if i == selectedIndex then
-            -- Cursor gris claro
-            love.graphics.setColor(0.9, 0.9, 0.9)
-            love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
-            -- Texto e iconos en negro
-            love.graphics.setColor(0, 0, 0)
-        else
-            if isLastPlayed and markPlayed then
-                love.graphics.setColor(theme.colors.list_played_unselected)
-                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
-            end
-            love.graphics.setColor(theme.colors.text_medium)
-        end
-
-        
-        if item.empty then
-            love.graphics.setColor(theme.colors.text_disabled)
-            love.graphics.printf(item.name, 55, y, layout.selWidth - 10, "left")
-        else
-            if item.selected then
-                love.graphics.setColor(theme.colors.selection_accent)
-            end
-            
-            local iconToDraw = item.icon or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
-            local drawScale = layout.iconScale
-            
-            if iconToDraw == currentSystemContentIcon or iconToDraw == item.icon then
-                drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
-            end
-            
-            local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
-            love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
-            
-            local availableWidth
-            if launchMode == "Juego Unico" then
-                local systems = {}
-                local seen = {}
-                if item.versions then
-                    for _, v in ipairs(item.versions) do
-                        if v.system and not seen[v.system] then
-                            seen[v.system] = true
-                            table.insert(systems, v.system)
-                        end
-                    end
-                end
-                local iconSize = 20
-                local spacing = 2
-                local totalW = #systems * (iconSize + spacing) - spacing
-                if totalW < 0 then totalW = 0 end
-                
-                local startX = layout.scrollbarX - totalW - 5
-                availableWidth = startX - 55 - 10
-            else
-                -- Calcular etiqueta SD
-                local label = item.sourceLabel
-                if not label then
-                    if romPath:find("/mnt/mmc") then label = "SD1"
-                    elseif romPath:find("/mnt/sdcard") then label = "SD2" end
-                end
-                
-                local labelWidth = 0
-                if label then labelWidth = fontList:getWidth(label) end
-                
-                -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(5)
-                availableWidth = layout.selWidth - 55 - labelWidth - 5
-            end
-
-            local nameToDraw = item.name
-            
-            if fontList:getWidth(nameToDraw) > availableWidth then
-                while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
-                    nameToDraw = nameToDraw:sub(1, -2)
-                end
-                nameToDraw = nameToDraw .. "..."
-            end
-            
-            -- Centrar el texto verticalmente en la fila
-            local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
-            
-            if i == selectedIndex then
-                love.graphics.print(nameToDraw, 55, textY)
-                love.graphics.print(nameToDraw, 56, textY)
-            else
-                love.graphics.print(nameToDraw, 55, textY)
-            end
-
-            if launchMode == "Juego Unico" then
-                -- Dibujar iconos de sistemas apilados a la derecha
-                local systems = {}
-                local seen = {}
-                if item.versions then
-                    for _, v in ipairs(item.versions) do
-                        if v.system and not seen[v.system] then
-                            seen[v.system] = true
-                            table.insert(systems, v.system)
-                        end
-                    end
-                end
-                
-                local iconSize = 20
-                local spacing = 2
-                local totalW = #systems * (iconSize + spacing) - spacing
-                local startX = layout.scrollbarX - totalW - 5
-                
-                for idx, sys in ipairs(systems) do
-                    local icon = getSystemIcon(sys)
-                    if icon then
-                        love.graphics.setColor(1, 1, 1)
-                        local scale = iconSize / icon:getHeight()
-                        love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
-                    end
-                end
-            else
-                local label = item.sourceLabel
-                if not label then
-                    if romPath:find("/mnt/mmc") then label = "SD1"
-                    elseif romPath:find("/mnt/sdcard") then label = "SD2" end
-                end
-                if label then
-                -- Colores distintivos para SD
-                if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
-                elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
-                elseif label == "SD½" then love.graphics.setColor(0.8, 0.5, 1)
-                else love.graphics.setColor(theme.colors.text_dim) end
-
-                if i == selectedIndex then
-                    -- Oscurecer un poco para contraste sobre fondo claro
-                    local r, g, b = love.graphics.getColor()
-                    love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
-                end
-                love.graphics.printf(label, sdColX, y, sdColW, "center")
-                end
-            end
-        end
-    end
-
-    -- Scrollbar
-    drawScrollbar()
-
-    -- Columna de Vista Previa (Boxart + Screenshot)
-    if showPreview then
-        local previewY = layout.listY
-
-        -- Boxart (Frontal)
-        if currentImage then
-            local scale = previewBoxW / currentImage:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
-            local imgW = currentImage:getWidth() * scale
-            local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
-            previewY = previewY + (currentImage:getHeight() * scale) + 15
-        end
-
-        -- Screenshot (Pantalla)
-        if currentScreenshot then
-            local scale = previewBoxW / currentScreenshot:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
-            local imgW = currentScreenshot:getWidth() * scale
-            local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
-        end
-    end
-    end
+    drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
 
     if state == "OPTIONS_MENU" or state == "DELETE_MENU" or closingMenu then
         drawSideMenu()

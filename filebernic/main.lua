@@ -1,5 +1,6 @@
 local json = require "libs.dkjson"
 utils = require "utils"
+Loader = require "loader"
 
 -- Variables de configuración y estado
 systemName = ""
@@ -377,6 +378,7 @@ function saveSelectedArt()
 end
 
 function loadPreview()
+    -- Clear current preview data immediately to show loading state
     currentImage = nil
     currentScreenshot = nil
     currentYear = nil
@@ -394,45 +396,28 @@ function loadPreview()
     systemName, muosArtPath, muosTextPath, muosPreviewPath = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
     
     local baseName = item.name:gsub("%..-$", "")
-    
-    -- Boxart
-    local imgFile = muosArtPath .. baseName .. ".png"
-    local f = io.open(imgFile, "rb")
-    if f then
-        local data = f:read("*a")
-        f:close()
-        if data then
-            local fileData = love.filesystem.newFileData(data, "boxart.png")
-            currentImage = love.graphics.newImage(fileData)
-        end
-    end
-    
-    -- Screenshot
-    local scrFile = muosPreviewPath .. baseName .. ".png"
-    local fScr = io.open(scrFile, "rb")
-    if fScr then
-        local data = fScr:read("*a")
-        fScr:close()
-        if data then
-            local fileData = love.filesystem.newFileData(data, "preview.png")
-            currentScreenshot = love.graphics.newImage(fileData)
-        end
-    end
-    
-    -- Description
-    local txtFile = muosTextPath .. baseName .. ".txt"
-    local fTxt = io.open(txtFile, "r")
-    if fTxt then
-        currentDescription = fTxt:read("*all")
-        fTxt:close()
-    end
-    
-    -- Year
-    local yearFile = muosTextPath .. baseName .. ".year"
-    local fYear = io.open(yearFile, "r")
-    if fYear then
-        currentYear = fYear:read("*all")
-        fYear:close()
+    local itemSystemName = utils.getSystemNameForItem(item)
+
+    if itemSystemName then
+        local artPathForSystem = filesystem.getArtPathForSystem(itemSystemName)
+        local textPathForSystem = artPathForSystem:gsub("/box/", "/text/")
+        local previewPathForSystem = artPathForSystem:gsub("/box/", "/preview/")
+
+        -- Boxart
+        local imgFile = artPathForSystem .. baseName .. ".png"
+        loader:request(imgFile) -- Request, will be fetched by update.lua
+
+        -- Screenshot
+        local scrFile = previewPathForSystem .. baseName .. ".png"
+        loader:request(scrFile) -- Request, will be fetched by update.lua
+        
+        -- Description
+        local txtFile = textPathForSystem .. baseName .. ".txt"
+        loader:request(txtFile) -- Request, will be fetched by update.lua
+        
+        -- Year
+        local yearFile = textPathForSystem .. baseName .. ".year"
+        loader:request(yearFile) -- Request, will be fetched by update.lua
     end
 end
 
@@ -535,6 +520,7 @@ end
 
 function love.quit()
     saveAppState()
+    loader:quit()
     
     -- Log content of art folders on exit
     if muosArtPath and muosArtPath ~= "" then
@@ -574,6 +560,8 @@ function love.load(arg)
     
     love.keyboard.setKeyRepeat(false) -- Desactivado para control manual
     
+    loader = Loader:new()
+
     local baseMuosPath = ""
     local f = io.open("/mnt/mmc", "r")
     if f then
@@ -773,13 +761,8 @@ function love.load(arg)
     love.gamepadpressed = input.gamepadpressed
     love.joystickpressed = input.joystickpressed
     love.textinput = input.textinput
-end
-
-love.load_final = love.load
-love.load = function(arg)
-    love.load_final(arg)
+    
     romIndex, isIndexing, indexStateMessage, indexCoroutine = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-    -- After index is loaded/started, if we are in Juego Unico mode and the list is empty, refresh it.
     if launchMode == "Juego Unico" and isVirtualRoot and romIndex and #files == 0 then
         createMergedVirtualRoot()
     end

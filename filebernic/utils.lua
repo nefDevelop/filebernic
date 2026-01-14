@@ -47,32 +47,33 @@ local systemVariants = {
     {"OPENBOR", "openbor", "OpenBOR"}
 }
 
+-- Pre-calcular tablas de búsqueda para rendimiento O(1)
+local variantToGroup = {}
+local variantToDisplay = {}
+
+for _, group in ipairs(systemVariants) do
+    local display = group[#group]
+    for _, v in ipairs(group) do
+        local lowerV = v:lower()
+        variantToGroup[lowerV] = group
+        variantToDisplay[lowerV] = display
+    end
+end
+
 function M.getSystemVariants(sysName)
     if not sysName then return {} end
-    local lowerName = sysName:lower()
-    for _, group in ipairs(systemVariants) do
-        for _, v in ipairs(group) do
-            if v:lower() == lowerName then return group end
-        end
-    end
-    return {sysName}
+    return variantToGroup[sysName:lower()] or {sysName}
 end
 
 function M.getSystemDisplayName(sysName)
     if not sysName then return sysName end
-    local lowerName = sysName:lower()
-    for _, group in ipairs(systemVariants) do
-        for _, v in ipairs(group) do
-            if v:lower() == lowerName then return group[#group] end
-        end
-    end
-    return sysName
+    return variantToDisplay[sysName:lower()] or sysName
 end
 
 function M.getSystemNameForItem(item)
     if not item then return nil end
 
-    -- 1. Check pre-assigned system property
+    -- 1. Check pre-assigned system property (most reliable, for virtual root)
     if item.system and item.system ~= "UNK" then
         return item.system
     end
@@ -82,10 +83,14 @@ function M.getSystemNameForItem(item)
         local lowerPath = item.fullPath:lower()
         local fromPath = lowerPath:match("roms/([^/]+)/") or lowerPath:match("simulador_sd/([^/]+)/")
         if fromPath then return fromPath end
-    else
     end
 
-    -- 3. Fallback to extension
+    -- 3. If not in virtual root, the global systemName is the fallback
+    if not isVirtualRoot and systemName and systemName ~= "" then
+        return systemName
+    end
+
+    -- 4. Fallback to extension (least reliable)
     if item.name then
         local ext = item.name:match("%.([^%.]+)$")
         if ext then return ext:lower() end
