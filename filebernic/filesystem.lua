@@ -70,6 +70,7 @@ end
 function M.addToHistory(path, playedRoms)
     playedRoms[path] = true
     M.saveHistory(playedRoms)
+    return playedRoms
 end
 
 function M.saveLastPlayed(path)
@@ -437,7 +438,7 @@ function M.findSaveFiles(item)
     return saveFiles, saveManagerSelection
 end
 
-function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource, io_open, log, performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json_encode, os_execute, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
+function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource, io_open, log, performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json_encode, os_execute, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
     local dataDir = love_filesystem_getSource() .. "/data"
     local indexPath = dataDir .. "/rom_index.json"
     local tsPath = dataDir .. "/rom_timestamps.json"
@@ -449,7 +450,7 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
         if indexFile then indexFile:close() end
         if tsFile then tsFile:close() end
         log("No index found. Starting background indexing.")
-        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
+        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
         return romIndex
     end
 
@@ -460,11 +461,11 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
     local savedTimestamps = json_decode(tsContent)
 
     for dir, saved_ts in pairs(savedTimestamps) do
-        local h = io.popen('stat -c %Y "'..dir..'"')
+        local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
         if h then
             local current_ts = h:read("*a"):gsub("%s+", "")
             h:close()
-            if current_ts ~= saved_ts then
+            if current_ts ~= "" and current_ts ~= saved_ts then
                 log("Change detected in " .. dir .. ". Re-indexing.")
                 needsReindex = true
                 break
@@ -473,7 +474,7 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
     end
 
     if needsReindex then
-        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
+        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
     else
         log("Index is up to date. Loading from file.")
         local indexContent = indexFile:read("*a")
@@ -524,7 +525,7 @@ function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSourc
     return romIndex
 end
 
-function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
+function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
     isIndexing = true
     indexStateMessage = "Iniciando escaneo..."
 
@@ -620,7 +621,7 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
         -- Guardar timestamps de los directorios
         local timestamps = {}
         for _, dir in ipairs(romDirs) do
-            local h = io.popen('stat -c %Y "'..dir..'"')
+            local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
             if h then timestamps[dir] = h:read("*a"):gsub("%s+", "") h:close() end
         end
         local f_ts = io_open(dataDir .. "/rom_timestamps.json", "w")
@@ -634,7 +635,7 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
         
         -- Si estamos en la vista de raíz virtual y modo juego único, refrescar
         if isVirtualRoot and launchMode == "Juego Unico" then
-             files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
+             createMergedVirtualRoot()
         end
     end)
     return isIndexing, indexStateMessage, romIndex, indexCoroutine

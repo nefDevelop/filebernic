@@ -312,13 +312,8 @@ local function keypressed(key)
                  menuSelection = 1
                  inputCooldown = 0.3
                  return
-             elseif not parentMenuData then
-                 -- Cerrar menú si no estamos en sub-menú (comportamiento normal)
-                 state = "LIST"
-                 closingMenu = true
-                 inputCooldown = 0.3
              end
-        elseif key == "backspace" or key == "tab" then
+        elseif key == "backspace" then
             if parentMenuData then
                  menuTitle = parentMenuData.title
                  menuMessage = parentMenuData.message
@@ -783,6 +778,23 @@ local function keypressed(key)
         if item and not item.isDir then
             -- En modo único, si hay versiones, el menú de opciones está dentro de la selección de versión
             if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
+                -- Open the version selection menu, same as 'A'
+                state = "OPTIONS_MENU"
+                menuAnim = 0
+                menuTitle = "Seleccionar Versión"
+                menuMessage = item.name
+                menuOptions = {}
+                for _, v in ipairs(item.versions) do
+                    local icon = getSystemContentIcon(v.system)
+                    table.insert(menuOptions, {
+                        text = v.name,
+                        icon = icon,
+                        system = v.system,
+                        played = playedRoms[v.fullPath]
+                    })
+                end
+                menuSelection = 1
+                inputCooldown = 0.3
                 return
             end
 
@@ -827,13 +839,15 @@ local function keypressed(key)
             inputCooldown = 0.3
         end
     elseif key == "x" then
-        local item = files[selectedIndex]
-        if item and not item.isDir then
-            item.selected = not item.selected
-            if item.selected then
-                selectedFilesCount = selectedFilesCount + 1
-            else
-                selectedFilesCount = selectedFilesCount - 1
+        if launchMode ~= "Juego Unico" then
+            local item = files[selectedIndex]
+            if item and not item.isDir then
+                item.selected = not item.selected
+                if item.selected then
+                    selectedFilesCount = selectedFilesCount + 1
+                else
+                    selectedFilesCount = selectedFilesCount - 1
+                end
             end
         end
     end

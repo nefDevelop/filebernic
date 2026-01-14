@@ -162,7 +162,7 @@ subsequentScrollDelay = 0.1
 keyHeld = nil -- ('up' o 'down')
 isVirtualRoot = false
 
-local filesystem = require "filesystem"
+filesystem = require "filesystem"
 
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
 local systemVariants = {
@@ -317,6 +317,55 @@ function jumpToPrevLetter()
 end
 
 function updateSystemPaths()
+    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, systemVariants, log, love.graphics.newImage)
+end
+
+function refreshFiles()
+    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
+end
+
+function createMergedVirtualRoot()
+    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
+end
+
+function getTargetSDPath(path)
+    return filesystem.getTargetSDPath(path, config)
+end
+
+function resolveSecondary(path)
+    return filesystem.resolveSecondary(path)
+end
+
+function deleteGameMedia(path)
+    filesystem.deleteGameMedia(path, muosArtPath, muosTextPath, muosPreviewPath)
+end
+
+function removeFromIndex(path)
+    if romIndex then
+        romIndex = filesystem.removeFromIndex(path, romIndex)
+    end
+end
+
+function saveHistory()
+    filesystem.saveHistory(playedRoms)
+end
+
+function saveLastPlayed(path)
+    filesystem.saveLastPlayed(path)
+end
+
+function addToHistory(path)
+    playedRoms = filesystem.addToHistory(path, playedRoms)
+end
+
+function findSaveFiles(item)
+    saveFiles = filesystem.findSaveFiles(item)
+end
+
+function performCleanupScan()
+    cleanupData = filesystem.performCleanupScan(cleanupData, romPath, validExtensions, muosArtPath, muosPreviewPath, muosTextPath)
+    if cleanupData and not cleanupData.orphanedImages then cleanupData.orphanedImages = {} end
+end
 
 function filterFiles()
     files = {}
@@ -765,7 +814,6 @@ function love.load(arg)
             end
         end
             loadPreview()
-        end
     else
         files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, loadPreview)
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
@@ -803,5 +851,9 @@ end
 love.load_final = love.load
 love.load = function(arg)
     love.load_final(arg)
-    romIndex = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, filesystem.createMergedVirtualRoot, isVirtualRoot, launchMode, files, secondaryPath, selectedIndex, allFiles, hideEmpty, getSystemIcon, loadPreview)
+    romIndex = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
+    -- After index is loaded/started, if we are in Juego Unico mode and the list is empty, refresh it.
+    if launchMode == "Juego Unico" and isVirtualRoot and romIndex and #files == 0 then
+        createMergedVirtualRoot()
+    end
 end

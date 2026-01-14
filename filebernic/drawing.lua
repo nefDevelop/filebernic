@@ -25,7 +25,9 @@ local function drawBottomBar()
         drawHint(buttonIcons.a, "Ok")
         drawHint(buttonIcons.b, "Back")
         drawHint(buttonIcons.y, "Menu")
-        drawHint(buttonIcons.x, "Select")
+        if launchMode ~= "Juego Unico" then
+            drawHint(buttonIcons.x, "Select")
+        end
         drawHint(buttonIcons.start, "Opciones")
         -- Select button with offset
         local icon = buttonIcons.select
@@ -65,18 +67,59 @@ local function drawSideMenu()
     -- Animación (Slide in)
     local t = menuAnim
     local ease = 1 - (1 - t)^3 -- Cubic ease out
-    local offset = (w / 2) * (1 - ease)
-    
-    -- Calcular ancho dinámico basado en contenido
+
+    -- Determinar si es el menú de un juego para obtener el título y el icono
+    local item = focusedItem or files[selectedIndex]
+    local isGameOptions = false
+    local mainName = ""
+    local sysIcon = nil
+    local iconWidth = 0
+    local iconSize = 32 -- Tamaño original del icono
+
+    if state == "OPTIONS_MENU" and item and (not item.isDir or focusedItem) and (menuTitle:match("^Opciones") and menuMessage == item.name) then
+        isGameOptions = true
+        local name = menuMessage
+        mainName = name
+        local pStart = name:find("%(")
+        if pStart then
+            mainName = name:sub(1, pStart - 1):gsub("%s*$", "") -- Quitar espacios finales
+        end
+        
+        local sysName = item.system
+        if not sysName and item.fullPath then
+             sysName = item.fullPath:match("ROMS/([^/]+)/") or item.fullPath:match("Simulador_SD/([^/]+)/")
+        end
+        -- Fallback: Usar extensión si no se detecta sistema por carpeta
+        if not sysName and item.name then
+            local ext = item.name:match("%.([^%.]+)$")
+            if ext then sysName = ext:upper() end
+        end
+
+        if sysName then sysIcon = getSystemIcon(sysName) end
+        
+        -- if sysIcon then
+        --     local iconScale = iconSize / sysIcon:getHeight()
+        --     iconWidth = sysIcon:getWidth() * iconScale
+        -- end
+    end
+
+    -- Calcular ancho necesario para las opciones y el título
     love.graphics.setFont(fontList)
-    local maxW = 0
+    local optionsMaxW = 0
     for _, opt in ipairs(menuOptions) do
         local text = type(opt) == "table" and opt.text or opt
         local width = fontList:getWidth(text)
         if type(opt) == "table" and opt.icon then width = width + 35 end
-        if width > maxW then maxW = width end
+        if width > optionsMaxW then optionsMaxW = width end
     end
-    local menuW = math.max(300, maxW + 60) -- Mínimo 300px, o contenido + padding
+
+    local coverSpace = 0
+    if isGameOptions and currentImage then
+        coverSpace = 80 -- 70px ancho estimado + 10px padding
+    end
+    local titleRequiredW = isGameOptions and (fontTitle:getWidth(mainName) + (iconWidth > 0 and (iconWidth + 10) or 0) + 40 + coverSpace) or 0
+    local menuW = math.min(w * 0.8, math.max(300, optionsMaxW + 60, titleRequiredW))
+
     local menuX = w - menuW
     local slideX = menuX + (menuW * (1 - ease))
     
@@ -93,85 +136,92 @@ local function drawSideMenu()
     love.graphics.setColor(theme.colors.side_menu_separator)
     love.graphics.line(slideX, 0, slideX, h)
 
-    -- Boxart en el fondo (Watermark)
-    if state == "OPTIONS_MENU" and currentImage then
-        love.graphics.setColor(1, 1, 1, 0.15) -- Opacidad levemente mayor
-        local availW = menuW - 20
-        local availH = h * 0.45 -- Max 45% de altura
-        local scale = math.min(availW / currentImage:getWidth(), availH / currentImage:getHeight())
-        
-        local imgW = currentImage:getWidth() * scale
-        local imgH = currentImage:getHeight() * scale
-        
-        love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, 20, 0, scale, scale)
-    end
+    -- -- Boxart en el fondo (Watermark)
+    -- if state == "OPTIONS_MENU" and currentImage then
+    --     love.graphics.setColor(1, 1, 1, 0.15) -- Opacidad levemente mayor
+    --     local availW = menuW - 20
+    --     local availH = h * 0.45 -- Max 45% de altura
+    --     local scale = math.min(availW / currentImage:getWidth(), availH / currentImage:getHeight())
+    --     
+    --     local imgW = currentImage:getWidth() * scale
+    --     local imgH = currentImage:getHeight() * scale
+    --     
+    --     love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, 20, 0, scale, scale)
+    -- end
 
     -- Header (Título y Mensaje/Info)
-    local item = focusedItem or files[selectedIndex]
+    -- item ya está definido arriba
     local startY = 90
-    local isGameOptions = false
-    
-    if state == "OPTIONS_MENU" and item and (not item.isDir or focusedItem) then
-        -- Detectar si es el menú de opciones de un juego (no confirmación de borrado múltiple)
-        if (menuTitle:match("^Opciones") and menuMessage == item.name) then
-            isGameOptions = true
-        end
-    end
+    -- isGameOptions ya está definido arriba
 
     if isGameOptions then
         -- Header Personalizado para Juego
         local name = menuMessage
-        local mainName = name
+        local mainName = name:gsub("%s*$", "")
         local extraInfo = ""
         
         local pStart = name:find("%(")
         if pStart then
-            mainName = name:sub(1, pStart - 1)
+            mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
             extraInfo = name:sub(pStart)
         end
         
-        local sysIcon = nil
-        local sysName = item.system
-        if not sysName and item.fullPath then
-             sysName = item.fullPath:match("ROMS/([^/]+)/") or item.fullPath:match("Simulador_SD/([^/]+)/")
-        end
-        if sysName then sysIcon = getSystemIcon(sysName) end
-        
         local headerY = 25
-        local iconSize = 32
-        local textX = slideX + 20
+        local baseTextX = slideX + 20
         
         love.graphics.setFont(fontTitle)
-        love.graphics.setColor(theme.colors.text_white)
         
-        local availW = menuW - 40
-        local iconWidth = 0
-        local iconScale = 1
+        -- Lógica para carátula a la izquierda del título
+        local coverW = 0
+        local titleX = baseTextX
         
-        if sysIcon then
-            iconScale = iconSize / sysIcon:getHeight()
-            iconWidth = sysIcon:getWidth() * iconScale
-            availW = availW - iconWidth - 10
+        -- 1. Calcular ancho disponible para el título, asumiendo un espacio para la carátula
+        local totalAvailW = menuW - 40 - (iconWidth > 0 and (iconWidth + 10) or 0)
+        local titleAvailW = totalAvailW
+        if currentImage then
+            -- Reservar un espacio para la carátula para calcular el alto del texto
+            local coverPlaceholderW = 70 
+            titleAvailW = totalAvailW - coverPlaceholderW - 10
         end
-        
-        local _, wrappedMain = fontTitle:getWrap(mainName, availW)
-        for i, line in ipairs(wrappedMain) do
-            love.graphics.print(line, textX, headerY + (i-1)*fontTitle:getHeight())
-        end
-        
-        if sysIcon then
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.draw(sysIcon, slideX + menuW - 20 - iconWidth, headerY, 0, iconScale, iconScale)
-        end
-        
+
+        -- 2. Obtener el texto del título envuelto y su altura
+        local _, wrappedMain = fontTitle:getWrap(mainName, titleAvailW)
         local mainH = #wrappedMain * fontTitle:getHeight()
+        
+        -- 3. Dibujar la carátula, escalada a la altura del título
+        if currentImage then
+            love.graphics.setColor(1, 1, 1)
+            local coverScale = mainH / currentImage:getHeight()
+            coverW = currentImage:getWidth() * coverScale
+            love.graphics.draw(currentImage, baseTextX, headerY, 0, coverScale, coverScale)
+            titleX = baseTextX + coverW + 10
+        end
+        
+        -- 4. Dibujar el texto del título
+        love.graphics.setColor(theme.colors.text_white)
+        for i, line in ipairs(wrappedMain) do
+            love.graphics.print(line, titleX, headerY + (i-1)*fontTitle:getHeight())
+        end
+        
+        -- 5. Dibujar el icono del sistema a la derecha
+        -- if sysIcon then
+        --     local iconScale = iconSize / sysIcon:getHeight()
+        --     love.graphics.setColor(1, 1, 1)
+        --     love.graphics.draw(sysIcon, slideX + menuW - 20 - iconWidth, headerY, 0, iconScale, iconScale)
+        -- end
+        
+        -- 6. Calcular la altura total del contenido para el encabezado
         local contentH = math.max(iconSize, mainH)
         
-        if extraInfo ~= "" then
+        -- 7. Preparar y dibujar el nuevo subtítulo
+        local regionInfo = extraInfo:gsub("%.[^%.]+$", "") -- quitar extensión
+        local newSubtitle = (sysName or "Sistema Desconocido") .. " " .. regionInfo
+        
+        if newSubtitle:gsub("%s+", "") ~= "" then
             love.graphics.setFont(fontSmall)
             love.graphics.setColor(theme.colors.text_dim)
-            love.graphics.printf(extraInfo, slideX + 20, headerY + contentH + 5, menuW - 40, "left")
-            local _, wrappedExtra = fontSmall:getWrap(extraInfo, menuW - 40)
+            love.graphics.printf(newSubtitle, slideX + 20, headerY + contentH + 5, menuW - 40, "left")
+            local _, wrappedExtra = fontSmall:getWrap(newSubtitle, menuW - 40)
             startY = headerY + contentH + 5 + (#wrappedExtra * fontSmall:getHeight()) + 20
         else
             startY = headerY + contentH + 20
@@ -304,9 +354,22 @@ local function drawHelpOverlay()
     love.graphics.printf("Ayuda - Controles", contentX + 20, 40, w/2 - 40, "left")
     
     local list = helpData[state] or helpData.DEFAULT
+
+    -- Filter out 'Select' option in 'Juego Unico' mode
+    local filteredList = {}
+    if state == "LIST" and launchMode == "Juego Unico" then
+        for _, item in ipairs(list) do
+            if item.text ~= "Seleccionar" then
+                table.insert(filteredList, item)
+            end
+        end
+    else
+        filteredList = list
+    end
+
     love.graphics.setFont(fontMedium)
     local startY = 90
-    for i, item in ipairs(list) do
+    for i, item in ipairs(filteredList) do
         love.graphics.setColor(theme.colors.text_white)
         love.graphics.draw(item.icon, contentX + 20, startY + (i-1)*40, 0, 0.8, 0.8)
         love.graphics.print(item.text, contentX + 60, startY + (i-1)*40 + 2)
@@ -648,7 +711,7 @@ local function drawCleanupMenu()
         
     else
         -- Resultados (2 Columnas)
-        local hasImages = #cleanupData.orphanedImages > 0
+        local hasImages = #(cleanupData.orphanedImages or {}) > 0
         local colCount = hasImages and 3 or 2
         local colW = (w - 40 - (colCount-1)*10) / colCount
         

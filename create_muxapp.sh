@@ -25,7 +25,7 @@ echo "Compressing directories '$DIR1' to '$ZIP_FILENAME'..."
 # -q: quiet operation
 # -x "*.DS_Store" -x "__MACOSX" -x ".git*" : Exclude common unwanted files/directories
 # Zip both directories at the root of the archive
-zip -rq "$ZIP_FILENAME" "$DIR1" -x "*.DS_Store" -x "__MACOSX" -x ".git*"
+zip -rq "$ZIP_FILENAME" "$DIR1" -x "*.DS_Store" -x "__MACOSX" -x ".git*" -x "$DIR1/data/*"
 
 if [ $? -eq 0 ]; then
   echo "Compression successful. Renaming '$ZIP_FILENAME' to '$MUXAPP_FILENAME'..."
