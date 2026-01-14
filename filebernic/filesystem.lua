@@ -67,6 +67,11 @@ function M.deleteGameMedia(romPath)
     os.remove(prevPath)
 end
 
+function M.addToHistory(path, playedRoms)
+    playedRoms[path] = true
+    M.saveHistory(playedRoms)
+end
+
 function M.saveLastPlayed(path)
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/last_played.txt", "w")

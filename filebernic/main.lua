@@ -462,17 +462,7 @@ function loadPreview()
     end
 end
 
-function addToHistory(path)
-    if playedRoms[path] then return end
-    playedRoms[path] = true
-    local dataDir = love.filesystem.getSource() .. "/data"
-    os.execute("mkdir -p " .. dataDir)
-    local f = io.open(dataDir .. "/played_roms.txt", "a")
-    if f then
-        f:write(path .. "\n")
-        f:close()
-    end
-end
+
 
 function log(message)
     local logPath = love.filesystem.getSource() .. "/data/log/filebernic.log"
