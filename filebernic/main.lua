@@ -2,166 +2,14 @@ local json = require "libs.dkjson"
 utils = require "utils"
 Loader = require "loader"
 
--- Variables de configuración y estado
-systemName = ""
-romPath = ""
-config = {
-    scraperApi = "all", -- Opciones: "all", "libretro", "screenscraper", "thegamesdb"
-    screenscraper_devid = "",
-    screenscraper_password = "",
-    thegamesdb_apikey = ""
-}
-scraperApi = config.scraperApi
-secondaryPath = nil
-muosArtPath = ""
-muosTextPath = ""
-muosPreviewPath = ""
-files = {}
-selectedIndex = 1
-state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRAPING_IN_PROGRESS, SCRAPER_RESULTS, SEARCH
-itemToDelete = nil
-lastPlayedRom = ""
-playedRoms = {}
-iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil
-currentDescription = ""
-timer, delay, pendingLoad = 0, 0.05, false
-inputCooldown = 0 -- Temporizador para evitar doble input
-launching = false -- Estado de lanzamiento
-launchTimer = 0
-hideEmpty = false
-markPlayed = true
-pageSize = 13
-viewMode = "LIST" -- "LIST" or "GRID"
-gridCols = 4
-launchMode = "Folder" -- "Folder" or "Juego Unico"
-selectedFilesCount = 0
-theme = nil
-fontList, fontTitle, fontSmall, fontMedium, fontHuge = nil, nil, nil, nil, nil
-menuOptions = {"Borrar"}
-menuSelection = 1
-menuTitle = ""
-menuMessage = ""
-showHelp = false
-closingMenu = false
-closingHelp = false
-fastScrollTimer = 0
-jumpLetter = ""
-jumpPanelAnim = 0
-helpData = {}
-menuAnim = 0
-saveFiles = {}
-saveManagerSelection = 1
-cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
-cleanupCoroutine = nil
-scraperResults = {}
-scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
-scraperCoroutine = nil
-scraperSelection = 1
-searchQuery = ""
-parentMenuData = nil
-focusedItem = nil
-allFiles = {}
--- Indexing
-romIndex = nil
-isIndexing = false
-indexStateMessage = ""
-indexCoroutine = nil
--- Virtual Keyboard
-keyboardGrid = {
-    {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
-    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "SPACE"},
-    {"A", "S", "D", "F", "G", "H", "J", "K", "L", "BACK"},
-    {"Z", "X", "C", "V", "B", "N", "M", ".", "-", "OK"}
-}
-keyboardRow = 1
-keyboardCol = 1
 
-validExtensions = {
-    -- Nintendo
-    gb=true, gbc=true, gba=true, nes=true, fds=true, unf=true, unif=true,
-    snes=true, smc=true, sfc=true, fig=true, swc=true, bs=true, bml=true,
-    n64=true, v64=true, z64=true, ndd=true, u1=true,
-    nds=true, ids=true, dsi=true,
-    vb=true, vboy=true, min=true,
-    -- Sega
-    md=true, gen=true, smd=true, bin=true, mdx=true,
-    sms=true, gg=true, sg=true,
-    cdi=true, gdi=true, elf=true,
-    ["32x"]=true, ["68k"]=true, sgd=true, pco=true,
-    -- Sony
-    ps=true, pbp=true, chd=true, cue=true, iso=true, m3u=true, cbn=true, mdf=true, img=true,
-    psp=true, cso=true, prx=true, psf=true, ecm=true, mds=true,
-    -- Atari
-    a26=true, a52=true, a78=true, cdf=true,
-    lnx=true, lyx=true, o=true,
-    jag=true, j64=true, cof=true, abs=true, prg=true,
-    st=true, msa=true, dim=true, stx=true, ipf=true, ctr=true, m3u8=true, gz=true, acsi=true, ahd=true, vhd=true, scsi=true, shd=true, ide=true, gem=true,
-    xfd=true, atr=true, dcm=true, cas=true, atx=true, car=true, com=true, xex=true,
-    -- Arcade / Otros
-    zip=true, ["7z"]=true, cmd=true, neo=true,
-    dsk=true, sna=true, kcr=true, tap=true, cdt=true, voc=true, cpr=true, -- Amstrad
-    hex=true, arduboy=true, -- Arduboy
-    ws=true, wsc=true, pc2=true, pcv2=true, -- WonderSwan
-    -- cbr=true, cbz=true, epub=true, pdf=true, -- Books
-    exe=true, -- Cave Story / DOS / Ports
-    chai=true, chailove=true, -- ChaiLove
-    ch8=true, sc8=true, xo8=true, -- CHIP-8
-    col=true, cv=true, ri=true, mx1=true, mx2=true, -- Coleco / MSX
-    adf=true, adz=true, dms=true, fdi=true, hdf=true, hdz=true, lha=true, slave=true, nrg=true, rp9=true, wrp=true, -- Amiga
-    d64=true, d71=true, d80=true, d81=true, d82=true, g64=true, g41=true, x64=true, t64=true, p00=true, crt=true, d6z=true, d7z=true, d8z=true, g6z=true, g4z=true, x6z=true, vfl=true, vsf=true, nib=true, nbz=true, d2m=true, d4m=true, -- Commodore
-    dosz=true, bat=true, ins=true, ima=true, jrc=true, tc=true, conf=true, -- DOS
-    doom=true, -- Doom
-    sh=true, -- Ports
-    chf=true, -- Channel F
-    vec=true, -- Vectrex
-    gal=true, -- Galaksija
-    mgw=true, -- Game & Watch
-    jar=true, -- J2ME
-    cdg=true, -- Karaoke
-    nx=true, -- Lowres NX
-    lutro=true, lua=true, love=true, -- Lutro/Love
-    int=true, -- Intellivision
-    pce=true, sgx=true, toc=true, -- PC Engine
-    d88=true, u88=true, -- PC-8800
-    d98=true, ["98d"]=true, fdd=true, ["2hd"]=true, tfd=true, ["88d"]=true, hdm=true, xdf=true, dup=true, hdi=true, thd=true, nhd=true, hdd=true, hdn=true, -- PC98
-    pak=true, -- OpenBOR / Quake
-    p8=true, -- PICO-8
-    ldb=true, easyrpg=true, -- RPG Maker
-    ngp=true, ngc=true, ngpc=true, npc=true, -- Neo Geo Pocket
-    scummvm=true, -- ScummVM
-    dx1=true, ["2d"]=true, -- Sharp X1
-    p=true, tzx=true, t81=true, -- ZX81
-    rzx=true, scl=true, trd=true, -- ZX Spectrum
-    tic=true, -- TIC-80
-    ["8xp"]=true, ["8xk"]=true, ["8xg"]=true, -- TI-83
-    uze=true, -- Uzebox
-    vms=true, dci=true, -- VeMUlator
-    v32=true, V32=true, -- Vircon32
-    wasm=true, -- WASM-4
-    sv=true, -- Supervision
-    wl6=true, n3d=true, sod=true, sdm=true, wl1=true, pk3=true, -- Wolfenstein
-    rar=true -- Archives
-}
+State = require "state"
+theme = require "theme"
+State.theme = theme
+local draw = require "drawing"
+local update = require "update"
+local input = require "input"
 
--- Configuración de diseño (Layout)
-layout = {
-    listY = 64,           -- Posición Y inicial de la lista
-    rowHeight = 30,       -- Altura de cada fila
-    selWidth = 300,       -- Ancho del selector
-    selHeight = 28,       -- Alto del selector
-    iconScale = 0.9,      -- Escala de los iconos de carpeta/rom
-    boxartMaxW = 280,     -- Ancho máximo del boxart
-    boxartMaxH = 360,     -- Alto máximo del boxart
-    scrollbarX = 315,     -- Posición X de la barra de scroll
-    scrollbarH = 360      -- Altura de la barra de scroll
-}
-
--- Variables para el control de scroll
-scrollTimer = 0
-initialScrollDelay = 0.4
-subsequentScrollDelay = 0.1
-keyHeld = nil -- ('up' o 'down')
-isVirtualRoot = false
 
 filesystem = require "filesystem"
 
@@ -197,26 +45,26 @@ function getSystemContentIcon(sysName)
 end
 
 function jumpToNextLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
-    for i = selectedIndex + 1, #files do
-        local c = files[i].name:sub(1,1):upper()
+    if #State.files == 0 then return end
+    local current = State.files[State.selectedIndex].name:sub(1,1):upper()
+    for i = State.selectedIndex + 1, #State.files do
+        local c = State.files[i].name:sub(1,1):upper()
         if c ~= current then
-            selectedIndex = i
-            jumpLetter = c
+            State.selectedIndex = i
+            State.jumpLetter = c
             return
         end
     end
-    selectedIndex = #files
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
+    State.selectedIndex = #State.files
+    State.jumpLetter = State.files[State.selectedIndex].name:sub(1,1):upper()
 end
 
 function jumpToPrevLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
+    if #State.files == 0 then return end
+    local current = State.files[State.selectedIndex].name:sub(1,1):upper()
     local prevLetterIdx = nil
-    for i = selectedIndex - 1, 1, -1 do
-        local c = files[i].name:sub(1,1):upper()
+    for i = State.selectedIndex - 1, 1, -1 do
+        local c = State.files[i].name:sub(1,1):upper()
         if c ~= current then
             prevLetterIdx = i
             break
@@ -224,38 +72,60 @@ function jumpToPrevLetter()
     end
     
     if prevLetterIdx then
-        local targetChar = files[prevLetterIdx].name:sub(1,1):upper()
+        local targetChar = State.files[prevLetterIdx].name:sub(1,1):upper()
         for i = prevLetterIdx - 1, 1, -1 do
-            local c = files[i].name:sub(1,1):upper()
+            local c = State.files[i].name:sub(1,1):upper()
             if c ~= targetChar then
-                selectedIndex = i + 1
-                jumpLetter = targetChar
+                State.selectedIndex = i + 1
+                State.jumpLetter = targetChar
                 return
             end
         end
-        selectedIndex = 1
+        State.selectedIndex = 1
     else
-        selectedIndex = 1
+        State.selectedIndex = 1
     end
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
+    State.jumpLetter = State.files[State.selectedIndex].name:sub(1,1):upper()
 end
 
 function updateSystemPaths()
-    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.graphics.newImage)
+    State.systemName, State.muosArtPath, State.muosTextPath, State.muosPreviewPath, State.currentSystemIcon, State.currentSystemContentIcon = filesystem.updateSystemPaths(State.systemName, State.romPath, log, love.graphics.newImage)
+    -- Sync globals
+    systemName = State.systemName
+    muosArtPath = State.muosArtPath
+    muosTextPath = State.muosTextPath
+    muosPreviewPath = State.muosPreviewPath
+    currentSystemIcon = State.currentSystemIcon
+    currentSystemContentIcon = State.currentSystemContentIcon
 end
 
 function refreshFiles()
-    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles)
+    State.files, State.selectedFilesCount, State.selectedIndex, State.allFiles = filesystem.refreshFiles(updateSystemPaths, State.files, State.selectedFilesCount, State.launchMode, State.hideEmpty, State.validExtensions, State.romPath, State.secondaryPath, State.selectedIndex, State.allFiles)
+    -- Sync globals
+    files = State.files
+    selectedFilesCount = State.selectedFilesCount
+    selectedIndex = State.selectedIndex
+    allFiles = State.allFiles
     loadPreview()
 end
 
 function createMergedVirtualRoot(pathToSelect)
-    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect)
+    State.files, State.isVirtualRoot, State.romPath, State.secondaryPath, State.selectedIndex, State.allFiles = filesystem.createMergedVirtualRoot(State.files, State.isVirtualRoot, State.romPath, State.secondaryPath, State.selectedIndex, State.launchMode, State.romIndex, State.hideEmpty, State.validExtensions, getSystemIcon, State.allFiles, pathToSelect)
+    -- Sync globals
+    files = State.files
+    isVirtualRoot = State.isVirtualRoot
+    romPath = State.romPath
+    secondaryPath = State.secondaryPath
+    selectedIndex = State.selectedIndex
+    allFiles = State.allFiles
+    
+    State.selectedFilesCount = #State.files
+    selectedFilesCount = State.selectedFilesCount
     loadPreview()
 end
 
 function getTargetSDPath(path)
-    return filesystem.getTargetSDPath(path, config)
+    return filesystem.getTargetSDPath(path, State.config)
 end
 
 function resolveSecondary(path)
@@ -263,17 +133,17 @@ function resolveSecondary(path)
 end
 
 function deleteGameMedia(path)
-    filesystem.deleteGameMedia(path, muosArtPath, muosTextPath, muosPreviewPath)
+    filesystem.deleteGameMedia(path, State.muosArtPath, State.muosTextPath, State.muosPreviewPath)
 end
 
 function removeFromIndex(path)
-    if romIndex then
-        romIndex = filesystem.removeFromIndex(path, romIndex, json.encode, love.filesystem.getSource, io.open)
+    if State.romIndex then
+        State.romIndex = filesystem.removeFromIndex(path, State.romIndex, json.encode, love.filesystem.getSource, io.open)
     end
 end
 
 function saveHistory()
-    filesystem.saveHistory(playedRoms)
+    filesystem.saveHistory(State.playedRoms)
 end
 
 function saveLastPlayed(path)
@@ -281,29 +151,31 @@ function saveLastPlayed(path)
 end
 
 function addToHistory(path)
-    playedRoms = filesystem.addToHistory(path, playedRoms)
+    State.playedRoms = filesystem.addToHistory(path, State.playedRoms)
 end
 
 function findSaveFiles(item)
-    saveFiles = filesystem.findSaveFiles(item)
+    State.saveFiles = filesystem.findSaveFiles(item)
 end
 
 function performCleanupScan()
-    cleanupData = filesystem.performCleanupScan(cleanupData, romPath, validExtensions, muosArtPath, muosPreviewPath, muosTextPath)
-    if cleanupData and not cleanupData.orphanedImages then cleanupData.orphanedImages = {} end
+    State.cleanupData = filesystem.performCleanupScan(State.cleanupData, State.romPath, State.validExtensions, State.muosArtPath, State.muosPreviewPath, State.muosTextPath)
+    if State.cleanupData and not State.cleanupData.orphanedImages then State.cleanupData.orphanedImages = {} end
+    -- Sync global
+    cleanupData = State.cleanupData
 end
 
 function filterFiles()
-    files = {}
-    for _, item in ipairs(allFiles) do
-        if item.name:lower():find(searchQuery:lower(), 1, true) then
-            table.insert(files, item)
+    State.files = {}
+    for _, item in ipairs(State.allFiles) do
+        if item.name:lower():find(State.searchQuery:lower(), 1, true) then
+            table.insert(State.files, item)
         end
     end
-    selectedIndex = 1
+    State.selectedIndex = 1
 end
 
-function loadConfig()
+function State.loadConfig()
     local configPath = love.filesystem.getSource() .. "/data/config.json"
     local f = io.open(configPath, "r")
     if f then
@@ -311,89 +183,89 @@ function loadConfig()
         f:close()
         local loaded = json.decode(content)
         if loaded then
-            for k, v in pairs(loaded) do config[k] = v end
+            for k, v in pairs(loaded) do State.config[k] = v end
         end
     else
         f = io.open(configPath, "w")
         if f then
-            f:write(json.encode(config))
+            f:write(json.encode(State.config))
             f:close()
         end
     end
-    scraperApi = config.scraperApi
+    State.scraperApi = State.config.scraperApi
 end
 
 local scraper = require "scraper"
 
 function startScraping()
-    local item = files[selectedIndex]
+    local item = State.files[State.selectedIndex]
     if not item then return end
     
     log("Starting interactive scrape for: " .. item.name)
     
-    state = "SCRAPING_IN_PROGRESS"
+    State.state = "SCRAPING_IN_PROGRESS"
     love.graphics.present() -- Forzar dibujado
     
     -- Limpiar temporales
     os.execute("rm -f /tmp/scraper_*.png")
     
-    scraperResults = scraper.getScrapeResults(item, config, log, systemName)
-    scraperSelection = 1
-    state = "SCRAPER_RESULTS"
+    State.scraperResults = scraper.getScrapeResults(item, State.config, log, State.systemName)
+    State.scraperSelection = 1
+    State.state = "SCRAPER_RESULTS"
 end
 
 function performBatchScrape(items)
-    state = "BATCH_SCRAPING"
-    scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
+    State.state = "BATCH_SCRAPING"
+    State.scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
     
     -- Limpiar temporales
     os.execute("rm -f /tmp/scraper_*.png")
     
-    scraperCoroutine = coroutine.create(function()
+    State.scraperCoroutine = coroutine.create(function()
         for i, item in ipairs(items) do
-            scraperProgress.current = i
-            scraperProgress.currentName = item.name
+            State.scraperProgress.current = i
+            State.scraperProgress.currentName = item.name
             coroutine.yield()
             
-            local results = scraper.getScrapeResults(item, config, log, systemName)
+            local results = scraper.getScrapeResults(item, State.config, log, State.systemName)
             if results and #results > 0 and not results[1].error then
-                filesystem.saveScrapeResult(item, results[1], muosArtPath, muosTextPath, muosPreviewPath, log)
-                scraperProgress.successes = scraperProgress.successes + 1
+                filesystem.saveScrapeResult(item, results[1], State.muosArtPath, State.muosTextPath, State.muosPreviewPath, log)
+                State.scraperProgress.successes = State.scraperProgress.successes + 1
             else
-                scraperProgress.failures = scraperProgress.failures + 1
+                State.scraperProgress.failures = State.scraperProgress.failures + 1
             end
         end
-        state = "LIST"
-        files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, loadPreview)
+        State.state = "LIST"
+        State.files, State.selectedFilesCount, State.selectedIndex, State.allFiles = filesystem.refreshFiles(updateSystemPaths, State.files, State.selectedFilesCount, State.launchMode, State.hideEmpty, State.validExtensions, State.romPath, State.secondaryPath, State.selectedIndex, State.allFiles, loadPreview)
     end)
 end
 
 function saveSelectedArt()
-    local result = scraperResults[scraperSelection]
-    local item = files[selectedIndex]
-    filesystem.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
+    local result = State.scraperResults[State.scraperSelection]
+    local item = State.files[State.selectedIndex]
+    filesystem.saveScrapeResult(item, result, State.muosArtPath, State.muosTextPath, State.muosPreviewPath, log)
     
-    state = "LIST"
+    State.state = "LIST"
     loadPreview()
 end
 
 function loadPreview()
     -- Clear current preview data immediately to show loading state
-    currentImage = nil
-    currentScreenshot = nil
-    currentYear = nil
-    currentDescription = ""
+    State.currentImage = nil
+    State.currentScreenshot = nil
+    State.currentYear = nil
+    State.currentDescription = ""
     
-    local item = focusedItem
+    local item = State.focusedItem
     if not item then
-        if #files == 0 then return end
-        item = files[selectedIndex]
+        if #State.files == 0 then return end
+        item = State.files[State.selectedIndex]
     end
     
     if not item or item.isDir then return end
     
     -- Asegurar que el sistema detectado corresponde al archivo seleccionado (para lista mixta)
-    systemName, muosArtPath, muosTextPath, muosPreviewPath = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
+    State.systemName, State.muosArtPath, State.muosTextPath, State.muosPreviewPath = filesystem.updateSystemForFile(item, State.romPath, State.systemName, State.muosArtPath, State.muosTextPath, State.muosPreviewPath)
     
     local baseName = item.name:gsub("%..-$", "")
     local itemSystemName = utils.getSystemNameForItem(item)
@@ -433,13 +305,41 @@ function log(message)
     end
 end
 
-function saveAppState()
+function State.loadAppState()
+    local statePath = love.filesystem.getSource() .. "/data/app_state.json"
+    local f = io.open(statePath, "r")
+    if f then
+        local content = f:read("*all")
+        f:close()
+        local loaded, _, err = json.decode(content)
+        if loaded then
+            -- Restore state, with defaults
+            -- The loaded romPath is virtual, like "ROMS/GB". createMergedVirtualRoot will use it to select the system.
+            State.romPath = loaded.romPath
+            State.selectedIndex = loaded.selectedIndex or 1
+            State.hideEmpty = loaded.hideEmpty == true -- ensure boolean
+            State.markPlayed = loaded.markPlayed == nil and true or loaded.markPlayed -- default to true
+            State.viewMode = loaded.viewMode or 1
+            State.launchMode = loaded.launchMode or "Juego Unico"
+        else
+            log("Could not decode app_state.json: " .. (err or "unknown error"))
+        end
+    else
+        -- Set defaults if no state file exists
+        State.hideEmpty = false
+        State.markPlayed = true
+        State.viewMode = 1
+        State.launchMode = "Juego Unico"
+    end
+end
+
+function State.saveAppState()
     local dataDir = love.filesystem.getSource() .. "/data"
     os.execute("mkdir -p " .. dataDir)
     local f = io.open(dataDir .. "/app_state.json", "w")
     if f then
         -- Normalizar ruta para guardar (convertir a virtual ROMS/...)
-        local savedPath = romPath
+        local savedPath = State.romPath
         if savedPath:find("/mnt/mmc/ROMS/") then
             savedPath = savedPath:gsub("/mnt/mmc/ROMS/", "ROMS/")
         elseif savedPath:find("/mnt/sdcard/ROMS/") then
@@ -450,11 +350,11 @@ function saveAppState()
 
         local stateToSave = {
             romPath = savedPath,
-            selectedIndex = selectedIndex,
-            hideEmpty = hideEmpty,
-            markPlayed = markPlayed,
-            viewMode = viewMode,
-            launchMode = launchMode
+            selectedIndex = State.selectedIndex,
+            hideEmpty = State.hideEmpty,
+            markPlayed = State.markPlayed,
+            viewMode = State.viewMode,
+            launchMode = State.launchMode
         }
         f:write(json.encode(stateToSave))
         f:close()
@@ -519,13 +419,15 @@ function love.errorhandler(msg)
 end
 
 function love.quit()
-    saveAppState()
-    loader:quit()
+    State.saveAppState()
+    if loader then
+        loader:quit()
+    end
     
     -- Log content of art folders on exit
-    if muosArtPath and muosArtPath ~= "" then
-        log("Listing Boxart folder content: " .. muosArtPath)
-        local h = io.popen('ls -1 "'..muosArtPath..'"')
+    if State.muosArtPath and State.muosArtPath ~= "" then
+        log("Listing Boxart folder content: " .. State.muosArtPath)
+        local h = io.popen('ls -1 "'..State.muosArtPath..'"')
         if h then 
             local content = h:read("*a")
             log(content and content ~= "" and content or "[Empty]") 
@@ -533,9 +435,9 @@ function love.quit()
         end
     end
     
-    if muosPreviewPath and muosPreviewPath ~= "" then
-        log("Listing Preview folder content: " .. muosPreviewPath)
-        local h = io.popen('ls -1 "'..muosPreviewPath..'"')
+    if State.muosPreviewPath and State.muosPreviewPath ~= "" then
+        log("Listing Preview folder content: " .. State.muosPreviewPath)
+        local h = io.popen('ls -1 "'..State.muosPreviewPath..'"')
         if h then 
             local content = h:read("*a")
             log(content and content ~= "" and content or "[Empty]") 
@@ -544,226 +446,136 @@ function love.quit()
     end
 end
 
-function love.load(arg)
-    -- Create data directories
-    os.execute("mkdir -p " .. love.filesystem.getSource() .. "/data/log")
-
-    -- Handle screen resolution from launch script
-    if arg[1] then
-        local res = arg[1]
-        local parts = utils.split(res, "x")
-        local w, h = tonumber(parts[1]), tonumber(parts[2])
-        if w and h then
-            love.window.setMode(w, h)
-        end
-    end
-    
-    love.keyboard.setKeyRepeat(false) -- Desactivado para control manual
-    
+function love.load()
     loader = Loader:new()
-
-    local baseMuosPath = ""
-    local f = io.open("/mnt/mmc", "r")
-    if f then
-        f:close()
-        -- Running on a real device
-        if arg and arg[4] then systemName = arg[4] end
-        baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-    else
-        -- Running in simulation on Fedora
-        local cwd = love.filesystem.getSource()
-        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-        local simPath = cwd .. "/../Simulador_SD/"
-        baseMuosPath = simPath .. "MUOS/info/catalogue/"
+    if not State.config then State.config = {} end
+    State.loadConfig()
+    State.loadAppState()
+    
+    -- Sync configuration globals
+    launchMode = State.launchMode
+    viewMode = State.viewMode
+    hideEmpty = State.hideEmpty
+    markPlayed = State.markPlayed
+    saveAppState = State.saveAppState
+    
+    -- Initialize fonts if not present
+    if not State.fontTitle then
+        if theme.fonts then
+            State.fontTitle = theme.fonts.title
+            State.fontMedium = theme.fonts.medium
+            State.fontSmall = theme.fonts.small
+            State.fontList = theme.fonts.list
+            State.fontHuge = theme.fonts.huge
+        else
+            State.fontTitle = love.graphics.newFont(24)
+            State.fontMedium = love.graphics.newFont(18)
+            State.fontSmall = love.graphics.newFont(14)
+            State.fontList = love.graphics.newFont(20)
+            State.fontHuge = love.graphics.newFont(72)
+        end
+    end
+    fontTitle = State.fontTitle
+    fontMedium = State.fontMedium
+    fontSmall = State.fontSmall
+    fontList = State.fontList
+    fontHuge = State.fontHuge
+    
+    local function safeLoad(path)
+        if love.filesystem.getInfo(path) then
+            return love.graphics.newImage(path)
+        else
+            log("Asset missing: " .. path)
+            return love.graphics.newImage(love.image.newImageData(1,1))
+        end
     end
     
-    muosArtPath = baseMuosPath .. systemName .. "/box/"
-    muosTextPath = baseMuosPath .. systemName .. "/text/"
-    muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-    
-    iconFolder = love.graphics.newImage("assets/folder.png")
-    iconRom = love.graphics.newImage("assets/roms.png")
-    
-    buttonIcons = {
-        a = love.graphics.newImage("assets/button/gamepad/small/a.png"),
-        b = love.graphics.newImage("assets/button/gamepad/small/b.png"),
-        y = love.graphics.newImage("assets/button/gamepad/small/y.png"),
-        x = love.graphics.newImage("assets/button/gamepad/small/x.png"),
-        select = love.graphics.newImage("assets/button/gamepad/small/select.png"),
-        start = love.graphics.newImage("assets/button/gamepad/small/start.png"),
-        l1 = love.graphics.newImage("assets/button/gamepad/small/l1.png"),
-        r1 = love.graphics.newImage("assets/button/gamepad/small/r1.png")
-    }
-
-    -- Load theme and fonts
-    theme = require "theme"
-    fontList = theme.fonts.list
-    fontTitle = theme.fonts.title
-    fontSmall = theme.fonts.small
-    fontMedium = theme.fonts.medium
-    fontHuge = theme.fonts.huge
-
-    -- Define Help Data
-    helpData = {
-        LIST = {
-            {icon=buttonIcons.a, text="Entrar/Jugar"},
-            {icon=buttonIcons.b, text="Subir/Atrás"},
-            {icon=buttonIcons.y, text="Opciones"},
-            {icon=buttonIcons.x, text="Seleccionar"},
-            {icon=buttonIcons.start, text="Config"},
-            {icon=buttonIcons.select, text="Salir"},
-            {icon=buttonIcons.l1, text="Buscar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
-        },
-        CLEANUP_MENU = {
-            {icon=buttonIcons.l1, text="Cambiar Columna"},
-            {icon=buttonIcons.a, text="Acción"},
-            {icon=buttonIcons.b, text="Salir"},
-            {icon=buttonIcons.r1, text="Ayuda"}
-        },
-        INFO_VIEW = {
-            {icon=buttonIcons.b, text="Volver"},
-            {icon=buttonIcons.r1, text="Ayuda"}
-        },
-        SCRAPER_VIEW = {
-            {icon=buttonIcons.a, text="Buscar"},
-            {icon=buttonIcons.y, text="Opciones"},
-            {icon=buttonIcons.b, text="Volver"},
-            {icon=buttonIcons.r1, text="Ayuda"}
-        },
-        OPTIONS_MENU = {
-            {icon=buttonIcons.a, text="Seleccionar"},
-            {icon=buttonIcons.b, text="Cerrar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
-        },
-        DEFAULT = {
-            {icon=buttonIcons.a, text="Aceptar"},
-            {icon=buttonIcons.b, text="Cancelar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+    if not State.buttonIcons then
+        State.buttonIcons = {
+            a = safeLoad("assets/buttons/a.png"),
+            b = safeLoad("assets/buttons/b.png"),
+            x = safeLoad("assets/buttons/x.png"),
+            y = safeLoad("assets/buttons/y.png"),
+            start = safeLoad("assets/buttons/start.png"),
+            select = safeLoad("assets/buttons/select.png")
         }
-    }
-
-    -- Cargar configuración global (API keys, etc)
-    loadConfig()
-
-    -- Cargar configuración guardada
-    local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")
-    if f then
-        local content = f:read("*all")
-        f:close()
-        local loadedState = json.decode(content)
-        if loadedState then
-            if loadedState.hideEmpty ~= nil then hideEmpty = loadedState.hideEmpty end
-            if loadedState.markPlayed ~= nil then markPlayed = loadedState.markPlayed end
-            if loadedState.viewMode then viewMode = loadedState.viewMode end
-            if loadedState.launchMode then launchMode = loadedState.launchMode end
-            if launchMode == "Juego Unico" then
-                romPath = "" -- Forzar raíz virtual en Modo Único
-            elseif loadedState.romPath then 
-                local p = loadedState.romPath
-                -- Restaurar ruta real desde virtual (ROMS/...)
-                if p:match("^ROMS/") then
-                    local suffix = p:gsub("^ROMS/", "")
-                    
-                    -- Detectar entorno (Dispositivo vs Simulador)
-                    local fCheck = io.open("/mnt/mmc", "r")
-                    if fCheck then
-                        fCheck:close()
-                        -- Estamos en dispositivo (muOS)
-                        local pathSD1 = "/mnt/mmc/ROMS/" .. suffix
-                        -- Verificar si existe en SD1, sino asumir SD2
-                        local h = io.popen('ls -d "'..pathSD1..'" 2>/dev/null')
-                        local res = h:read("*a")
-                        h:close()
-                        romPath = (res and res ~= "") and pathSD1 or ("/mnt/sdcard/ROMS/" .. suffix)
-                    else
-                        -- Estamos en simulador
-                        local cwd = love.filesystem.getSource()
-                        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-                        romPath = cwd .. "/../Simulador_SD/" .. suffix
-                    end
-                else
-                    romPath = p
-                end
-            end
-            if loadedState.selectedIndex then selectedIndex = loadedState.selectedIndex end
-        end
     end
-
-    -- Cargar historial de juegos jugados (this populates playedRoms, keep it)
-    local f = io.open(love.filesystem.getSource() .. "/data/played_roms.txt", "r")
-    if f then
-        for line in f:lines() do
-            playedRoms[line] = true
-        end
-        f:close()
-    end
-
-    -- Load last played ROM (separate from app_state)
-    local f = io.open(love.filesystem.getSource() .. "/data/last_played.txt", "r")
-    if f then
-        lastPlayedRom = f:read("*all")
-        f:close()
-    end
-
-    -- Determine initial view: app_state.json -> lastPlayedRom -> createMergedVirtualRoot
-    if romPath == "" and launchMode ~= "Juego Unico" then -- Solo auto-navegar a carpeta en Modo Carpeta
-        if lastPlayedRom and lastPlayedRom ~= "" then
-            playedRoms[lastPlayedRom] = true -- Ensure the last played is marked
-            romPath = lastPlayedRom:match("(.*/)")
-            -- selectedIndex will be updated after refreshFiles
-        end
-    end
-
-    if romPath ~= "" then
-        refreshFiles()
-        -- If romPath was from lastPlayedRom, try to find and set selectedIndex
-        if lastPlayedRom and lastPlayedRom ~= "" and romPath == lastPlayedRom:match("(.*/)") then
-            for i, item in ipairs(files) do
-                if (romPath .. item.name) == lastPlayedRom then
-                    selectedIndex = i
-                    break
-                end
-            end
-        end
-        loadPreview()
-    else
-        createMergedVirtualRoot()
-        -- En Modo Único, buscar y seleccionar el último juego en la lista global
-        if lastPlayedRom and lastPlayedRom ~= "" then
-             local found = false
-             for i, item in ipairs(files) do
-                 if item.fullPath == lastPlayedRom then
-                     selectedIndex = i
-                     found = true
-                 elseif item.versions then
-                     for _, v in ipairs(item.versions) do
-                         if v.fullPath == lastPlayedRom then
-                             selectedIndex = i
-                             found = true
-                             break
-                         end
-                     end
-                 end
-                 if found then break end
-             end
-             if found then
-                loadPreview()
-             end
-        end
-    end
-
-    -- Load modules
-    love.draw = require "drawing"
-    love.update = require "update"
-    local input = require "input"
-    love.keypressed = input.keypressed
-    love.gamepadpressed = input.gamepadpressed
-    love.joystickpressed = input.joystickpressed
-    love.textinput = input.textinput
+    buttonIcons = State.buttonIcons
     
-    romIndex, isIndexing, indexStateMessage, indexCoroutine = filesystem.startIndexingProcess(romIndex, json.decode, love.filesystem.getSource, io.open, log, filesystem.performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json.encode, os.execute, coroutine.create, coroutine.yield, table.insert, table.sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-    if launchMode == "Juego Unico" and isVirtualRoot and romIndex and #files == 0 then
-        createMergedVirtualRoot()
-    end
+    if not State.iconFolder then State.iconFolder = safeLoad("assets/icons/folder.png") end
+    iconFolder = State.iconFolder
+    if not State.iconRom then State.iconRom = safeLoad("assets/icons/rom.png") end
+    iconRom = State.iconRom
+    
+    -- Initialize globals used in update/drawing to prevent nil errors
+    menuAnim = 0
+    State.menuAnim = 0
+    jumpPanelAnim = 0
+    State.jumpPanelAnim = 0
+    jumpLetter = ""
+    State.jumpLetter = ""
+    searchQuery = ""
+    State.searchQuery = ""
+    jumpLetterTimer = 0
+    
+    inputCooldown = 0
+    State.jumpLetterTimer = 0
+    
+    cleanupData = { scanned = false, scanning = false, progress = 0, orphans = {}, duplicates = {}, orphanedImages = {} }
+    State.cleanupData = cleanupData
+    
+    layout = State.layout
+    
+    menuOptions = State.menuOptions
+    menuTitle = State.menuTitle
+    menuMessage = State.menuMessage
+    
+    scraperResults = State.scraperResults
+    scraperProgress = State.scraperProgress
+    scraperSelection = State.scraperSelection
+    
+    saveFiles = State.saveFiles
+    saveManagerSelection = State.saveManagerSelection
+    
+    -- Initialize scroll and list state to prevent nil errors in update
+    State.scroll = 0
+    State.scrollTo = 0
+    State.selectedFilesCount = 0
+    pageSize = 0 -- Default, will be calculated in drawing.lua
+    State.pageSize = 0
+    
+    -- Initialize core state machine and UI variables
+    state = "LIST"
+    State.state = "LIST" -- Global mirror for modules using State table
+    menuSelection = 1
+    State.menuSelection = 1
+    
+    -- Initialize help data to prevent crashes
+    State.helpData = { DEFAULT = {} }
+    
+    createMergedVirtualRoot(State.romPath)
+end
+
+function love.update(dt)
+    update(dt)
+end
+
+function love.draw()
+    draw()
+end
+
+function love.keypressed(key)
+    input.keypressed(key)
+end
+
+function love.gamepadpressed(joystick, button)
+    input.gamepadpressed(joystick, button)
+end
+
+function love.joystickpressed(joystick, button)
+    input.joystickpressed(joystick, button)
+end
+
+function love.textinput(t)
+    input.textinput(t)
 end

@@ -1,16 +1,18 @@
 local function drawBottomBar()
     local w, h = love.graphics.getDimensions()
-    love.graphics.setFont(fontMedium)
-    love.graphics.setColor(theme.colors.bottom_bar_background)
+    love.graphics.setFont(State.fontMedium)
+    love.graphics.setColor(State.theme.colors.bottom_bar_background)
     love.graphics.rectangle("fill", 0, h - 30, w, 30)
-    love.graphics.setColor(theme.colors.text_bright)
+    love.graphics.setColor(State.theme.colors.text_bright)
     
     local barCenterY = h - 15
-    local textH = fontMedium:getHeight()
+    local textH = State.fontMedium:getHeight()
     local textY = barCenterY - textH / 2
     
     local x = 20
-    local scale = 0.8
+    -- Ajustar escala para que los iconos tengan 20px de alto (la barra mide 30px)
+    local targetH = 20
+    local scale = (State.buttonIcons and State.buttonIcons.a) and (targetH / State.buttonIcons.a:getHeight()) or 0.5
 
     local function drawHint(icon, text)
         local iconH = icon:getHeight() * scale
@@ -21,43 +23,43 @@ local function drawBottomBar()
         x = x + love.graphics.getFont():getWidth(text) + 20
     end
 
-    if state == "LIST" then
-        drawHint(buttonIcons.a, "Ok")
-        drawHint(buttonIcons.b, "Back")
-        drawHint(buttonIcons.y, "Menu")
-        if launchMode ~= "Juego Unico" then
-            drawHint(buttonIcons.x, "Select")
+    if State.state == "LIST" then
+        drawHint(State.buttonIcons.a, "Ok")
+        drawHint(State.buttonIcons.b, "Back")
+        drawHint(State.buttonIcons.y, "Menu")
+        if State.launchMode ~= "Juego Unico" then
+            drawHint(State.buttonIcons.x, "Select")
         end
-        drawHint(buttonIcons.start, "Opciones")
+        drawHint(State.buttonIcons.start, "Opciones")
         -- Select button with offset
-        local icon = buttonIcons.select
+        local icon = State.buttonIcons.select
         local text = "Salir"
         local iconH = icon:getHeight() * scale
         local iconY = barCenterY - iconH / 2
         love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
         love.graphics.print(text, x, textY)
-    elseif state == "DELETE_MENU" or state == "POST_GAME" then
-        drawHint(buttonIcons.a, "Confirmar")
-        drawHint(buttonIcons.b, "Cancelar")
-    elseif state == "INFO_VIEW" then
-        drawHint(buttonIcons.b, "Volver")
-    elseif state == "SCRAPER_VIEW" then
-        drawHint(buttonIcons.a, "Buscar")
-        drawHint(buttonIcons.b, "Volver")
-        drawHint(buttonIcons.y, "Opciones")
-    elseif state == "SCRAPER_OPTIONS" then
-        drawHint(buttonIcons.a, "Seleccionar")
-        drawHint(buttonIcons.b, "Volver")
-    elseif state == "SCRAPER_RESULTS" then
-        drawHint(buttonIcons.a, "Guardar")
-        drawHint(buttonIcons.b, "Volver")
-    elseif state == "SAVE_MANAGER" then
-        drawHint(buttonIcons.a, "Copiar a otra SD")
-        drawHint(buttonIcons.b, "Volver")
-    elseif state == "CLEANUP_MENU" then
-        drawHint(buttonIcons.a, "Acción")
-        drawHint(buttonIcons.b, "Salir")
+    elseif State.state == "DELETE_MENU" or State.state == "POST_GAME" then
+        drawHint(State.buttonIcons.a, "Confirmar")
+        drawHint(State.buttonIcons.b, "Cancelar")
+    elseif State.state == "INFO_VIEW" then
+        drawHint(State.buttonIcons.b, "Volver")
+    elseif State.state == "SCRAPER_VIEW" then
+        drawHint(State.buttonIcons.a, "Buscar")
+        drawHint(State.buttonIcons.b, "Volver")
+        drawHint(State.buttonIcons.y, "Opciones")
+    elseif State.state == "SCRAPER_OPTIONS" then
+        drawHint(State.buttonIcons.a, "Seleccionar")
+        drawHint(State.buttonIcons.b, "Volver")
+    elseif State.state == "SCRAPER_RESULTS" then
+        drawHint(State.buttonIcons.a, "Guardar")
+        drawHint(State.buttonIcons.b, "Volver")
+    elseif State.state == "SAVE_MANAGER" then
+        drawHint(State.buttonIcons.a, "Copiar a otra SD")
+        drawHint(State.buttonIcons.b, "Volver")
+    elseif State.state == "CLEANUP_MENU" then
+        drawHint(State.buttonIcons.a, "Acción")
+        drawHint(State.buttonIcons.b, "Salir")
     end
 end
 
@@ -322,38 +324,38 @@ local function drawSideMenu()
 end
 
 local function drawHelpOverlay()
-    if not showHelp and not closingHelp then return end
+    if not State.showHelp and not State.closingHelp then return end
     local w, h = love.graphics.getDimensions()
     
     -- Animación (Slide in)
-    local t = menuAnim
+    local t = State.menuAnim
     local ease = 1 - (1 - t)^3 -- Cubic ease out
     local offset = (w / 2) * (1 - ease)
     
     -- Overlay oscuro (Fade in)
-    local r, g, b, a = unpack(theme.colors.overlay_dark)
+    local r, g, b, a = unpack(State.theme.colors.overlay_dark)
     love.graphics.setColor(r, g, b, a * ease)
     love.graphics.rectangle("fill", 0, 0, w/2, h)
     
     -- Panel lateral
-    love.graphics.setColor(theme.colors.side_menu_background)
+    love.graphics.setColor(State.theme.colors.side_menu_background)
     love.graphics.rectangle("fill", w/2 + offset, 0, w/2, h)
     
     -- Línea separadora
-    love.graphics.setColor(theme.colors.side_menu_separator)
+    love.graphics.setColor(State.theme.colors.side_menu_separator)
     love.graphics.line(w/2 + offset, 0, w/2 + offset, h)
 
     local contentX = w/2 + offset
 
-    love.graphics.setColor(theme.colors.text_white)
-    love.graphics.setFont(fontTitle)
+    love.graphics.setColor(State.theme.colors.text_white)
+    love.graphics.setFont(State.fontTitle)
     love.graphics.printf("Ayuda - Controles", contentX + 20, 40, w/2 - 40, "left")
     
-    local list = helpData[state] or helpData.DEFAULT
+    local list = State.helpData[State.state] or State.helpData.DEFAULT
 
     -- Filter out 'Select' option in 'Juego Unico' mode
     local filteredList = {}
-    if state == "LIST" and launchMode == "Juego Unico" then
+    if State.state == "LIST" and State.launchMode == "Juego Unico" then
         for _, item in ipairs(list) do
             if item.text ~= "Seleccionar" then
                 table.insert(filteredList, item)
@@ -363,10 +365,10 @@ local function drawHelpOverlay()
         filteredList = list
     end
 
-    love.graphics.setFont(fontMedium)
+    love.graphics.setFont(State.fontMedium)
     local startY = 90
     for i, item in ipairs(filteredList) do
-        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.setColor(State.theme.colors.text_white)
         love.graphics.draw(item.icon, contentX + 20, startY + (i-1)*40, 0, 0.8, 0.8)
         love.graphics.print(item.text, contentX + 60, startY + (i-1)*40 + 2)
     end
