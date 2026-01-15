@@ -289,7 +289,7 @@ function M.getScrapeResults(item, config, log, systemName)
 
     if config.scraperApi == "mock" then
         log("Mock Scraping: " .. item.name)
-        local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
+        local mockSrc = love.filesystem.getSource() .. "/assets/icons/rom.png"
         local mockTemp = "/tmp/scraper_mock.png"
         os.execute("cp '" .. mockSrc .. "' " .. mockTemp)
         

@@ -1,3 +1,18 @@
+-- Initialize globals early to prevent nil errors in modules capturing them at require time
+scrollTimer = 0
+keyRepeatTimer = 0
+inputCooldown = 0
+menuAnim = 0
+jumpPanelAnim = 0
+jumpLetter = ""
+searchQuery = ""
+jumpLetterTimer = 0
+pageSize = 0
+viewMode = 1
+launchMode = "Juego Unico"
+hideEmpty = false
+markPlayed = true
+
 local json = require "libs.dkjson"
 utils = require "utils"
 Loader = require "loader"
@@ -6,6 +21,7 @@ Loader = require "loader"
 State = require "state"
 theme = require "theme"
 State.theme = theme
+
 local draw = require "drawing"
 local update = require "update"
 local input = require "input"
@@ -502,9 +518,21 @@ function love.load()
     end
     buttonIcons = State.buttonIcons
     
-    if not State.iconFolder then State.iconFolder = safeLoad("assets/icons/folder.png") end
+    if not State.iconFolder then 
+        if love.filesystem.getInfo("assets/icons/folder.png") then
+            State.iconFolder = safeLoad("assets/icons/folder.png")
+        else
+            State.iconFolder = safeLoad("assets/icons/folder.png")
+        end
+    end
     iconFolder = State.iconFolder
-    if not State.iconRom then State.iconRom = safeLoad("assets/icons/rom.png") end
+    if not State.iconRom then 
+        if love.filesystem.getInfo("assets/icons/rom.png") then
+            State.iconRom = safeLoad("assets/icons/rom.png")
+        else
+            State.iconRom = safeLoad("assets/icons/rom.png")
+        end
+    end
     iconRom = State.iconRom
     
     -- Initialize globals used in update/drawing to prevent nil errors
@@ -520,6 +548,8 @@ function love.load()
     
     inputCooldown = 0
     State.jumpLetterTimer = 0
+    scrollTimer = 0
+    State.scrollTimer = 0
     
     cleanupData = { scanned = false, scanning = false, progress = 0, orphans = {}, duplicates = {}, orphanedImages = {} }
     State.cleanupData = cleanupData
@@ -557,6 +587,10 @@ function love.load()
 end
 
 function love.update(dt)
+    -- Safety check for globals to prevent crashes
+    if not scrollTimer then scrollTimer = 0 end
+    if not keyRepeatTimer then keyRepeatTimer = 0 end
+    if not inputCooldown then inputCooldown = 0 end
     update(dt)
 end
 
