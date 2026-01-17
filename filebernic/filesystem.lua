@@ -2,6 +2,7 @@ local M = {}
 local utils = require "utils"
 
 function M.getArtPathForSystem(systemName)
+    log("getArtPathForSystem called with systemName: " .. tostring(systemName))
     if not systemName or systemName == "" then return nil end
     
     local baseMuosPath
@@ -16,6 +17,7 @@ function M.getArtPathForSystem(systemName)
 end
 
 function M.hasRoms(path, validExtensions)
+    log("hasRoms called with path: " .. tostring(path))
     local items = love.filesystem.getDirectoryItems(path)
     for _, item_name in ipairs(items) do
         local full_item_path = path .. "/" .. item_name
@@ -31,6 +33,7 @@ end
 
 -- Helper para escapar caracteres XML
 local function escapeXML(s)
+    log("escapeXML called")
     if not s then return "" end
     s = s:gsub("&", "&amp;")
     s = s:gsub("<", "&lt;")
@@ -42,6 +45,7 @@ end
 
 -- Función para actualizar gamelist.xml
 local function updateGamelistXML(romPath, metadata, action)
+    log("updateGamelistXML called with romPath: " .. tostring(romPath) .. ", action: " .. tostring(action))
     local dir = romPath:match("(.*/)")
     if not dir then return end
     local filename = romPath:match("([^/]+)$")
@@ -90,6 +94,7 @@ local function updateGamelistXML(romPath, metadata, action)
 end
 
 function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
+    log("updateSystemForFile called")
     local currentPath = item.fullPath or (romPath .. item.name)
     local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
     
@@ -116,6 +121,7 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
 end
 
 function M.deleteGameMedia(romPath)
+    log("deleteGameMedia called with romPath: " .. tostring(romPath))
     local system = romPath:match("ROMS/([^/]+)/")
     if not system then return end
     
@@ -146,12 +152,14 @@ function M.deleteGameMedia(romPath)
 end
 
 function M.addToHistory(path, playedRoms)
+    log("addToHistory called with path: " .. tostring(path))
     playedRoms[path] = true
     M.saveHistory(playedRoms)
     return playedRoms
 end
 
 function M.saveLastPlayed(path)
+    log("saveLastPlayed called with path: " .. tostring(path))
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/last_played.txt", "w")
     if f then
@@ -161,6 +169,7 @@ function M.saveLastPlayed(path)
 end
 
 function M.resolveSecondary(item)
+    log("resolveSecondary called")
     if item.secondaryPath then return item.secondaryPath end
     
     local otherSD = ""
@@ -184,6 +193,7 @@ function M.resolveSecondary(item)
 end
 
 function M.getTargetSDPath(item, config)
+    log("getTargetSDPath called")
     local targetSD = config.copyToSD2 and "sdcard" or "mmc"
     if item.sourceLabel == "SD1" then
         targetSD = "sdcard"
@@ -194,6 +204,7 @@ function M.getTargetSDPath(item, config)
 end
 
 function M.saveHistory(playedRoms)
+    log("saveHistory called")
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/played_roms.txt", "w")
     if f then
@@ -205,6 +216,7 @@ function M.saveHistory(playedRoms)
 end
 
 function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
+    log("saveScrapeResult called")
     if result and result.tempPath then
         local baseName = item.name:gsub("%..-$", "")
         
@@ -265,6 +277,7 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
 end
 
 function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getSource, io_open, coroutine_create, coroutine_yield, table_insert, table_sort)
+    log("performCleanupScan called")
     cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false, currentFile = "" }
     
     local cleanupCoroutine = coroutine_create(function()
@@ -481,6 +494,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
 end
 
 function M.findSaveFiles(item)
+    log("findSaveFiles called")
     local saveFiles = {}
     local saveManagerSelection = 1
     local baseName = item.name:gsub("%..-$", "")
@@ -541,6 +555,7 @@ function M.findSaveFiles(item)
 end
 
 function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource, io_open, log, performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json_encode, os_execute, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
+    log("startIndexingProcess called")
     local dataDir = love_filesystem_getSource() .. "/data"
     local indexPath = dataDir .. "/rom_index.json"
     local tsPath = dataDir .. "/rom_timestamps.json"
@@ -588,6 +603,7 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
 end
 
 function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSource, io_open)
+    log("removeFromIndex called with path: " .. tostring(path))
     if not romIndex then return romIndex end
     local i = 1
     while i <= #romIndex do
@@ -629,6 +645,7 @@ function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSourc
 end
 
 function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
+    log("performBackgroundIndexing called")
     isIndexing = true
     indexStateMessage = "Iniciando escaneo..."
 
@@ -739,6 +756,7 @@ function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, va
 end
 
 function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect)
+    log("createMergedVirtualRoot called")
     files = {}
     isVirtualRoot = true
     romPath = "" -- Not a real path in this view
@@ -832,6 +850,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
 end
 
 function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
+    log("updateSystemForFile (second instance) called")
     local currentPath = item.fullPath or (romPath .. item.name)
     local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
     
@@ -858,6 +877,7 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
 end
 
 function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
+    log("updateSystemPaths called")
     local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
     
     local muosArtPath = ""
@@ -918,6 +938,7 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
 end
 
 function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles)
+    log("refreshFiles called")
     updateSystemPaths()
     files = {}
     selectedFilesCount = 0

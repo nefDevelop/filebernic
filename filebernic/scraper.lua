@@ -4,6 +4,7 @@ local utils = require "utils"
 local M = {}
 
 function M.getScrapeResults(item, config, log, systemName)
+    log("M.getScrapeResults called with item: " .. tostring(item.name) .. ", systemName: " .. tostring(systemName))
     local results = {}
     
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión

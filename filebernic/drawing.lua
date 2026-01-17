@@ -1,4 +1,5 @@
 local function drawBottomBar()
+    log("drawBottomBar called")
     local w, h = love.graphics.getDimensions()
     love.graphics.setFont(State.fontMedium)
     love.graphics.setColor(State.theme.colors.bottom_bar_background)
@@ -64,6 +65,7 @@ local function drawBottomBar()
 end
 
 local function drawSideMenu()
+    log("drawSideMenu called")
     local w, h = love.graphics.getDimensions()
     
     -- Animación (Slide in)
@@ -324,6 +326,7 @@ local function drawSideMenu()
 end
 
 local function drawHelpOverlay()
+    log("drawHelpOverlay called")
     if not State.showHelp and not State.closingHelp then return end
     local w, h = love.graphics.getDimensions()
     
@@ -375,6 +378,7 @@ local function drawHelpOverlay()
 end
 
 local function drawMediaDetailContent(currentItem, showSearchButton)
+    log("drawMediaDetailContent called")
     local w, h = love.graphics.getDimensions()
 
     -- 1. Extraer datos del subtítulo
@@ -450,6 +454,7 @@ local function drawMediaDetailContent(currentItem, showSearchButton)
 end
 
 local function drawInfoView()
+    log("drawInfoView called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
 
@@ -477,6 +482,7 @@ local function drawInfoView()
 end
 
 local function drawScraperView()
+    log("drawScraperView called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background) -- Fondo de pantalla completa
 
@@ -608,6 +614,7 @@ local function drawScraperView()
 end
 
 local function drawScrollbar()
+    log("drawScrollbar called")
     love.graphics.setColor(theme.colors.scrollbar_background)
     love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, 4, layout.scrollbarH)
     if #files > 1 then
@@ -619,6 +626,7 @@ local function drawScrollbar()
 end
 
 local function drawSaveManager()
+    log("drawSaveManager called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
     
@@ -657,6 +665,7 @@ local function drawSaveManager()
 end
 
 local function drawTrimmed(text, x, y, limit, font)
+    log("drawTrimmed called")
     local dText = text
     if font:getWidth(dText) > limit then
         while font:getWidth(dText .. "...") > limit and #dText > 0 do
@@ -668,6 +677,7 @@ local function drawTrimmed(text, x, y, limit, font)
 end
 
 local function drawTrimmedStart(text, x, y, limit, font)
+    log("drawTrimmedStart called")
     local dText = text
     if font:getWidth(dText) > limit then
         while font:getWidth("..." .. dText) > limit and #dText > 0 do
@@ -679,6 +689,7 @@ local function drawTrimmedStart(text, x, y, limit, font)
 end
 
 local function drawCleanupMenu()
+    log("drawCleanupMenu called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
     
@@ -928,6 +939,7 @@ local function drawCleanupMenu()
 end
 
 local function drawGrid(w, h)
+    log("drawGrid called")
     local cols = gridCols
     local rows = 3
     local cellW = w / cols
@@ -1030,6 +1042,7 @@ local function drawGrid(w, h)
 end
 
 local function drawJumpLetter()
+    log("drawJumpLetter called")
     if jumpPanelAnim <= 0 or jumpLetter == "" then return end
     
     local w, h = love.graphics.getDimensions()
@@ -1066,6 +1079,7 @@ local function drawJumpLetter()
 end
 
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
+    log("drawMainList called")
     if viewMode == "GRID" then
         drawGrid(w, h)
         -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado
@@ -1252,6 +1266,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
 end
 
 local function draw()
+    log("draw called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
 

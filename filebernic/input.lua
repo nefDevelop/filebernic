@@ -2,6 +2,7 @@ local stateHandlers = {}
 
 -- Manejador para el modo Búsqueda
 function stateHandlers.SEARCH(key)
+    log("stateHandlers.SEARCH called with key: " .. tostring(key))
     if key == "up" then
         keyboardRow = math.max(1, keyboardRow - 1)
         keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
@@ -53,6 +54,7 @@ end
 
 -- Manejador para el Menú de Opciones
 function stateHandlers.OPTIONS_MENU(key)
+    log("stateHandlers.OPTIONS_MENU called with key: " .. tostring(key))
     if key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
         if parentMenuData then
              -- Acciones del sub-menú de versión
@@ -263,6 +265,7 @@ end
 
 -- Manejador para la Vista de Información
 function stateHandlers.INFO_VIEW(key)
+    log("stateHandlers.INFO_VIEW called with key: " .. tostring(key))
     if key == "backspace" or key == "b" or key == "escape" then
         if parentMenuData then
             state = "OPTIONS_MENU"
@@ -276,6 +279,7 @@ end
 
 -- Manejador para Opciones de Scraper
 function stateHandlers.SCRAPER_OPTIONS(key)
+    log("stateHandlers.SCRAPER_OPTIONS called with key: " .. tostring(key))
     if key == "return" or key == "kpenter" then
         if menuOptions[menuSelection] == "Limpiar" then
             local item = files[selectedIndex]
@@ -297,6 +301,7 @@ end
 
 -- Manejador para Vista de Scraper
 function stateHandlers.SCRAPER_VIEW(key)
+    log("stateHandlers.SCRAPER_VIEW called with key: " .. tostring(key))
     if key == "backspace" then -- 'b' button
         if parentMenuData then
             state = "OPTIONS_MENU"
@@ -320,6 +325,7 @@ end
 
 -- Manejador para Resultados de Scraper
 function stateHandlers.SCRAPER_RESULTS(key)
+    log("stateHandlers.SCRAPER_RESULTS called with key: " .. tostring(key))
     if key == "backspace" then
         state = "SCRAPER_VIEW"
         showHelp = false
@@ -341,6 +347,7 @@ end
 
 -- Manejador para Gestor de Partidas
 function stateHandlers.SAVE_MANAGER(key)
+    log("stateHandlers.SAVE_MANAGER called with key: " .. tostring(key))
     if key == "backspace" or key == "escape" then
         if parentMenuData then
             state = "OPTIONS_MENU"
@@ -370,6 +377,7 @@ end
 
 -- Manejador para Menú de Limpieza
 function stateHandlers.CLEANUP_MENU(key)
+    log("stateHandlers.CLEANUP_MENU called with key: " .. tostring(key))
     if cleanupData.confirming then
         if key == "backspace" or key == "escape" or key == "b" then
             cleanupData.confirming = false
@@ -489,6 +497,7 @@ end
 
 -- Manejador para Menú de Borrado
 function stateHandlers.DELETE_MENU(key)
+    log("stateHandlers.DELETE_MENU called with key: " .. tostring(key))
     if key == "return" or key == "space" or key == "kpenter" then
         if menuOptions[menuSelection] == "Borrar" then
             if selectedFilesCount > 0 then
@@ -552,6 +561,7 @@ end
 
 -- Manejador para Post-Juego
 function stateHandlers.POST_GAME(key)
+    log("stateHandlers.POST_GAME called with key: " .. tostring(key))
     if key == "return" or key == "space" or key == "kpenter" then -- 'a' button
         os.remove(lastPlayedRom) 
         state = "LIST" 
@@ -565,6 +575,7 @@ end
 
 -- Manejador para Lista (Default)
 local function handleListInput(key)
+    log("handleListInput called with key: " .. tostring(key))
     -- Comprobación de directorio vacío
     local currentItem = files[selectedIndex]
     if currentItem and currentItem.empty then
@@ -821,6 +832,7 @@ local function handleListInput(key)
 end
 
 local function keypressed(key)
+    log("keypressed called with key: " .. tostring(key))
     if inputCooldown > 0 then return end
 
     -- Si se está mostrando la pantalla de indexación, bloquear casi toda la entrada.
@@ -886,6 +898,7 @@ local function keypressed(key)
 end
 
 local function gamepadpressed(joystick, button)
+    log("gamepadpressed called with button: " .. tostring(button))
     if button == "a" then
         keypressed("kpenter") -- Usamos kpenter para mayor compatibilidad
     elseif button == "b" then
@@ -914,6 +927,7 @@ local function gamepadpressed(joystick, button)
 end
 
 local function joystickpressed(joystick, button)
+    log("joystickpressed called with button: " .. tostring(button))
     -- Fallback para botones que no se detectan como Gamepad (L1/R1/L2 a veces)
     -- Mapeo común en dispositivos Anbernic/muOS: 4=L1, 5=R1, 6=L2
     if button == 4 then
@@ -927,6 +941,7 @@ local function joystickpressed(joystick, button)
 end
 
 local function textinput(t)
+    log("textinput called with text: " .. tostring(t))
     if showHelp then return end
     if state == "SEARCH" then
         searchQuery = searchQuery .. t

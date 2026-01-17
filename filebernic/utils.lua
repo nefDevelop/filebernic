@@ -61,16 +61,19 @@ for _, group in ipairs(systemVariants) do
 end
 
 function M.getSystemVariants(sysName)
+    log("M.getSystemVariants called with sysName: " .. tostring(sysName))
     if not sysName then return {} end
     return variantToGroup[sysName:lower()] or {sysName}
 end
 
 function M.getSystemDisplayName(sysName)
+    log("M.getSystemDisplayName called with sysName: " .. tostring(sysName))
     if not sysName then return sysName end
     return variantToDisplay[sysName:lower()] or sysName
 end
 
 function M.getSystemNameForItem(item)
+    log("M.getSystemNameForItem called")
     if not item then return nil end
 
     -- 1. Check pre-assigned system property (most reliable, for virtual root)
@@ -101,6 +104,7 @@ end
 
 -- Utility function to split a string by a delimiter
 function M.split(s, delimiter)
+    log("M.split called")
     local result = {};
     for match in (s..delimiter):gmatch("(.-)"..delimiter) do
         table.insert(result, match);
@@ -110,6 +114,7 @@ end
 
 -- Helper para codificar URL
 local function urlencode(str)
+    log("urlencode called")
     if (str) then
         str = string.gsub (str, "\n", "\r\n")
         str = string.gsub (str, "([^%w %-%_%.%~])",

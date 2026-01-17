@@ -1,4 +1,5 @@
 local function update(dt)
+    log("update called with dt: " .. tostring(dt))
     loader:update()
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     

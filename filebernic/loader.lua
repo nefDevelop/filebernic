@@ -31,6 +31,7 @@ local threadCode = [[
 ]]
 
 function Loader:new()
+  log("Loader:new called")
   local obj = {
     -- In-memory cache for loaded assets.
     -- cache[path] = 'loading' | 'error' | love.FileData | love.Image | string
@@ -48,6 +49,7 @@ end
 
 -- Called in love.update() to process results from the background thread.
 function Loader:update()
+  log("Loader:update called")
   while true do
     local msg = self.channel:pop()
     if not msg then break end
@@ -65,6 +67,7 @@ end
 
 -- Requests a file to be loaded.
 function Loader:request(path)
+  log("Loader:request called with path: " .. tostring(path))
   if not path or path == "" or self.cache[path] then
     -- Don't request if it's nil, already cached, or already being loaded.
     return
@@ -77,6 +80,7 @@ end
 
 -- Returns a love.Image object if it's ready.
 function Loader:getImage(path)
+  log("Loader:getImage called with path: " .. tostring(path))
   if not path or path == "" then return nil end
   local data = self.cache[path]
 
@@ -107,6 +111,7 @@ end
 
 -- Returns a string object if it's ready.
 function Loader:getText(path)
+  log("Loader:getText called with path: " .. tostring(path))
   if not path or path == "" then return nil end
   local data = self.cache[path]
 
@@ -130,11 +135,13 @@ end
 
 -- Clears the asset cache.
 function Loader:clearCache()
+  log("Loader:clearCache called")
   self.cache = {}
 end
 
 -- Safely shuts down the thread.
 function Loader:quit()
+  log("Loader:quit called")
   -- Push nil to the channel to signal the thread to exit its loop.
   self.channel:push(nil)
 end

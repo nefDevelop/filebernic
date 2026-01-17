@@ -1,4 +1,5 @@
 -- Initialize globals early to prevent nil errors in modules capturing them at require time
+DEBUG = true
 scrollTimer = 0
 keyRepeatTimer = 0
 inputCooldown = 0
@@ -30,6 +31,7 @@ local input = require "input"
 filesystem = require "filesystem"
 
 function getSystemIcon(sysName)
+    log("getSystemIcon called with sysName: " .. tostring(sysName))
     if not sysName then return nil end
     local variants = utils.getSystemVariants(sysName)
 
@@ -45,6 +47,7 @@ end
 local systemContentIconCache = {}
 
 function getSystemContentIcon(sysName)
+    log("getSystemContentIcon called with sysName: " .. tostring(sysName))
     if not sysName then return nil end
     if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
     local variants = utils.getSystemVariants(sysName)
@@ -61,6 +64,7 @@ function getSystemContentIcon(sysName)
 end
 
 function jumpToNextLetter()
+    log("jumpToNextLetter called")
     if #State.files == 0 then return end
     local current = State.files[State.selectedIndex].name:sub(1,1):upper()
     for i = State.selectedIndex + 1, #State.files do
@@ -76,6 +80,7 @@ function jumpToNextLetter()
 end
 
 function jumpToPrevLetter()
+    log("jumpToPrevLetter called")
     if #State.files == 0 then return end
     local current = State.files[State.selectedIndex].name:sub(1,1):upper()
     local prevLetterIdx = nil
@@ -105,6 +110,7 @@ function jumpToPrevLetter()
 end
 
 function updateSystemPaths()
+    log("updateSystemPaths called")
     State.systemName, State.muosArtPath, State.muosTextPath, State.muosPreviewPath, State.currentSystemIcon, State.currentSystemContentIcon = filesystem.updateSystemPaths(State.systemName, State.romPath, log, love.graphics.newImage)
     -- Sync globals
     systemName = State.systemName
@@ -116,6 +122,7 @@ function updateSystemPaths()
 end
 
 function refreshFiles()
+    log("refreshFiles called")
     State.files, State.selectedFilesCount, State.selectedIndex, State.allFiles = filesystem.refreshFiles(updateSystemPaths, State.files, State.selectedFilesCount, State.launchMode, State.hideEmpty, State.validExtensions, State.romPath, State.secondaryPath, State.selectedIndex, State.allFiles)
     -- Sync globals
     files = State.files
@@ -126,6 +133,7 @@ function refreshFiles()
 end
 
 function createMergedVirtualRoot(pathToSelect)
+    log("createMergedVirtualRoot called")
     State.files, State.isVirtualRoot, State.romPath, State.secondaryPath, State.selectedIndex, State.allFiles = filesystem.createMergedVirtualRoot(State.files, State.isVirtualRoot, State.romPath, State.secondaryPath, State.selectedIndex, State.launchMode, State.romIndex, State.hideEmpty, State.validExtensions, getSystemIcon, State.allFiles, pathToSelect)
     -- Sync globals
     files = State.files
@@ -141,40 +149,49 @@ function createMergedVirtualRoot(pathToSelect)
 end
 
 function getTargetSDPath(path)
+    log("getTargetSDPath called")
     return filesystem.getTargetSDPath(path, State.config)
 end
 
 function resolveSecondary(path)
+    log("resolveSecondary called")
     return filesystem.resolveSecondary(path)
 end
 
 function deleteGameMedia(path)
+    log("deleteGameMedia called")
     filesystem.deleteGameMedia(path, State.muosArtPath, State.muosTextPath, State.muosPreviewPath)
 end
 
 function removeFromIndex(path)
+    log("removeFromIndex called")
     if State.romIndex then
         State.romIndex = filesystem.removeFromIndex(path, State.romIndex, json.encode, love.filesystem.getSource, io.open)
     end
 end
 
 function saveHistory()
+    log("saveHistory called")
     filesystem.saveHistory(State.playedRoms)
 end
 
 function saveLastPlayed(path)
+    log("saveLastPlayed called")
     filesystem.saveLastPlayed(path)
 end
 
 function addToHistory(path)
+    log("addToHistory called")
     State.playedRoms = filesystem.addToHistory(path, State.playedRoms)
 end
 
 function findSaveFiles(item)
+    log("findSaveFiles called")
     State.saveFiles = filesystem.findSaveFiles(item)
 end
 
 function performCleanupScan()
+    log("performCleanupScan called")
     State.cleanupData = filesystem.performCleanupScan(State.cleanupData, State.romPath, State.validExtensions, State.muosArtPath, State.muosPreviewPath, State.muosTextPath)
     if State.cleanupData and not State.cleanupData.orphanedImages then State.cleanupData.orphanedImages = {} end
     -- Sync global
@@ -182,6 +199,7 @@ function performCleanupScan()
 end
 
 function filterFiles()
+    log("filterFiles called")
     State.files = {}
     for _, item in ipairs(State.allFiles) do
         if item.name:lower():find(State.searchQuery:lower(), 1, true) then
@@ -192,6 +210,7 @@ function filterFiles()
 end
 
 function State.loadConfig()
+    log("State.loadConfig called")
     local configPath = love.filesystem.getSource() .. "/data/config.json"
     local f = io.open(configPath, "r")
     if f then
@@ -214,6 +233,7 @@ end
 local scraper = require "scraper"
 
 function startScraping()
+    log("startScraping called")
     local item = State.files[State.selectedIndex]
     if not item then return end
     
@@ -231,6 +251,7 @@ function startScraping()
 end
 
 function performBatchScrape(items)
+    log("performBatchScrape called")
     State.state = "BATCH_SCRAPING"
     State.scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
     
@@ -257,6 +278,7 @@ function performBatchScrape(items)
 end
 
 function saveSelectedArt()
+    log("saveSelectedArt called")
     local result = State.scraperResults[State.scraperSelection]
     local item = State.files[State.selectedIndex]
     filesystem.saveScrapeResult(item, result, State.muosArtPath, State.muosTextPath, State.muosPreviewPath, log)
@@ -266,6 +288,7 @@ function saveSelectedArt()
 end
 
 function loadPreview()
+    log("loadPreview called")
     -- Clear current preview data immediately to show loading state
     State.currentImage = nil
     State.currentScreenshot = nil
@@ -312,6 +335,7 @@ end
 
 
 function log(message)
+    if not DEBUG then return end
     local logPath = love.filesystem.getSource() .. "/data/log/filebernic.log"
     print("[CONSOLE] " .. message)
     local f = io.open(logPath, "a")
@@ -322,6 +346,7 @@ function log(message)
 end
 
 function State.loadAppState()
+    log("State.loadAppState called")
     local statePath = love.filesystem.getSource() .. "/data/app_state.json"
     local f = io.open(statePath, "r")
     if f then
@@ -350,6 +375,7 @@ function State.loadAppState()
 end
 
 function State.saveAppState()
+    log("State.saveAppState called")
     local dataDir = love.filesystem.getSource() .. "/data"
     os.execute("mkdir -p " .. dataDir)
     local f = io.open(dataDir .. "/app_state.json", "w")
@@ -378,6 +404,7 @@ function State.saveAppState()
 end
 
 function love.errorhandler(msg)
+    if not DEBUG then return end
     local err = tostring(msg)
     local trace = debug.traceback()
     
@@ -440,6 +467,7 @@ function love.quit()
         loader:quit()
     end
     
+    if not DEBUG then return end
     -- Log content of art folders on exit
     if State.muosArtPath and State.muosArtPath ~= "" then
         log("Listing Boxart folder content: " .. State.muosArtPath)
@@ -463,6 +491,7 @@ function love.quit()
 end
 
 function love.load()
+    log("love.load called")
     loader = Loader:new()
     if not State.config then State.config = {} end
     State.loadConfig()
@@ -587,6 +616,7 @@ function love.load()
 end
 
 function love.update(dt)
+    log("love.update called with dt: " .. tostring(dt))
     -- Safety check for globals to prevent crashes
     if not scrollTimer then scrollTimer = 0 end
     if not keyRepeatTimer then keyRepeatTimer = 0 end
@@ -595,21 +625,26 @@ function love.update(dt)
 end
 
 function love.draw()
+    log("love.draw called")
     draw()
 end
 
 function love.keypressed(key)
+    log("love.keypressed called with key: " .. tostring(key))
     input.keypressed(key)
 end
 
 function love.gamepadpressed(joystick, button)
+    log("love.gamepadpressed called with button: " .. tostring(button))
     input.gamepadpressed(joystick, button)
 end
 
 function love.joystickpressed(joystick, button)
+    log("love.joystickpressed called with button: " .. tostring(button))
     input.joystickpressed(joystick, button)
 end
 
 function love.textinput(t)
+    log("love.textinput called with text: " .. tostring(t))
     input.textinput(t)
 end
