@@ -849,40 +849,19 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     return files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles
 end
 
-function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
-    log("updateSystemForFile (second instance) called")
-    local currentPath = item.fullPath or (romPath .. item.name)
-    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
-    
-    if detectedSystem and detectedSystem ~= systemName then
-        systemName = detectedSystem
-        
-        -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
-        -- Recalcular rutas de arte
-        local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
-        muosArtPath = baseMuosPath .. systemName .. "/box/"
-        muosTextPath = baseMuosPath .. systemName .. "/text/"
-        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-        return systemName, muosArtPath, muosTextPath, muosPreviewPath
-    end
-    return systemName, muosArtPath, muosTextPath, muosPreviewPath
-end
+
 
 function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
     log("updateSystemPaths called")
-    local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
     
-    local muosArtPath = ""
-    local muosTextPath = ""
-    local muosPreviewPath = ""
+    local detectedSystem, muosArtPath, muosTextPath, muosPreviewPath
+    
+    -- Create a temporary item-like table to pass to the existing logic
+    local tempItem = { fullPath = romPath }
+    
+    -- Reuse the logic from updateSystemForFile
+    detectedSystem, muosArtPath, muosTextPath, muosPreviewPath = M.updateSystemForFile(tempItem, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
+    
     local currentSystemIcon = nil
     local currentSystemContentIcon = nil
 
@@ -890,20 +869,6 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
         systemName = detectedSystem
         log("System detected: " .. systemName)
         
-        local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
-        muosArtPath = baseMuosPath .. systemName .. "/box/"
-        muosTextPath = baseMuosPath .. systemName .. "/text/"
-        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
-        -- Year is stored in text path with .year extension
-
         -- Buscar grupo de variantes para el sistema detectado
         local variants = utils.getSystemVariants(systemName)
         log("Variant group found for: " .. systemName)

@@ -1,4 +1,52 @@
+local filesystem = require "filesystem"
+local scraper = require "scraper"
 local stateHandlers = {}
+
+local function jumpToNextLetter()
+    log("jumpToNextLetter called")
+    if #State.files == 0 then return end
+    local current = State.files[State.selectedIndex].name:sub(1,1):upper()
+    for i = State.selectedIndex + 1, #State.files do
+        local c = State.files[i].name:sub(1,1):upper()
+        if c ~= current then
+            State.selectedIndex = i
+            State.jumpLetter = c
+            return
+        end
+    end
+    State.selectedIndex = #State.files
+    State.jumpLetter = State.files[State.selectedIndex].name:sub(1,1):upper()
+end
+
+local function jumpToPrevLetter()
+    log("jumpToPrevLetter called")
+    if #State.files == 0 then return end
+    local current = State.files[State.selectedIndex].name:sub(1,1):upper()
+    local prevLetterIdx = nil
+    for i = State.selectedIndex - 1, 1, -1 do
+        local c = State.files[i].name:sub(1,1):upper()
+        if c ~= current then
+            prevLetterIdx = i
+            break
+        end
+    end
+    
+    if prevLetterIdx then
+        local targetChar = State.files[prevLetterIdx].name:sub(1,1):upper()
+        for i = prevLetterIdx - 1, 1, -1 do
+            local c = State.files[i].name:sub(1,1):upper()
+            if c ~= targetChar then
+                State.selectedIndex = i + 1
+                State.jumpLetter = targetChar
+                return
+            end
+        end
+        State.selectedIndex = 1
+    else
+        State.selectedIndex = 1
+    end
+    State.jumpLetter = State.files[State.selectedIndex].name:sub(1,1):upper()
+end
 
 -- Manejador para el modo Búsqueda
 function stateHandlers.SEARCH(key)
@@ -24,13 +72,13 @@ function stateHandlers.SEARCH(key)
             love.keyboard.setTextInput(false)
         elseif char == "BACK" then
             searchQuery = searchQuery:sub(1, -2)
-            filterFiles()
+            filesystem.filterFiles()
         elseif char == "SPACE" then
             searchQuery = searchQuery .. " "
-            filterFiles()
+            filesystem.filterFiles()
         else
             searchQuery = searchQuery .. char
-            filterFiles()
+            filesystem.filterFiles()
         end
         inputCooldown = 0.2
     elseif key == "f" then -- L1: Exit search, keep filter
@@ -39,7 +87,7 @@ function stateHandlers.SEARCH(key)
         inputCooldown = 0.3
     elseif key == "f2" then -- L2: Clear filter
         searchQuery = ""
-        filterFiles()
+        filesystem.filterFiles()
         state = "LIST"
         love.keyboard.setTextInput(false)
         inputCooldown = 0.3
@@ -68,7 +116,7 @@ function stateHandlers.OPTIONS_MENU(key)
                  state = "SAVE_MANAGER"
              elseif opt == "Borrar" then
                  local fullPath = focusedItem.fullPath
-                 deleteGameMedia(fullPath)
+                 filesystem.deleteGameMedia(fullPath)
                  local success, err = os.remove(fullPath)
                  if not success then
                      log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
@@ -76,12 +124,12 @@ function stateHandlers.OPTIONS_MENU(key)
                      log("Archivo borrado con éxito: " .. fullPath)
                  end
                  -- Always update internal state
-                 if romIndex then removeFromIndex(fullPath) end
-                 if playedRoms[fullPath] then playedRoms[fullPath] = nil saveHistory() end
+                 if romIndex then filesystem.removeFromIndex(fullPath) end
+                 if playedRoms[fullPath] then playedRoms[fullPath] = nil filesystem.saveHistory() end
                  if isVirtualRoot and launchMode == "Juego Unico" then
-                     createMergedVirtualRoot()
+                     filesystem.createMergedVirtualRoot()
                  else
-                     refreshFiles()
+                     filesystem.refreshFiles()
                  end
                  state = "LIST"
                  parentMenuData = nil
@@ -96,8 +144,8 @@ function stateHandlers.OPTIONS_MENU(key)
              if item and item.versions and item.versions[menuSelection] then
                  local v = item.versions[menuSelection]
                  lastPlayedRom = v.fullPath
-                 saveLastPlayed(lastPlayedRom)
-                 addToHistory(lastPlayedRom)
+                 filesystem.saveLastPlayed(lastPlayedRom)
+                 filesystem.addToHistory(lastPlayedRom)
                  launching = true
                  launchTimer = 0
              end
@@ -127,7 +175,7 @@ function stateHandlers.OPTIONS_MENU(key)
                 for _, f in ipairs(files) do
                     if f.selected then table.insert(items, f) end
                 end
-                performBatchScrape(items)
+                scraper.performBatchScrape(items)
                 inputCooldown = 0.3
             else
                 state = "SCRAPER_VIEW"
@@ -136,52 +184,52 @@ function stateHandlers.OPTIONS_MENU(key)
         elseif menuOptions[menuSelection] == "Borrar de SD1" then
             local item = files[selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
-            deleteGameMedia(pathToDelete)
+            filesystem.deleteGameMedia(pathToDelete)
             local success, err = os.remove(pathToDelete)
             if not success then
                 log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
                 log("Archivo borrado con éxito: " .. pathToDelete)
             end
-            if romIndex then removeFromIndex(pathToDelete) end
-            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
+            if romIndex then filesystem.removeFromIndex(pathToDelete) end
+            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil filesystem.saveHistory() end
             if isVirtualRoot and launchMode == "Juego Unico" then
-                createMergedVirtualRoot()
+                filesystem.createMergedVirtualRoot()
             else
-                refreshFiles()
+                filesystem.refreshFiles()
             end
             state = "LIST"
         elseif menuOptions[menuSelection] == "Borrar de SD2" then
             local item = files[selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
-            deleteGameMedia(pathToDelete)
+            filesystem.deleteGameMedia(pathToDelete)
             local success, err = os.remove(pathToDelete)
             if not success then
                 log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
                 log("Archivo borrado con éxito: " .. pathToDelete)
             end
-            if romIndex then removeFromIndex(pathToDelete) end
-            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
+            if romIndex then filesystem.removeFromIndex(pathToDelete) end
+            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil filesystem.saveHistory() end
             if isVirtualRoot and launchMode == "Juego Unico" then
-                createMergedVirtualRoot()
+                filesystem.createMergedVirtualRoot()
             else
-                refreshFiles()
+                filesystem.refreshFiles()
             end
             state = "LIST"
         elseif menuOptions[menuSelection]:match("Modo:") then
             launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
             menuOptions[menuSelection] = "Modo: " .. launchMode
-            saveAppState()
-            createMergedVirtualRoot()
+            State.saveAppState()
+            filesystem.createMergedVirtualRoot()
         elseif menuOptions[menuSelection]:match("Ocultar vacíos") then
             hideEmpty = not hideEmpty
             menuOptions[menuSelection] = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
-            if isVirtualRoot then createMergedVirtualRoot() end
+            if isVirtualRoot then filesystem.createMergedVirtualRoot() end
         elseif menuOptions[menuSelection]:match("Vista:") then
             viewMode = (viewMode == "LIST") and "GRID" or "LIST"
             menuOptions[menuSelection] = "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula")
-            saveAppState()
+            State.saveAppState()
         elseif menuOptions[menuSelection] == "Limpieza" then
             state = "CLEANUP_MENU"
             cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
@@ -189,10 +237,10 @@ function stateHandlers.OPTIONS_MENU(key)
         elseif menuOptions[menuSelection]:match("Marcar Jugado") then
             markPlayed = not markPlayed
             menuOptions[menuSelection] = "Marcar Jugado: " .. (markPlayed and "Si" or "No")
-            saveAppState()
+            State.saveAppState()
         elseif menuOptions[menuSelection]:match("Copiar") or menuOptions[menuSelection]:match("Mover") then
             local isMove = menuOptions[menuSelection]:match("Mover")
-            local targetDir, _ = getTargetSDPath(romPath)
+            local targetDir, _ = filesystem.getTargetSDPath(romPath)
             
             if targetDir then
                 os.execute('mkdir -p "' .. targetDir .. '"')
@@ -215,8 +263,8 @@ function stateHandlers.OPTIONS_MENU(key)
                     processItem(files[selectedIndex])
                 end
                 
-                if isMove then saveHistory() end
-                refreshFiles()
+                if isMove then filesystem.saveHistory() end
+                filesystem.refreshFiles()
                 state = "LIST"
             end
         elseif menuOptions[menuSelection]:match("Save Games") then
@@ -238,7 +286,7 @@ function stateHandlers.OPTIONS_MENU(key)
              
              menuTitle = "Opciones: " .. ver.name
              menuMessage = ver.name
-             findSaveFiles(ver)
+             filesystem.findSaveFiles(ver)
              menuOptions = {"Info", "Scraper", "Save Games (" .. #saveFiles .. ")", "Borrar"}
              menuSelection = 1
              inputCooldown = 0.3
@@ -311,7 +359,7 @@ function stateHandlers.SCRAPER_VIEW(key)
         showHelp = false
         inputCooldown = 0.3
     elseif key == "return" or key == "kpenter" then -- 'a' button
-        startScraping()
+        scraper.startScraping()
     elseif key == "tab" then -- 'y' button
         state = "SCRAPER_OPTIONS"
         menuTitle = "Opciones"
@@ -339,7 +387,7 @@ function stateHandlers.SCRAPER_RESULTS(key)
     elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
         local sel = scraperResults[scraperSelection]
         if sel and not sel.error then
-            saveSelectedArt()
+            scraper.saveSelectedArt()
             inputCooldown = 0.3
         end
     end
@@ -368,7 +416,7 @@ function stateHandlers.SAVE_MANAGER(key)
                 os.execute('mkdir -p "' .. destDir .. '"')
                 os.execute('cp "' .. item.fullPath .. '" "' .. destPath .. '"')
                 -- Refrescar lista para ver el nuevo archivo
-                findSaveFiles(files[selectedIndex])
+                filesystem.findSaveFiles(files[selectedIndex])
             end
         end
         inputCooldown = 0.3
@@ -429,7 +477,7 @@ function stateHandlers.CLEANUP_MENU(key)
                     local success, err = os.remove(item.fullPath)
                     if success then 
                         log("Cleanup: Borrado " .. item.fullPath) 
-                        if romIndex then removeFromIndex(item.fullPath) end
+                        if romIndex then filesystem.removeFromIndex(item.fullPath) end
                     else 
                         log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) 
                     end
@@ -454,7 +502,7 @@ function stateHandlers.CLEANUP_MENU(key)
         inputCooldown = 0.3
     elseif not cleanupData.scanned then
         if key == "return" or key == "kpenter" then
-            performCleanupScan()
+            filesystem.performCleanupScan()
         end
     else
         -- Navegación en resultados
@@ -504,46 +552,46 @@ function stateHandlers.DELETE_MENU(key)
                 for _, item in ipairs(files) do
                     if item.selected then
                         local fullPath = item.fullPath or (romPath .. item.name)
-                        deleteGameMedia(fullPath)
+                        filesystem.deleteGameMedia(fullPath)
                         local success, err = os.remove(fullPath)
                         if not success then
                             log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                         else
                             log("Archivo borrado con éxito: " .. fullPath)
                         end
-                        if romIndex then removeFromIndex(fullPath) end
+                        if romIndex then filesystem.removeFromIndex(fullPath) end
                         if playedRoms[fullPath] then
                             playedRoms[fullPath] = nil
                         end
                     end
                 end
-                saveHistory()
+                filesystem.saveHistory()
                 if isVirtualRoot and launchMode == "Juego Unico" then
-                    createMergedVirtualRoot()
+                    filesystem.createMergedVirtualRoot()
                 else
-                    refreshFiles()
+                    filesystem.refreshFiles()
                 end
                 itemToDelete = nil
             elseif itemToDelete then
                 local fullPath = itemToDelete.fullPath or (romPath .. itemToDelete.name)
-                deleteGameMedia(fullPath)
+                filesystem.deleteGameMedia(fullPath)
                 local success, err = os.remove(fullPath)
                 if not success then
                     log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                 else
                     log("Archivo borrado con éxito: " .. fullPath)
                 end
-                if romIndex then removeFromIndex(fullPath) end
+                if romIndex then filesystem.removeFromIndex(fullPath) end
                 if playedRoms[fullPath] then
                     playedRoms[fullPath] = nil
-                    saveHistory()
+                    filesystem.saveHistory()
                 end
                 -- Deselect to avoid errors, then refresh
                 selectedIndex = math.max(1, selectedIndex - 1)
                 if isVirtualRoot and launchMode == "Juego Unico" then
-                    createMergedVirtualRoot()
+                    filesystem.createMergedVirtualRoot()
                 else
-                    refreshFiles()
+                    filesystem.refreshFiles()
                 end
                 itemToDelete = nil
             end
@@ -566,7 +614,7 @@ function stateHandlers.POST_GAME(key)
         os.remove(lastPlayedRom) 
         state = "LIST" 
         inputCooldown = 0.3
-        refreshFiles()
+        filesystem.refreshFiles()
     elseif key == "backspace" then -- 'b' button
         state = "LIST" 
         inputCooldown = 0.3
@@ -592,14 +640,14 @@ local function handleListInput(key)
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 createMergedVirtualRoot(romPath)
+                 filesystem.createMergedVirtualRoot(romPath)
                  inputCooldown = 0.3
                  return
             end
             romPath = parent
-            secondaryPath = resolveSecondary(romPath)
+            secondaryPath = filesystem.resolveSecondary(romPath)
             selectedIndex = 1
-            refreshFiles()
+            filesystem.refreshFiles()
             inputCooldown = 0.3
         else
             return -- Ignore other key presses for empty directory message
@@ -612,13 +660,13 @@ local function handleListInput(key)
         keyboardRow = 1
         keyboardCol = 1
         love.keyboard.setTextInput(true) -- Enable text input
-        filterFiles()
+        filesystem.filterFiles()
         return
     end
     
     if key == "f2" then -- L2: Clear filter
         searchQuery = ""
-        filterFiles()
+        filesystem.filterFiles()
         inputCooldown = 0.3
         return
     end
@@ -652,28 +700,28 @@ local function handleListInput(key)
                 secondaryPath = item.secondaryPath
                 isVirtualRoot = false
                 selectedIndex = 1
-                refreshFiles()
+                filesystem.refreshFiles()
                 inputCooldown = 0.3
             else
                 if item.name == ".." then
                     local newPath = romPath:gsub("[^/]+/$", "")
                     if newPath == "/mnt/mmc/ROMS/" or newPath == "/mnt/sdcard/ROMS/" then
-                        createMergedVirtualRoot()
+                        filesystem.createMergedVirtualRoot()
                         return
                     end
                     local cwd = love.filesystem.getSource()
                     if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
                     if newPath == cwd .. "/../" then -- Simulator path check
-                        createMergedVirtualRoot()
+                        filesystem.createMergedVirtualRoot()
                         return
                     end
                     romPath = newPath
-                    secondaryPath = resolveSecondary(romPath)
+                    secondaryPath = filesystem.resolveSecondary(romPath)
                 else
                     romPath = romPath .. item.name .. "/"
                 end
                 selectedIndex = 1
-                refreshFiles()
+                filesystem.refreshFiles()
                 inputCooldown = 0.3
             end
         else
@@ -708,8 +756,8 @@ local function handleListInput(key)
             
             if romToLaunch then
                 lastPlayedRom = romToLaunch
-                saveLastPlayed(lastPlayedRom)
-                addToHistory(lastPlayedRom)
+                filesystem.saveLastPlayed(lastPlayedRom)
+                filesystem.addToHistory(lastPlayedRom)
                 -- Iniciamos secuencia de lanzamiento (verde -> espera -> salir)
                 launching = true
                 launchTimer = 0
@@ -732,14 +780,14 @@ local function handleListInput(key)
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
                  log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 createMergedVirtualRoot(romPath)
+                 filesystem.createMergedVirtualRoot(romPath)
                  inputCooldown = 0.3
                  return
             end
             romPath = parent
-            secondaryPath = resolveSecondary(romPath)
+            secondaryPath = filesystem.resolveSecondary(romPath)
             selectedIndex = 1
-            refreshFiles()
+            filesystem.refreshFiles()
             inputCooldown = 0.3
         end
     elseif key == "escape" then -- 'back' button on controller
@@ -794,7 +842,7 @@ local function handleListInput(key)
                 
                 -- 2. Copiar / Mover
                 if item.sourceLabel ~= "SD½" then
-                    local _, targetLabel = getTargetSDPath(item.fullPath)
+                    local _, targetLabel = filesystem.getTargetSDPath(item.fullPath)
                     if targetLabel then
                         table.insert(menuOptions, "Copiar a " .. targetLabel)
                         table.insert(menuOptions, "Mover a " .. targetLabel)
@@ -802,7 +850,7 @@ local function handleListInput(key)
                 end
                 
                 -- 3. Save Games
-                findSaveFiles(item)
+                filesystem.findSaveFiles(item)
                 table.insert(menuOptions, "Save Games (" .. #saveFiles .. ")")
                 
                 -- 4. Borrar (Al final)
@@ -945,7 +993,7 @@ local function textinput(t)
     if showHelp then return end
     if state == "SEARCH" then
         searchQuery = searchQuery .. t
-        filterFiles()
+        filesystem.filterFiles()
     end
 end
 
@@ -953,5 +1001,7 @@ return {
     keypressed = keypressed,
     gamepadpressed = gamepadpressed,
     joystickpressed = joystickpressed,
-    textinput = textinput
+    textinput = textinput,
+    jumpToNextLetter = jumpToNextLetter,
+    jumpToPrevLetter = jumpToPrevLetter
 }
