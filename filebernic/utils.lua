@@ -6,7 +6,7 @@ local M = {}
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
 local systemVariants = {
     -- Nintendo
-    {"GBA", "gba", "Nintendo - Game Boy Advance", "Game Boy Advance"},
+    {"GBA", "gba", "Game Boy Advance", "Nintendo - Game Boy Advance"},
     {"SNES", "snes", "sfc", "Super Nintendo", "Super Famicom", "Nintendo - Super Nintendo Entertainment System"},
     {"NES", "nes", "fc", "Nintendo Entertainment System", "Famicom", "Nintendo - Nintendo Entertainment System"},
     {"GB", "gb", "Game Boy", "Nintendo - Game Boy"},
@@ -206,7 +206,7 @@ local function urlencode(str)
         str = string.gsub (str, "\n", "\r\n")
         str = string.gsub (str, "([^%w %-%_%.%~])",
             function (c) return string.format ("%%%02X", string.byte(c)) end)
-        str = string.gsub (str, " ", "+")
+        str = string.gsub (str, " ", "%%20")
     end
     return str
 end

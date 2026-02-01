@@ -1,3 +1,5 @@
+package.path = "./filebernic/?.lua;" .. package.path
+
 describe("filebernic.utils", function()
   local utils = require("filebernic.utils")
 
@@ -41,7 +43,7 @@ describe("filebernic.utils", function()
   describe("getSystemVariants", function()
     it("should return the variants for a known system", function()
       local variants = utils.getSystemVariants("GBA")
-      assert.are.same({"GBA", "gba", "Nintendo - Game Boy Advance", "Game Boy Advance"}, variants)
+      assert.are.same({"GBA", "gba", "Game Boy Advance", "Nintendo - Game Boy Advance"}, variants)
     end)
 
     it("should return a table with the original name if no variant is found", function()
@@ -74,14 +76,14 @@ describe("filebernic.utils", function()
     local originalSystemName
     local originalLog
 
-    beforeEach(function()
+    before_each(function()
       originalIsVirtualRoot = _G.isVirtualRoot
       originalSystemName = _G.systemName
       originalLog = _G.log
       _G.log = function() end -- Mock log function to prevent output during tests
     end)
 
-    afterEach(function()
+    after_each(function()
       _G.isVirtualRoot = originalIsVirtualRoot
       _G.systemName = originalSystemName
       _G.log = originalLog

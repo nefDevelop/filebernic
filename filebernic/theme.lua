@@ -11,7 +11,7 @@ local font_path = "assets/JetBrainsMono-Regular.ttf"
   Colors are defined in a range from 0 to 1 (e.g., 255, 255, 255 -> 1, 1, 1).
 ]]
 theme.colors = {
-    background = {0.1, 0.1, 0.12},
+    background = {0.02, 0.02, 0.02},
     bottom_bar_background = {0.15, 0.15, 0.2},
     text_bright = {0.9, 0.9, 0.9},
     text_white = {1, 1, 1},

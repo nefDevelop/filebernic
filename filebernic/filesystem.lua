@@ -90,6 +90,7 @@ local function escapeXML(s)
     s = s:gsub("'", "&apos;")
     return s
 end
+M.escapeXML = escapeXML
 
 function M.findInGamelist(romFullPath, romFilename)
     if not romFullPath then return nil end

@@ -1,3 +1,5 @@
+package.path = "./filebernic/?.lua;" .. package.path
+
 describe("filesystem.escapeXML", function()
   local filesystem = require("filebernic.filesystem")
 
@@ -24,14 +26,14 @@ describe("filesystem.getArtPathForSystem", function()
   local original_love_filesystem_getSource
   local original_log
 
-  beforeEach(function()
+  before_each(function()
     original_io_open = io.open
     original_love_filesystem_getSource = love.filesystem.getSource
     original_log = log
     _G.log = function() end -- Mock log function
   end)
 
-  afterEach(function()
+  after_each(function()
     io.open = original_io_open
     love.filesystem.getSource = original_love_filesystem_getSource
     _G.log = original_log
@@ -69,14 +71,14 @@ describe("filesystem.hasRoms", function()
   local original_love_filesystem_isFile
   local original_log
 
-  beforeEach(function()
+  before_each(function()
     original_love_filesystem_getDirectoryItems = love.filesystem.getDirectoryItems
     original_love_filesystem_isFile = love.filesystem.isFile
     original_log = log
     _G.log = function() end -- Mock log function
   end)
 
-  afterEach(function()
+  after_each(function()
     love.filesystem.getDirectoryItems = original_love_filesystem_getDirectoryItems
     love.filesystem.isFile = original_love_filesystem_isFile
     _G.log = original_log

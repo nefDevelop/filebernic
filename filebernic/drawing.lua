@@ -4,6 +4,26 @@
 local utils = require "utils"
 local unpack = table.unpack or unpack
 
+local ditherShader = love.graphics.newShader[[
+    vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
+        vec2 p = floor(screen_coords.xy / 3.0);
+        int x = int(mod(p.x, 4.0));
+        int y = int(mod(p.y, 4.0));
+        float t = 0.0;
+        
+        // Matriz Bayer 4x4 manual para compatibilidad
+        if (x == 0) { if (y == 0) t = 0.0; else if (y == 1) t = 12.0; else if (y == 2) t = 3.0; else t = 15.0; }
+        else if (x == 1) { if (y == 0) t = 8.0; else if (y == 1) t = 4.0; else if (y == 2) t = 11.0; else t = 7.0; }
+        else if (x == 2) { if (y == 0) t = 2.0; else if (y == 1) t = 14.0; else if (y == 2) t = 1.0; else t = 13.0; }
+        else { if (y == 0) t = 10.0; else if (y == 1) t = 6.0; else if (y == 2) t = 9.0; else t = 5.0; }
+        
+        if (color.a <= (t / 16.0)) {
+            discard;
+        }
+        return vec4(color.rgb, 1.0);
+    }
+]]
+
 local gradientMesh
 local function getGradientMesh()
     if not gradientMesh then
@@ -16,6 +36,22 @@ local function getGradientMesh()
         gradientMesh = love.graphics.newMesh(vertices, "fan", "static")
     end
     return gradientMesh
+end
+
+local fadeGradientMesh
+local function getFadeGradientMesh()
+    if not fadeGradientMesh then
+        local vertices = {
+            {0, 0, 0, 0, 1, 1, 1, 1}, -- Izquierda: Opaco
+            {0, 1, 0, 1, 1, 1, 1, 1},
+            {0.7, 0, 0.7, 0, 1, 1, 1, 0}, -- 70%: Transparente (deja 30% visible)
+            {0.7, 1, 0.7, 1, 1, 1, 1, 0},
+            {1, 0, 1, 0, 1, 1, 1, 0}, -- Derecha: Transparente (relleno)
+            {1, 1, 1, 1, 1, 1, 1, 0}
+        }
+        fadeGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
+    end
+    return fadeGradientMesh
 end
 
 local function drawStar(x, y, size)
@@ -1099,12 +1135,6 @@ local function drawGrid(w, h)
         local y = startY + r * cellH
         local item = files[i]
         
-        -- Fondo selección
-        if i == selectedIndex then
-            love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", x + 5, y + 7, cellW - 10, cellH - 3, 5)
-        end
-        
         local contentWidth = cellW - 10
 
         local imageToDraw = nil
@@ -1186,10 +1216,20 @@ local function drawGrid(w, h)
             end
         end
 
+        -- Fondo selección (Dibujado DESPUÉS de la imagen para que esta quede al fondo)
+        if i == selectedIndex then
+            love.graphics.setColor(1, 1, 1, 0.2) -- Blanco translúcido
+            love.graphics.rectangle("fill", x + 5, y + 7, cellW - 10, cellH - 3, 20)
+        end
+
         -- Texto
         love.graphics.setFont(fontMedium)
         local textFont = fontMedium
-        local _, wrappedLines = textFont:getWrap(item.name, contentWidth)
+        local displayName = item.name
+        if not item.isDir then
+            displayName = displayName:gsub("%.[^%.]+$", "")
+        end
+        local _, wrappedLines = textFont:getWrap(displayName, contentWidth)
 
         local textToPrint = ""
         if #wrappedLines == 1 then
@@ -1250,13 +1290,66 @@ local function drawJumpLetter()
     love.graphics.print(jumpLetter, drawX, drawY, 0, scale, scale, textW / 2, textH / 2)
 end
 
+local function drawBattery(x, y)
+    local state, percent = love.system.getPowerInfo()
+    -- Si no se detecta batería (PC/Simulador), mostramos 100% para visualizar el icono
+    if state == "nobattery" or not percent then
+        percent = 100
+    end
+
+    local batW, batH = 26, 14
+    local nippleW, nippleH = 3, 6
+    
+    -- Icono Batería (Alineado a la derecha en x)
+    love.graphics.setColor(theme.colors.text_bright)
+    love.graphics.rectangle("line", x - batW, y, batW, batH, 2)
+    love.graphics.rectangle("fill", x, y + (batH - nippleH)/2, nippleW, nippleH) -- Polo positivo
+
+    if percent then
+        local margin = 2
+        local maxFill = batW - (margin * 2)
+        local fill = math.max(0, maxFill * (percent / 100))
+        
+        if state == "charging" then
+            love.graphics.setColor(0.2, 1, 0.2)
+        elseif percent <= 20 then
+            love.graphics.setColor(1, 0.2, 0.2)
+        end
+        love.graphics.rectangle("fill", x - batW + margin, y + margin, fill, batH - (margin * 2))
+        
+        -- Texto porcentaje
+        love.graphics.setFont(fontSmall)
+        love.graphics.setColor(theme.colors.text_bright)
+        local text = percent .. "%"
+        love.graphics.print(text, x - batW - fontSmall:getWidth(text) - 5, y - 2)
+    end
+end
+
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
     if viewMode == "GRID" then
         drawGrid(w, h)
     else
+        -- Columna de Vista Previa (Boxart + Screenshot) - DIBUJADO AL FONDO
+        if showPreview then
+            local bgImage = currentScreenshot or currentImage
+            if bgImage then
+                local scale = h / bgImage:getHeight()
+                love.graphics.setColor(1, 1, 1, 0.15) -- Más translúcido
+                local imgW = bgImage:getWidth() * scale
+                local imgX = w - imgW
+                love.graphics.draw(bgImage, imgX, 0, 0, scale, scale)
+                
+                local r, g, b = unpack(theme.colors.background)
+                love.graphics.setColor(r, g, b, 1)
+                love.graphics.setShader(ditherShader)
+                love.graphics.draw(getFadeGradientMesh(), imgX, 0, 0, imgW, h)
+                love.graphics.setShader()
+            end
+        end
+
         -- Lista de Archivos
         love.graphics.setFont(fontList)
-        local startLine = math.max(1, selectedIndex - 7)
+        local startLine = math.max(1, selectedIndex - 5)
         for i = startLine, math.min(#files, startLine + pageSize) do
             local y = layout.listY + (i - startLine) * layout.rowHeight
             local item = files[i]
@@ -1265,32 +1358,15 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             local checkPath = item.fullPath or (romPath .. item.name)
             local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
             
-            if i == selectedIndex then
-                -- Cursor gris claro
-                love.graphics.setColor(0.9, 0.9, 0.9)
-                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - (layout.selHeight + 2)) / 2, layout.selWidth, layout.selHeight + 2, 4)
-                -- Texto e iconos en negro
-                if item.pendingDelete then
-                    love.graphics.setColor(1, 0, 0) -- Rojo para fantasma
-                else
-                    love.graphics.setColor(0, 0, 0)
-                end
-            else
-                if isLastPlayed and markPlayed then
-                    love.graphics.setColor(theme.colors.list_played_unselected)
-                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
-                end
-                love.graphics.setColor(theme.colors.text_medium)
-            end
-
-            
             if item.empty then
                 love.graphics.setColor(theme.colors.text_disabled)
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
-                love.graphics.printf(item.name, 55, textY, layout.selWidth - 50, "left")
+                love.graphics.printf(item.name, 85, textY, layout.selWidth - 80, "left")
             else
                 if item.selected then
                     love.graphics.setColor(theme.colors.selection_accent)
+                else
+                    love.graphics.setColor(1, 1, 1, 1) -- Resetear color para evitar que el selector afecte al siguiente icono
                 end
                 
                 local iconToDraw = item.icon
@@ -1307,13 +1383,13 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 local drawScale = layout.iconScale
                 
                 if iconToDraw == iconFavorite then
-                    drawScale = (layout.rowHeight * 0.55) / iconToDraw:getHeight() -- Icono de favoritos más pequeño
+                    drawScale = (40 * 0.55) / iconToDraw:getHeight() -- Icono de favoritos más pequeño
                 elseif iconToDraw ~= iconFolder and iconToDraw ~= iconRom then
-                    drawScale = (layout.rowHeight * 0.80) / iconToDraw:getHeight() -- Reducido de 0.8 para hacer el icono ~4px más pequeño
+                    drawScale = (40 * 0.80) / iconToDraw:getHeight() -- Reducido de 0.8 para hacer el icono ~4px más pequeño
                 end
                 
                 local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
-                love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
+                love.graphics.draw(iconToDraw, 35, drawY, 0, drawScale, drawScale)
                 
                 local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
 
@@ -1335,7 +1411,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     if totalW < 0 then totalW = 0 end
                     
                     local startX = layout.scrollbarX - totalW - 5
-                    availableWidth = startX - 55 - 10
+                    availableWidth = startX - 85 - 10
                 else
                     -- Calcular etiqueta SD
                     local label = item.sourceLabel
@@ -1344,12 +1420,13 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         elseif romPath:find("/mnt/sdcard") then label = "SD2" end
                     end
                     
-                    -- Calcular espacio disponible para el nombre: Ancho total - offset(40) - padding(5)
-                    availableWidth = layout.selWidth - 45
+                    -- Calcular espacio disponible para el nombre: Ancho total - offset(70) - padding(5)
+                    availableWidth = layout.selWidth - 75
                 end
 
-                local textX = 55
+                local textX = 85
                 local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+                local favOffset = 0
 
                 if isFav then
                     -- Draw favorite icon
@@ -1358,12 +1435,43 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local favScale = favH / iconFavorite:getHeight()
                     local favY = y + (layout.rowHeight - favH) / 2
                     love.graphics.draw(iconFavorite, textX, favY, 0, favScale, favScale)
-                    textX = textX + (iconFavorite:getWidth() * favScale) + 5
-                    availableWidth = availableWidth - ((iconFavorite:getWidth() * favScale) + 5)
+                    favOffset = (iconFavorite:getWidth() * favScale) + 5
+                    textX = textX + favOffset
+                    availableWidth = availableWidth - favOffset
                 end
 
                 local nameToDraw = item.name
-                
+                if not item.isDir then
+                    nameToDraw = nameToDraw:gsub("%.[^%.]+$", "")
+                end
+
+                local currentSelWidth = layout.selWidth
+                if launchMode == "Folder" then
+                    local textW = fontList:getWidth(nameToDraw)
+                    -- Text starts at 85. Selector starts at 15. Width = (85 - 15) + textW + padding(20)
+                    currentSelWidth = 70 + favOffset + textW + 20
+                    if currentSelWidth > layout.selWidth then currentSelWidth = layout.selWidth end
+                end
+
+                -- Fondo selección (Dibujado DESPUÉS del icono pero ANTES del texto)
+                if i == selectedIndex then
+                    love.graphics.setColor(1, 1, 1, 0.1) -- Blanco más translúcido
+                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                    
+                    -- Configurar color de texto para seleccionado
+                    if item.pendingDelete then
+                        love.graphics.setColor(1, 0, 0)
+                    else
+                        love.graphics.setColor(theme.colors.text_bright)
+                    end
+                else
+                    if isLastPlayed and markPlayed then
+                        love.graphics.setColor(theme.colors.list_played_unselected)
+                        love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 15)
+                    end
+                    love.graphics.setColor(theme.colors.text_medium)
+                end
+
                 if fontList:getWidth(nameToDraw) > availableWidth then
                     while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
                         nameToDraw = nameToDraw:sub(1, -2)
@@ -1433,30 +1541,6 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
 
     -- Scrollbar
     drawScrollbar()
-
-    -- Columna de Vista Previa (Boxart + Screenshot)
-    if showPreview then
-        local previewY = layout.listY
-
-        -- Boxart (Frontal)
-        if currentImage then
-            local scale = previewBoxW / currentImage:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
-            local imgW = currentImage:getWidth() * scale
-            local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
-            previewY = previewY + (currentImage:getHeight() * scale) + 15
-        end
-
-        -- Screenshot (Pantalla)
-        if currentScreenshot then
-            local scale = previewBoxW / currentScreenshot:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
-            local imgW = currentScreenshot:getWidth() * scale
-            local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
-        end
-    end
 
     -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado (Overlay)
     if files[selectedIndex] then
@@ -1545,33 +1629,11 @@ local function draw()
          previewBoxX = layout.scrollbarX - previewBoxW - 10
     end
 
-    if showPreview then
-        layout.selWidth = previewBoxX - 20 -- Ajustar lista al espacio restante
+    if launchMode == "Juego Unico" then
+        layout.selWidth = layout.scrollbarX - 15
     else
-        if launchMode == "Juego Unico" then
-            layout.selWidth = layout.scrollbarX - 15
-        else
-            layout.selWidth = sdColX - 20
-        end
+        layout.selWidth = sdColX - 20
     end
-
-    -- Título
-    love.graphics.setColor(theme.colors.text_bright)
-    love.graphics.setFont(fontTitle)
-    love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
-    
-    -- Path actual
-    love.graphics.setFont(fontSmall)
-    local displayPath = isVirtualRoot and "Todos los Sistemas" or romPath
-    if not isVirtualRoot then
-        local shortened = displayPath:match("ROMS/.*")
-        if shortened then
-            displayPath = shortened
-        elseif displayPath:find("Simulador_SD") then
-            displayPath = displayPath:gsub(".*Simulador_SD/", "ROMS/")
-        end
-    end
-    love.graphics.printf(displayPath, 0, 45, w, "center")
 
     -- Mensaje de indexación en "Modo Único" si el índice no está listo
     if launchMode == "Juego Unico" and isVirtualRoot and not romIndex and #files == 0 then
@@ -1582,6 +1644,24 @@ local function draw()
         love.graphics.setColor(theme.colors.text_dim)
         local msg = isIndexing and indexStateMessage or "Cargando índice..."
         love.graphics.printf(msg, 0, h/2 + 20, w, "center")
+
+        -- Título (Indexación)
+        love.graphics.setColor(theme.colors.text_bright)
+        love.graphics.setFont(fontList)
+        love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
+        love.graphics.print(os.date("%H:%M"), 20, 15)
+        drawBattery(w - 25, 20)
+        love.graphics.setFont(fontSmall)
+        local displayPath = isVirtualRoot and "Todos los Sistemas" or romPath
+        if not isVirtualRoot then
+            local shortened = displayPath:match("ROMS/.*")
+            if shortened then
+                displayPath = shortened
+            elseif displayPath:find("Simulador_SD") then
+                displayPath = displayPath:gsub(".*Simulador_SD/", "ROMS/")
+            end
+        end
+        love.graphics.printf(displayPath, 0, 45, w, "center")
         
         drawOverlayMenus()
         
@@ -1597,6 +1677,26 @@ local function draw()
     end
 
     drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
+
+    -- Título (Dibujado después de la lista para quedar encima del fondo/dithering)
+    love.graphics.setColor(theme.colors.text_bright)
+    love.graphics.setFont(fontList)
+    love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
+    love.graphics.print(os.date("%H:%M"), 20, 15)
+    drawBattery(w - 25, 20)
+    
+    -- Path actual
+    love.graphics.setFont(fontSmall)
+    local displayPath = isVirtualRoot and "Todos los Sistemas" or romPath
+    if not isVirtualRoot then
+        local shortened = displayPath:match("ROMS/.*")
+        if shortened then
+            displayPath = shortened
+        elseif displayPath:find("Simulador_SD") then
+            displayPath = displayPath:gsub(".*Simulador_SD/", "ROMS/")
+        end
+    end
+    love.graphics.printf(displayPath, 0, 45, w, "center")
 
     drawOverlayMenus()
 
