@@ -1467,7 +1467,9 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 else
                     if isLastPlayed and markPlayed then
                         love.graphics.setColor(theme.colors.list_played_unselected)
-                        love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 15)
+                        love.graphics.setShader(ditherShader)
+                        love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                        love.graphics.setShader()
                     end
                     love.graphics.setColor(theme.colors.text_medium)
                 end
