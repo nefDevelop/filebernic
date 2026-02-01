@@ -1,19 +1,61 @@
+---@diagnostic disable: undefined-global
+---@diagnostic disable: undefined-field
+
+local utils = require "utils"
+local unpack = table.unpack or unpack
+
+local gradientMesh
+local function getGradientMesh()
+    if not gradientMesh then
+        local vertices = {
+            {0, 0, 0, 0, 1, 1, 1, 0}, -- Izquierda: Transparente
+            {1, 0, 1, 0, 1, 1, 1, 1}, -- Derecha: Opaco (se teñirá de negro)
+            {1, 1, 1, 1, 1, 1, 1, 1},
+            {0, 1, 0, 1, 1, 1, 1, 0}
+        }
+        gradientMesh = love.graphics.newMesh(vertices, "fan", "static")
+    end
+    return gradientMesh
+end
+
+local function drawStar(x, y, size)
+    local vertices = {}
+    local outerRadius = size
+    local innerRadius = size * 0.4
+    local steps = 10
+    for i = 0, steps - 1 do
+        local radius = (i % 2 == 0) and outerRadius or innerRadius
+        local angle = (i / steps) * math.pi * 2 - math.pi / 2
+        table.insert(vertices, x + math.cos(angle) * radius)
+        table.insert(vertices, y + math.sin(angle) * radius)
+    end
+    love.graphics.polygon("fill", vertices)
+end
+
+local function drawTrimmed(text, x, y, limit, font)
+    local dText = text
+    if font:getWidth(dText) > limit then
+        while font:getWidth(dText .. "...") > limit and #dText > 0 do
+            dText = dText:sub(1, -2)
+        end
+        dText = dText .. "..."
+    end
+    love.graphics.print(dText, x, y)
+end
+
 local function drawBottomBar()
-    log("drawBottomBar called")
     local w, h = love.graphics.getDimensions()
-    love.graphics.setFont(State.fontMedium)
-    love.graphics.setColor(State.theme.colors.bottom_bar_background)
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.bottom_bar_background)
     love.graphics.rectangle("fill", 0, h - 30, w, 30)
-    love.graphics.setColor(State.theme.colors.text_bright)
+    love.graphics.setColor(theme.colors.text_bright)
     
     local barCenterY = h - 15
-    local textH = State.fontMedium:getHeight()
+    local textH = fontMedium:getHeight()
     local textY = barCenterY - textH / 2
     
     local x = 20
-    -- Ajustar escala para que los iconos tengan 20px de alto (la barra mide 30px)
-    local targetH = 20
-    local scale = (State.buttonIcons and State.buttonIcons.a) and (targetH / State.buttonIcons.a:getHeight()) or 0.5
+    local scale = 0.8
 
     local function drawHint(icon, text)
         local iconH = icon:getHeight() * scale
@@ -24,137 +66,84 @@ local function drawBottomBar()
         x = x + love.graphics.getFont():getWidth(text) + 20
     end
 
-    if State.state == "LIST" then
-        drawHint(State.buttonIcons.a, "Ok")
-        drawHint(State.buttonIcons.b, "Back")
-        drawHint(State.buttonIcons.y, "Menu")
-        if State.launchMode ~= "Juego Unico" then
-            drawHint(State.buttonIcons.x, "Select")
+    if state == "LIST" then
+        drawHint(buttonIcons.a, "Ok")
+        drawHint(buttonIcons.b, "Back")
+        drawHint(buttonIcons.y, "Menu")
+        if launchMode ~= "Juego Unico" then
+            drawHint(buttonIcons.x, "Select")
         end
-        drawHint(State.buttonIcons.start, "Opciones")
+        drawHint(buttonIcons.start, "Opciones")
         -- Select button with offset
-        local icon = State.buttonIcons.select
+        local icon = buttonIcons.select
         local text = "Salir"
         local iconH = icon:getHeight() * scale
         local iconY = barCenterY - iconH / 2
         love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
         love.graphics.print(text, x, textY)
-    elseif State.state == "DELETE_MENU" or State.state == "POST_GAME" then
-        drawHint(State.buttonIcons.a, "Confirmar")
-        drawHint(State.buttonIcons.b, "Cancelar")
-    elseif State.state == "INFO_VIEW" then
-        drawHint(State.buttonIcons.b, "Volver")
-    elseif State.state == "SCRAPER_VIEW" then
-        drawHint(State.buttonIcons.a, "Buscar")
-        drawHint(State.buttonIcons.b, "Volver")
-        drawHint(State.buttonIcons.y, "Opciones")
-    elseif State.state == "SCRAPER_OPTIONS" then
-        drawHint(State.buttonIcons.a, "Seleccionar")
-        drawHint(State.buttonIcons.b, "Volver")
-    elseif State.state == "SCRAPER_RESULTS" then
-        drawHint(State.buttonIcons.a, "Guardar")
-        drawHint(State.buttonIcons.b, "Volver")
-    elseif State.state == "SAVE_MANAGER" then
-        drawHint(State.buttonIcons.a, "Copiar a otra SD")
-        drawHint(State.buttonIcons.b, "Volver")
-    elseif State.state == "CLEANUP_MENU" then
-        drawHint(State.buttonIcons.a, "Acción")
-        drawHint(State.buttonIcons.b, "Salir")
+    elseif state == "DELETE_MENU" or state == "POST_GAME" then
+        drawHint(buttonIcons.a, "Confirmar")
+        drawHint(buttonIcons.b, "Cancelar")
+    elseif state == "INFO_VIEW" then
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "OPTIONS_MENU" then
+        drawHint(buttonIcons.a, "Seleccionar")
+        drawHint(buttonIcons.b, "Cerrar")
+        drawHint(buttonIcons.r1, "Ayuda")
+        drawHint(buttonIcons.select, "Salir")
+    elseif state == "SCRAPER_VIEW" then
+        drawHint(buttonIcons.a, "Buscar")
+        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.y, "Opciones")
+    elseif state == "SCRAPER_OPTIONS" then
+        drawHint(buttonIcons.a, "Seleccionar")
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "SCRAPER_RESULTS" then
+        drawHint(buttonIcons.a, "Guardar")
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "SAVE_MANAGER" then
+        drawHint(buttonIcons.a, "Copiar a otra SD")
+        drawHint(buttonIcons.b, "Volver")
+    elseif state == "CLEANUP_MENU" then
+        drawHint(buttonIcons.a, "Acción")
+        drawHint(buttonIcons.b, "Salir")
     end
 end
 
-local function drawSideMenu()
-    log("drawSideMenu called")
-    local w, h = love.graphics.getDimensions()
-    
-    -- Animación (Slide in)
-    local t = menuAnim
-    local ease = 1 - (1 - t)^3 -- Cubic ease out
-
-    -- Determinar si es el menú de un juego para obtener el título y el icono
-    local item = focusedItem or files[selectedIndex]
+local function drawMenuContent(title, message, options, selection, item, x, w, h, alpha, isFocused, dimProgress)
+    -- Header Logic
+    local startY = 90
     local isGameOptions = false
     local mainName = ""
-    local sysIcon = nil
-    local sysName = nil -- Declarar aquí para que sea visible en toda la función
     local iconWidth = 0
     local iconSize = 32 -- Tamaño original del icono
+    local sysName = nil
 
-    if state == "OPTIONS_MENU" and item and (not item.isDir or focusedItem) and (menuTitle:match("^Opciones") and menuMessage == item.name) then
+    -- Panel lateral
+    local bg = theme.colors.side_menu_background
+    love.graphics.setColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+    love.graphics.rectangle("fill", x, 0, w, h)
+    
+    -- Línea separadora
+    local sep = theme.colors.side_menu_separator
+    love.graphics.setColor(sep[1], sep[2], sep[3], alpha)
+    love.graphics.line(x, 0, x, h)
+
+    if item and (title:match("^Opciones") and message == item.name) then
         isGameOptions = true
-        local name = menuMessage
+        local name = message
         mainName = name
         local pStart = name:find("%(")
         if pStart then
-            mainName = name:sub(1, pStart - 1):gsub("%s*$", "") -- Quitar espacios finales
+            mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
         end
-        
         sysName = utils.getSystemNameForItem(item)
-
-        if sysName then sysIcon = getSystemIcon(sysName) end
-        
-        -- if sysIcon then
-        --     local iconScale = iconSize / sysIcon:getHeight()
-        --     iconWidth = sysIcon:getWidth() * iconScale
-        -- end
     end
-
-    -- Calcular ancho necesario para las opciones y el título
-    love.graphics.setFont(fontList)
-    local optionsMaxW = 0
-    for _, opt in ipairs(menuOptions) do
-        local text = type(opt) == "table" and opt.text or opt
-        local width = fontList:getWidth(text)
-        if type(opt) == "table" and opt.icon then width = width + 35 end
-        if width > optionsMaxW then optionsMaxW = width end
-    end
-
-    local coverSpace = 0
-    if isGameOptions and currentImage then
-        coverSpace = 80 -- 70px ancho estimado + 10px padding
-    end
-    local titleRequiredW = isGameOptions and (fontTitle:getWidth(mainName) + (iconWidth > 0 and (iconWidth + 10) or 0) + 40 + coverSpace) or 0
-    local extraWidth = parentMenuData and 50 or 0 -- Hacer más ancho si es un submenú para efecto de solapado
-    local menuW = math.min(w * 0.8, math.max(300, optionsMaxW + 60, titleRequiredW) + extraWidth)
-
-    local menuX = w - menuW
-    local slideX = menuX + (menuW * (1 - ease))
-    
-    -- Overlay oscuro (Fade in)
-    local r, g, b, a = unpack(theme.colors.overlay_dark)
-    love.graphics.setColor(r, g, b, a * ease)
-    love.graphics.rectangle("fill", 0, 0, w, h)
-
-    -- Panel lateral
-    love.graphics.setColor(theme.colors.side_menu_background)
-    love.graphics.rectangle("fill", slideX, 0, menuW, h)
-    
-    -- Línea separadora
-    love.graphics.setColor(theme.colors.side_menu_separator)
-    love.graphics.line(slideX, 0, slideX, h)
-
-    -- -- Boxart en el fondo (Watermark)
-    -- if state == "OPTIONS_MENU" and currentImage then
-    --     love.graphics.setColor(1, 1, 1, 0.15) -- Opacidad levemente mayor
-    --     local availW = menuW - 20
-    --     local availH = h * 0.45 -- Max 45% de altura
-    --     local scale = math.min(availW / currentImage:getWidth(), availH / currentImage:getHeight())
-    --     
-    --     local imgW = currentImage:getWidth() * scale
-    --     local imgH = currentImage:getHeight() * scale
-    --     
-    --     love.graphics.draw(currentImage, slideX + (menuW - imgW) / 2, 20, 0, scale, scale)
-    -- end
-
-    -- Header (Título y Mensaje/Info)
-    -- item ya está definido arriba
-    local startY = 90
-    -- isGameOptions ya está definido arriba
 
     if isGameOptions then
         -- Header Personalizado para Juego
-        local name = menuMessage
+        local name = message
         local mainName = name:gsub("%s*$", "")
         mainName = mainName:gsub("%.[^%.]+$", "") -- Quitar extensión del título
         local extraInfo = ""
@@ -166,7 +155,7 @@ local function drawSideMenu()
         end
         
         local headerY = 25
-        local baseTextX = slideX + 20
+        local baseTextX = x + 20
         
         love.graphics.setFont(fontTitle)
         
@@ -175,42 +164,62 @@ local function drawSideMenu()
         local titleX = baseTextX
         
         -- 1. Calcular ancho disponible para el título, asumiendo un espacio para la carátula
-        local totalAvailW = menuW - 40 - (iconWidth > 0 and (iconWidth + 10) or 0)
+        local totalAvailW = w - 40 - (iconWidth > 0 and (iconWidth + 10) or 0)
         local titleAvailW = totalAvailW
+        local coverPlaceholderW = 0
         if currentImage then
             -- Reservar un espacio para la carátula para calcular el alto del texto
-            local coverPlaceholderW = 70 
+            coverPlaceholderW = 90 -- 80px ancho + 10px margen
             titleAvailW = totalAvailW - coverPlaceholderW - 10
         end
 
         -- 2. Obtener el texto del título envuelto y su altura
         local _, wrappedMain = fontTitle:getWrap(mainName, titleAvailW)
-        local mainH = #wrappedMain * fontTitle:getHeight()
+        local visibleLines = math.min(#wrappedMain, 2)
+        local mainH = visibleLines * fontTitle:getHeight()
         
-        -- 3. Dibujar la carátula, escalada a la altura del título
+        -- 3. Dibujar la carátula (Tamaño fijo/máximo, no depende del texto)
+        local coverH = 0
         if currentImage then
             love.graphics.setColor(1, 1, 1)
-            local coverScale = mainH / currentImage:getHeight()
+            local maxH = 120 -- Altura máxima en cabecera
+            local maxW = 80  -- Ancho máximo en cabecera
+            local coverScale = math.min(maxW / currentImage:getWidth(), maxH / currentImage:getHeight())
+            
             coverW = currentImage:getWidth() * coverScale
-            love.graphics.draw(currentImage, baseTextX, headerY, 0, coverScale, coverScale)
-            titleX = baseTextX + coverW + 10
+            coverH = currentImage:getHeight() * coverScale
+            
+            -- Centrar imagen en su slot de 80px
+            love.graphics.draw(currentImage, baseTextX + (maxW - coverW)/2, headerY, 0, coverScale, coverScale)
+            titleX = baseTextX + maxW + 10
         end
         
         -- 4. Dibujar el texto del título
-        love.graphics.setColor(theme.colors.text_white)
-        for i, line in ipairs(wrappedMain) do
-            love.graphics.print(line, titleX, headerY + (i-1)*fontTitle:getHeight())
+        love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
+        
+        -- Centrar texto verticalmente respecto a la imagen si el texto es más corto
+        local textStartY = headerY
+        if coverH > mainH then
+            textStartY = headerY + (coverH - mainH) / 2
+        end
+        
+        for i = 1, visibleLines do
+            local line = wrappedMain[i]
+            if i == visibleLines and #wrappedMain > visibleLines then
+                line = line .. "..."
+            end
+            love.graphics.print(line, titleX, textStartY + (i-1)*fontTitle:getHeight())
         end
         
         -- 5. Dibujar el icono del sistema a la derecha
         -- if sysIcon then
         --     local iconScale = iconSize / sysIcon:getHeight()
-        --     love.graphics.setColor(1, 1, 1)
-        --     love.graphics.draw(sysIcon, slideX + menuW - 20 - iconWidth, headerY, 0, iconScale, iconScale)
+        --     love.graphics.setColor(1, 1, 1, alpha)
+        --     love.graphics.draw(sysIcon, x + w - 20 - iconWidth, headerY, 0, iconScale, iconScale)
         -- end
         
         -- 6. Calcular la altura total del contenido para el encabezado
-        local contentH = math.max(iconSize, mainH)
+        local contentH = math.max(iconSize, mainH, coverH)
         
         -- 7. Preparar y dibujar el nuevo subtítulo
         local regionInfo = extraInfo:gsub("%.[^%.]+$", "") -- quitar extensión
@@ -219,24 +228,24 @@ local function drawSideMenu()
         
         if newSubtitle:gsub("%s+", "") ~= "" then
             love.graphics.setFont(fontSmall)
-            love.graphics.setColor(theme.colors.text_dim)
-            love.graphics.printf(newSubtitle, slideX + 20, headerY + contentH + 5, menuW - 40, "left")
-            local _, wrappedExtra = fontSmall:getWrap(newSubtitle, menuW - 40)
+            love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
+            love.graphics.printf(newSubtitle, x + 20, headerY + contentH + 5, w - 40, "left")
+            local _, wrappedExtra = fontSmall:getWrap(newSubtitle, w - 40)
             startY = headerY + contentH + 5 + (#wrappedExtra * fontSmall:getHeight()) + 20
         else
             startY = headerY + contentH + 20
         end
     else
         -- Header Estándar
-        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
         love.graphics.setFont(fontTitle)
-        love.graphics.printf(menuTitle, slideX + 20, 40, menuW - 40, "left")
+        love.graphics.printf(title, x + 20, 40, w - 40, "left")
 
-        if menuMessage and menuMessage ~= "" then
+        if message and message ~= "" then
             love.graphics.setFont(fontMedium)
-            love.graphics.setColor(theme.colors.text_medium)
-            love.graphics.printf(menuMessage, slideX + 20, 80, menuW - 40, "left")
-            local width, wrappedtext = fontMedium:getWrap(menuMessage, menuW - 40)
+            love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
+            love.graphics.printf(message, x + 20, 80, w - 40, "left")
+            local width, wrappedtext = fontMedium:getWrap(message, w - 40)
             startY = 80 + (#wrappedtext * fontMedium:getHeight()) + 30
         end
     end
@@ -244,7 +253,7 @@ local function drawSideMenu()
     -- Opciones
     love.graphics.setFont(fontList)
     local rowHeight = 40
-    for i, option in ipairs(menuOptions) do
+    for i, option in ipairs(options) do
         local rowY = startY + (i-1) * rowHeight
         local centerY = rowY + rowHeight / 2
         
@@ -253,16 +262,21 @@ local function drawSideMenu()
         
         local labelColor, valueColor
 
-        if i == menuSelection then
-            love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", slideX, rowY, menuW, rowHeight)
+        if i == selection then
+            if isFocused then
+                local c = theme.colors.selection_accent
+                love.graphics.setColor(c[1], c[2], c[3], alpha)
+            else
+                love.graphics.setColor(0.3, 0.3, 0.3, alpha) -- Selección gris en menú inactivo
+            end
+            love.graphics.rectangle("fill", x, rowY, w, rowHeight)
             labelColor = theme.colors.text_white
             valueColor = theme.colors.text_white
         else
             if type(option) == "table" and option.played and markPlayed then
-                local r,g,b,a = unpack(theme.colors.list_played_unselected)
-                love.graphics.setColor(r,g,b,a)
-                love.graphics.rectangle("fill", slideX, rowY, menuW, rowHeight)
+                local c = theme.colors.list_played_unselected
+                love.graphics.setColor(c[1], c[2], c[3], (c[4] or 1) * alpha)
+                love.graphics.rectangle("fill", x, rowY, w, rowHeight)
             end
 
             if type(option) == "string" and option:find("Borrar") then
@@ -282,207 +296,347 @@ local function drawSideMenu()
 
         local textY = centerY - fontList:getHeight() / 2
 
+        -- Aplicar alpha a los colores de texto
+        local lc = {labelColor[1], labelColor[2], labelColor[3], (labelColor[4] or 1) * alpha}
+        local vc = {valueColor[1], valueColor[2], valueColor[3], (valueColor[4] or 1) * alpha}
+
         if label and value then
-            love.graphics.setColor(labelColor)
-            love.graphics.print(label .. ":", slideX + 20, textY)
-            love.graphics.setColor(valueColor)
+            love.graphics.setColor(lc)
+            love.graphics.print(label .. ":", x + 20, textY)
+            love.graphics.setColor(vc)
             local valW = fontList:getWidth(value)
-            love.graphics.print(value, slideX + menuW - 20 - valW, textY)
+            love.graphics.print(value, x + w - 20 - valW, textY)
         elseif icon then
-            love.graphics.setColor(1, 1, 1)
+            love.graphics.setColor(1, 1, 1, alpha)
             local iconH = 24
             local scale = iconH / icon:getHeight()
-            love.graphics.draw(icon, slideX + 20, centerY - iconH/2, 0, scale, scale)
-            love.graphics.setColor(labelColor)
-            love.graphics.print(text, slideX + 55, textY)
+            love.graphics.draw(icon, x + 20, centerY - iconH/2, 0, scale, scale)
+            love.graphics.setColor(lc)
+            drawTrimmed(text, x + 55, textY, w - 75, fontList)
         else
-            love.graphics.setColor(labelColor)
-            love.graphics.print(text, slideX + 20, textY)
+            love.graphics.setColor(lc)
+            drawTrimmed(text, x + 20, textY, w - 40, fontList)
         end
     end
 
-    -- Mostrar ruta en DELETE_MENU
-    if state == "DELETE_MENU" and itemToDelete then
-        local path = itemToDelete.fullPath or ""
-        local displayPath = path
-        if path:find("ROMS/") then
-            displayPath = path:match("ROMS/(.*)")
-        elseif path:find("Simulador_SD/") then
-            displayPath = path:match("Simulador_SD/(.*)")
-        end
-        
-        love.graphics.setFont(fontSmall)
-        love.graphics.setColor(theme.colors.text_dim)
-        
-        local textY = h - 45
-        local availableW = menuW - 40
-        
-        if fontSmall:getWidth(displayPath) > availableW then
-             love.graphics.printf(displayPath, slideX + 20, textY - fontSmall:getHeight(), availableW, "center")
-        else
-             love.graphics.printf(displayPath, slideX + 20, textY, availableW, "center")
-        end
+    if not isFocused then
+        local dp = dimProgress or 1
+        -- Oscurecer todo el panel si no tiene foco
+        love.graphics.setColor(0, 0, 0, 0.5 * alpha * dp)
+        love.graphics.rectangle("fill", x, 0, w, h)
+        love.graphics.setColor(0, 0, 0, 0.5 * alpha * dp)
+        love.graphics.draw(getGradientMesh(), x, 0, 0, w, h)
     end
 end
 
-local function drawHelpOverlay()
-    log("drawHelpOverlay called")
-    if not State.showHelp and not State.closingHelp then return end
+local function calculateMenuWidth(title, message, options, item, isGameOptions)
     local w, h = love.graphics.getDimensions()
-    
-    -- Animación (Slide in)
-    local t = State.menuAnim
-    local ease = 1 - (1 - t)^3 -- Cubic ease out
-    local offset = (w / 2) * (1 - ease)
-    
-    -- Overlay oscuro (Fade in)
-    local r, g, b, a = unpack(State.theme.colors.overlay_dark)
-    love.graphics.setColor(r, g, b, a * ease)
-    love.graphics.rectangle("fill", 0, 0, w/2, h)
-    
-    -- Panel lateral
-    love.graphics.setColor(State.theme.colors.side_menu_background)
-    love.graphics.rectangle("fill", w/2 + offset, 0, w/2, h)
-    
-    -- Línea separadora
-    love.graphics.setColor(State.theme.colors.side_menu_separator)
-    love.graphics.line(w/2 + offset, 0, w/2 + offset, h)
+    love.graphics.setFont(fontList)
+    local optionsMaxW = 0
+    for _, opt in ipairs(options) do
+        local text = type(opt) == "table" and opt.text or opt
+        local width = fontList:getWidth(text)
+        if type(opt) == "table" and opt.icon then width = width + 35 end
+        if width > optionsMaxW then optionsMaxW = width end
+    end
 
-    local contentX = w/2 + offset
-
-    love.graphics.setColor(State.theme.colors.text_white)
-    love.graphics.setFont(State.fontTitle)
-    love.graphics.printf("Ayuda - Controles", contentX + 20, 40, w/2 - 40, "left")
+    local mainName = title
+    local iconWidth = 0 -- Simplificación: no calculamos ancho de icono de sistema aquí para layout básico
+    local coverSpace = 0
     
-    local list = State.helpData[State.state] or State.helpData.DEFAULT
+    if isGameOptions and message then
+        -- Usar el nombre real del juego para el cálculo, no "Opciones"
+        local name = message
+        mainName = name:gsub("%s*$", "")
+        mainName = mainName:gsub("%.[^%.]+$", "")
+        local pStart = name:find("%(")
+        if pStart then
+            mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
+        end
+        
+        if currentImage then
+            coverSpace = 100 -- Espacio reservado para carátula + margen
+        end
+    end
+    
+    local titleRequiredW = fontTitle:getWidth(mainName) + 40 + coverSpace
+    
+    -- Ancho mínimo mayor si hay carátula para que no quede apretado
+    local minW = (isGameOptions and currentImage) and 320 or 200
+    
+    return math.min(w * 0.8, math.max(minW, optionsMaxW + 60, titleRequiredW))
+end
 
-    -- Filter out 'Select' option in 'Juego Unico' mode
+local function drawHelpPanel(x, w, h, alpha)
+    local bg = theme.colors.side_menu_background
+    love.graphics.setColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+    love.graphics.rectangle("fill", x, 0, w, h)
+    
+    local sep = theme.colors.side_menu_separator
+    love.graphics.setColor(sep[1], sep[2], sep[3], alpha)
+    love.graphics.line(x, 0, x, h)
+
+    local contentX = x
+    love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
+    love.graphics.setFont(fontTitle)
+    love.graphics.printf("Ayuda - Controles", contentX + 20, 40, w - 40, "left")
+    
+    local list = helpData[state] or helpData.DEFAULT
     local filteredList = {}
-    if State.state == "LIST" and State.launchMode == "Juego Unico" then
+    if state == "LIST" and launchMode == "Juego Unico" then
         for _, item in ipairs(list) do
-            if item.text ~= "Seleccionar" then
-                table.insert(filteredList, item)
-            end
+            if item.text ~= "Seleccionar" then table.insert(filteredList, item) end
         end
     else
         filteredList = list
     end
 
-    love.graphics.setFont(State.fontMedium)
+    love.graphics.setFont(fontMedium)
     local startY = 90
     for i, item in ipairs(filteredList) do
-        love.graphics.setColor(State.theme.colors.text_white)
-        love.graphics.draw(item.icon, contentX + 20, startY + (i-1)*40, 0, 0.8, 0.8)
-        love.graphics.print(item.text, contentX + 60, startY + (i-1)*40 + 2)
+        local rowY = startY + (i-1)*40
+        local centerY = rowY + 20
+        local iconScale = 0.8
+        local iconH = item.icon:getHeight() * iconScale
+        local iconY = centerY - iconH / 2
+        local textY = centerY - fontMedium:getHeight() / 2
+
+        love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
+        love.graphics.draw(item.icon, contentX + 20, iconY, 0, iconScale, iconScale)
+        love.graphics.print(item.text, contentX + 60, textY)
     end
 end
 
-local function drawMediaDetailContent(currentItem, showSearchButton)
-    log("drawMediaDetailContent called")
-    local w, h = love.graphics.getDimensions()
-
-    -- 1. Extraer datos del subtítulo
+local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
     local regionInfo = ""
     local pStart = currentItem.name:find("%(")
-    if pStart then
-        regionInfo = currentItem.name:sub(pStart)
-    end
+    if pStart then regionInfo = currentItem.name:sub(pStart) end
 
     local sysName = utils.getSystemNameForItem(currentItem)
     local displayName = utils.getSystemDisplayName(sysName)
     local subtitle = (displayName or "Desconocido") .. " " .. regionInfo
 
-    -- 2. Dibujar Subtítulo
     love.graphics.setFont(fontMedium)
-    love.graphics.setColor(theme.colors.text_dim)
-    love.graphics.printf(subtitle, 0, 55, w, "center")
+    love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
+    love.graphics.printf(subtitle, x, y + 55, w, "center")
 
-    -- 3. Layout de imágenes
-    local contentY = 100
+    local contentY = y + 100
     local imagesY = contentY + fontMedium:getHeight() + 5
-    local availableH = h - imagesY - 40 - 120 -- Restar espacio para barra inferior y descripción
+    local availableH = h - imagesY - 40 - 120
     
     local spacing = 20
     local coverW, screenW = 0, 0
     local coverScale, screenScale = 1, 1
 
     if currentImage then
-        coverScale = availableH / currentImage:getHeight()
+        coverScale = math.min(1, availableH / currentImage:getHeight())
+        local maxW = (w - 40 - spacing) / 2
+        if currentImage:getWidth() * coverScale > maxW then coverScale = maxW / currentImage:getWidth() end
         coverW = currentImage:getWidth() * coverScale
     end
     if currentScreenshot then
-        screenScale = availableH / currentScreenshot:getHeight()
+        screenScale = math.min(1, availableH / currentScreenshot:getHeight())
+        local maxW = (w - 40 - spacing) / 2
+        if currentScreenshot:getWidth() * screenScale > maxW then screenScale = maxW / currentScreenshot:getWidth() end
         screenW = currentScreenshot:getWidth() * screenScale
     end
 
     local totalW = coverW + (currentImage and currentScreenshot and spacing or 0) + screenW
-    local startX = (w - totalW) / 2
+    local startX = x + (w - totalW) / 2
     
     love.graphics.setFont(fontMedium)
-    
     if currentImage then
-        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Frontal", startX, contentY, coverW, "center")
-        love.graphics.setColor(1, 1, 1)
+        love.graphics.setColor(1, 1, 1, alpha)
         love.graphics.draw(currentImage, startX, imagesY, 0, coverScale, coverScale)
     end
-    
     if currentScreenshot then
         local drawX = startX + (currentImage and (coverW + spacing) or 0)
-        love.graphics.setColor(theme.colors.text_medium)
+        love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Screen", drawX, contentY, screenW, "center")
-        love.graphics.setColor(1, 1, 1)
+        love.graphics.setColor(1, 1, 1, alpha)
         love.graphics.draw(currentScreenshot, drawX, imagesY, 0, screenScale, screenScale)
     end
 
-    -- 4. Dibujar Descripción
     local textY = imagesY + availableH + 15
     love.graphics.setFont(fontMedium)
-    love.graphics.setColor(theme.colors.text_medium)
+    love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
     local infoTitle = "Info"
     if currentYear and currentYear ~= "" then infoTitle = infoTitle .. " (" .. currentYear .. ")" end
-    love.graphics.print(infoTitle, 20, textY)
+    love.graphics.print(infoTitle, x + 20, textY)
     love.graphics.setFont(fontSmall)
-    love.graphics.setColor(theme.colors.text_dim)
+    love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
     local descText = (currentDescription and currentDescription ~= "") and currentDescription or "Sin información."
-    love.graphics.printf(descText, 20, textY + 25, w - 40, "left")
+    love.graphics.printf(descText, x + 20, textY + 25, w - 40, "left")
 
     if not currentImage and not currentScreenshot and descText == "Sin información." then
-        love.graphics.setColor(theme.colors.text_medium)
-        love.graphics.printf("No hay imágenes ni información disponible.", 0, h/2, w, "center")
+        love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
+        love.graphics.printf("No hay imágenes ni información disponible.", x, y + h/2, w, "center")
     end
 end
 
-local function drawInfoView()
-    log("drawInfoView called")
-    local w, h = love.graphics.getDimensions()
-    love.graphics.clear(theme.colors.background)
+local function drawInfoPanel(item, x, w, h, alpha)
+    local bg = theme.colors.side_menu_background
+    love.graphics.setColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+    love.graphics.rectangle("fill", x, 0, w, h)
+    local sep = theme.colors.side_menu_separator
+    love.graphics.setColor(sep[1], sep[2], sep[3], alpha)
+    love.graphics.line(x, 0, x, h)
 
-    local currentItem = focusedItem or files[selectedIndex]
-    if not currentItem then return end
-
-    -- 1. Extraer datos
-    local mainName = currentItem.name:gsub("%s*$", "")
+    if not item then return end
+    local mainName = item.name:gsub("%s*$", "")
     local pStart = mainName:find("%(")
-    if pStart then
-        mainName = mainName:sub(1, pStart - 1):gsub("%s*$", "")
-    end
-    mainName = mainName:gsub("%.[^%.]+$", "") -- Quitar extensión
+    if pStart then mainName = mainName:sub(1, pStart - 1):gsub("%s*$", "") end
+    mainName = mainName:gsub("%.[^%.]+$", "")
 
-    -- Dibujar Título
     love.graphics.setFont(fontTitle)
-    love.graphics.setColor(theme.colors.text_white)
-    love.graphics.printf(mainName, 0, 20, w, "center")
+    love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
+    love.graphics.printf(mainName, x, 20, w, "center")
 
-    -- Dibujar contenido
-    drawMediaDetailContent(currentItem, false)
+    drawMediaDetailContent(item, x, 0, w, h, alpha)
+end
 
-    -- Hint de volver
-    drawBottomBar()
+local function drawOverlayMenus()
+    local w, h = love.graphics.getDimensions()
+    local menusToDraw = {}
+    
+    -- 1. Stacked menus
+    for _, m in ipairs(menuStack) do
+        table.insert(menusToDraw, { type = "MENU", data = m, isCurrent = false })
+    end
+    
+    -- 2. Current State Menu
+    if state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" then
+        table.insert(menusToDraw, { type = "MENU", data = { title = menuTitle, message = menuMessage, options = menuOptions, selection = menuSelection, focusedItem = focusedItem }, isCurrent = true })
+    elseif state == "INFO_VIEW" then
+        table.insert(menusToDraw, { type = "INFO", data = { focusedItem = focusedItem or files[selectedIndex] }, isCurrent = true })
+    end
+
+    -- 3. Help Menu
+    if showHelp or closingHelp then
+        table.insert(menusToDraw, { type = "HELP", data = {}, isCurrent = true })
+    end
+
+    -- Calculate Widths
+    for _, m in ipairs(menusToDraw) do
+        if m.type == "MENU" then
+            local item = m.data.focusedItem or files[selectedIndex]
+            local isGameOpts = false
+            if item then
+                isGameOpts = (m.data.title:match("^Opciones") and m.data.message == item.name)
+            end
+            m.naturalWidth = calculateMenuWidth(m.data.title, m.data.message, m.data.options, item, isGameOpts)
+        elseif m.type == "INFO" then
+            m.naturalWidth = math.max(w * 0.5, 400)
+        elseif m.type == "HELP" then
+            m.naturalWidth = math.max(w * 0.4, 300)
+        end
+    end
+    
+    -- Determine animation progress
+    local activeMenu = #menusToDraw > 0 and menusToDraw[#menusToDraw] or nil
+    local t = 0
+    if activeMenu then
+        if activeMenu.type == "HELP" then
+            t = helpAnim
+        else -- MENU, INFO
+            t = menuAnim
+        end
+    end
+    local ease = 1 - (1 - t)^3
+
+    -- Calculate Stack Max (parents) and Total Max (all)
+    local stackMax = 0
+    for i = 1, #menusToDraw - 1 do
+        if menusToDraw[i].naturalWidth > stackMax then stackMax = menusToDraw[i].naturalWidth end
+    end
+    
+    local totalMax = stackMax
+    if activeMenu and activeMenu.naturalWidth > totalMax then totalMax = activeMenu.naturalWidth end
+
+    -- Apply Animated Widths
+    for i, m in ipairs(menusToDraw) do
+        if i == #menusToDraw then
+            m.width = totalMax
+        else
+            m.width = stackMax + (totalMax - stackMax) * ease
+        end
+    end
+    
+    -- Flap Logic (Positions)
+    local flapSize = 30
+    if #menusToDraw > 0 then
+        local last = menusToDraw[#menusToDraw]
+        last.finalX = w - last.width
+        for i = #menusToDraw - 1, 1, -1 do
+            menusToDraw[i].finalX = menusToDraw[i+1].finalX - flapSize
+        end
+    end
+
+    -- Animation (X Position)
+    for i, menu in ipairs(menusToDraw) do
+        local startX
+        if i == #menusToDraw then
+            startX = w
+            menu.alpha = ease -- Solo el menú nuevo se desvanece/entra
+        else
+            startX = w - stackMax
+            menu.alpha = 1 -- Los padres se mantienen visibles
+        end
+        
+        menu.x = startX + (menu.finalX - startX) * ease
+    end
+
+    -- Draw
+    if #menusToDraw > 0 then
+        -- Draw a stacking, blended overlay for each menu
+        local r, g, b, base_a = unpack(theme.colors.overlay_dark)
+        for _, m in ipairs(menusToDraw) do
+            love.graphics.setColor(r, g, b, base_a * m.alpha)
+            love.graphics.draw(getGradientMesh(), 0, 0, 0, w, h)
+        end
+
+        -- Only the topmost menu is truly "current" for input focus
+        for i, m in ipairs(menusToDraw) do
+            m.isFocused = (i == #menusToDraw)
+        end
+
+        for _, m in ipairs(menusToDraw) do
+            if m.type == "MENU" then
+                local item = m.data.focusedItem or files[selectedIndex]
+                -- Usamos 'ease' para que el oscurecimiento del padre sea progresivo
+                drawMenuContent(m.data.title, m.data.message, m.data.options, m.data.selection, item, m.x, m.width, h, m.alpha, m.isFocused, ease)
+            elseif m.type == "INFO" then
+                drawInfoPanel(m.data.focusedItem, m.x, m.width, h, m.alpha)
+            elseif m.type == "HELP" then
+                drawHelpPanel(m.x, m.width, h, m.alpha)
+            end
+        end
+        
+        if state == "DELETE_MENU" and itemToDelete then
+             local activeMenu = nil
+             for _, m in ipairs(menusToDraw) do if m.type == "MENU" and m.isCurrent then activeMenu = m break end end
+             if activeMenu then
+                local path = itemToDelete.fullPath or ""
+                local displayPath = path
+                if path:find("ROMS/") then displayPath = path:match("ROMS/(.*)")
+                elseif path:find("Simulador_SD/") then displayPath = path:match("Simulador_SD/(.*)") end
+                love.graphics.setFont(fontSmall)
+                love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], activeMenu.alpha)
+                local textY = h - 45
+                local availableW = activeMenu.width - 40
+                if fontSmall:getWidth(displayPath) > availableW then
+                     love.graphics.printf(displayPath, activeMenu.x + 20, textY - fontSmall:getHeight(), availableW, "center")
+                else
+                     love.graphics.printf(displayPath, activeMenu.x + 20, textY, availableW, "center")
+                end
+             end
+        end
+    end
 end
 
 local function drawScraperView()
-    log("drawScraperView called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background) -- Fondo de pantalla completa
 
@@ -496,7 +650,7 @@ local function drawScraperView()
 
     if state == "SCRAPER_VIEW" then
         -- Usar la nueva función de dibujado de contenido
-        drawMediaDetailContent(currentItem, true)
+        drawMediaDetailContent(currentItem, 0, 0, w, h, 1)
 
         -- Botón de Scrapear
         love.graphics.setFont(fontMedium)
@@ -614,7 +768,6 @@ local function drawScraperView()
 end
 
 local function drawScrollbar()
-    log("drawScrollbar called")
     love.graphics.setColor(theme.colors.scrollbar_background)
     love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, 4, layout.scrollbarH)
     if #files > 1 then
@@ -626,7 +779,6 @@ local function drawScrollbar()
 end
 
 local function drawSaveManager()
-    log("drawSaveManager called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
     
@@ -664,20 +816,7 @@ local function drawSaveManager()
     drawBottomBar()
 end
 
-local function drawTrimmed(text, x, y, limit, font)
-    log("drawTrimmed called")
-    local dText = text
-    if font:getWidth(dText) > limit then
-        while font:getWidth(dText .. "...") > limit and #dText > 0 do
-            dText = dText:sub(1, -2)
-        end
-        dText = dText .. "..."
-    end
-    love.graphics.print(dText, x, y)
-end
-
 local function drawTrimmedStart(text, x, y, limit, font)
-    log("drawTrimmedStart called")
     local dText = text
     if font:getWidth(dText) > limit then
         while font:getWidth("..." .. dText) > limit and #dText > 0 do
@@ -689,7 +828,6 @@ local function drawTrimmedStart(text, x, y, limit, font)
 end
 
 local function drawCleanupMenu()
-    log("drawCleanupMenu called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
     
@@ -935,11 +1073,9 @@ local function drawCleanupMenu()
         end
     end
     drawBottomBar()
-    drawHelpOverlay()
 end
 
 local function drawGrid(w, h)
-    log("drawGrid called")
     local cols = gridCols
     local rows = 3
     local cellW = w / cols
@@ -963,23 +1099,27 @@ local function drawGrid(w, h)
         local y = startY + r * cellH
         local item = files[i]
         
-        local cornerRadius = 8
-        local itemPadding = 5
-        
         -- Fondo selección
         if i == selectedIndex then
             love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", x + itemPadding, y + itemPadding, cellW - (2 * itemPadding), cellH - (2 * itemPadding), cornerRadius)
+            love.graphics.rectangle("fill", x + 5, y + 7, cellW - 10, cellH - 3, 5)
         end
         
-        local contentWidth = cellW - (2 * itemPadding)
+        local contentWidth = cellW - 10
 
         local imageToDraw = nil
         if not item.isDir then
             local base = item.name:gsub("%..-$", "")
             
             -- Determinar la ruta de la carátula correcta para el item (considerando virtual root)
-            local systemForItem = utils.getSystemNameForItem(item)
+            local systemForItem = utils.getSystemNameForItem(item, systemName, isVirtualRoot)
+
+            if launchMode == "Juego Unico" and item.versions and #item.versions > 0 then
+                local v = item.versions[1]
+                base = v.name:gsub("%..-$", "")
+                systemForItem = v.system or systemForItem
+            end
+
             local artPathForItem = filesystem.getArtPathForSystem(systemForItem)
 
             if artPathForItem then
@@ -991,31 +1131,61 @@ local function drawGrid(w, h)
         -- Dibujar imagen o icono
         if imageToDraw then
             love.graphics.setColor(1, 1, 1)
-            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50 - (2 * itemPadding)) / imageToDraw:getHeight())
+            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50) / imageToDraw:getHeight())
             local imgW = imageToDraw:getWidth() * scale
             local imgH = imageToDraw:getHeight() * scale
-            local ix = x + itemPadding + (contentWidth - imgW) / 2
-            local iy = y + itemPadding + ((cellH - 50 - (2 * itemPadding)) - imgH) / 2
+            local ix = x + 5 + (contentWidth - imgW) / 2
+            local iy = y + 10 + ((cellH - 50) - imgH) / 2
             love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
-            local icon = item.icon or (item.isDir and iconFolder)
+            local icon = item.icon
+            if not icon and item.isDir then
+                icon = utils.getSystemIcon(item.name)
+            end
+            icon = icon or (item.isDir and iconFolder)
             
             if not icon then
                 if item.system then
-                    icon = getSystemContentIcon(item.system)
+                    icon = utils.getSystemContentIcon(item.system)
                 end
                 if not icon then icon = currentSystemContentIcon or iconRom end
             end
             
-            local availableH = cellH - 45 - (2 * itemPadding) -- Espacio disponible restando texto y márgenes
-            local availableW = cellW - (2 * itemPadding)
-            local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.85
-            local ix = x + itemPadding + (availableW - icon:getWidth()*scale)/2
-            local iy = y + itemPadding + (availableH - icon:getHeight()*scale)/2
+            local availableH = cellH - 45 -- Espacio disponible restando texto y márgenes
+            local availableW = cellW - 10
+            local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.7
+            local ix = x + (cellW - icon:getWidth()*scale)/2
+            local iy = y + 5 + (availableH - icon:getHeight()*scale)/2
             love.graphics.draw(icon, ix, iy, 0, scale, scale)
         end
-        
+
+        if launchMode == "Juego Unico" and item.versions then
+            local systems = {}
+            local seen = {}
+            for _, v in ipairs(item.versions) do
+                if v.system and not seen[v.system] then
+                    seen[v.system] = true
+                    table.insert(systems, v.system)
+                end
+            end
+            
+            local iconSize = 16
+            local iconY = y + cellH - 45 - iconSize
+            local iconX = x + cellW - 10
+            
+            for idx = #systems, 1, -1 do
+                local sys = systems[idx]
+                local sIcon = utils.getSystemIcon(sys)
+                if sIcon then
+                    love.graphics.setColor(1, 1, 1, 0.9)
+                    local scale = iconSize / sIcon:getHeight()
+                    love.graphics.draw(sIcon, iconX - iconSize, iconY, 0, scale, scale)
+                    iconX = iconX - iconSize - 2
+                end
+            end
+        end
+
         -- Texto
         love.graphics.setFont(fontMedium)
         local textFont = fontMedium
@@ -1040,12 +1210,11 @@ local function drawGrid(w, h)
         local textBlockHeight = textFont:getHeight() * numLines
         local textY = y + cellH - 40 + (40 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(textToPrint, x + itemPadding, textY, contentWidth, "center")
+        love.graphics.printf(textToPrint, x + 5, textY, contentWidth, "center")
     end
 end
 
 local function drawJumpLetter()
-    log("drawJumpLetter called")
     if jumpPanelAnim <= 0 or jumpLetter == "" then return end
     
     local w, h = love.graphics.getDimensions()
@@ -1082,15 +1251,8 @@ local function drawJumpLetter()
 end
 
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
-    log("drawMainList called")
     if viewMode == "GRID" then
         drawGrid(w, h)
-        -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado
-        if files[selectedIndex] then
-            love.graphics.setFont(fontMedium)
-            love.graphics.setColor(theme.colors.text_white)
-            love.graphics.printf(files[selectedIndex].name, 10, h - 55, w - 20, "center")
-        end
     else
         -- Lista de Archivos
         love.graphics.setFont(fontList)
@@ -1103,37 +1265,20 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             local checkPath = item.fullPath or (romPath .. item.name)
             local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
             
-        local cornerRadius = 8
-        local itemPadding = 5
-
-        local cornerRadius = 8
-        local itemPadding = 5
-
-        -- Calculate visible range based on State.scroll
-        local firstVisibleItem = math.floor(State.scroll / layout.rowHeight) + 1
-        local lastVisibleItem = math.min(#files, firstVisibleItem + pageSize)
-
-        for i = firstVisibleItem, lastVisibleItem do
-            local y = layout.listY + (i - 1) * layout.rowHeight - State.scroll
-            local item = files[i]
-            
-            -- Verificar si es el último juego jugado
-            local checkPath = item.fullPath or (romPath .. item.name)
-            local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
-            
-            local rectX = 15 + itemPadding
-            local rectY = y + itemPadding
-            local rectW = layout.selWidth - (2 * itemPadding)
-            local rectH = layout.rowHeight - (2 * itemPadding)
-
             if i == selectedIndex then
+                -- Cursor gris claro
                 love.graphics.setColor(0.9, 0.9, 0.9)
-                love.graphics.rectangle("fill", rectX, rectY, rectW, rectH, cornerRadius)
-                love.graphics.setColor(0, 0, 0) -- Texto e iconos en negro
+                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - (layout.selHeight + 2)) / 2, layout.selWidth, layout.selHeight + 2, 4)
+                -- Texto e iconos en negro
+                if item.pendingDelete then
+                    love.graphics.setColor(1, 0, 0) -- Rojo para fantasma
+                else
+                    love.graphics.setColor(0, 0, 0)
+                end
             else
                 if isLastPlayed and markPlayed then
                     love.graphics.setColor(theme.colors.list_played_unselected)
-                    love.graphics.rectangle("fill", rectX, rectY, rectW, rectH, cornerRadius)
+                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
                 end
                 love.graphics.setColor(theme.colors.text_medium)
             end
@@ -1141,24 +1286,39 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             
             if item.empty then
                 love.graphics.setColor(theme.colors.text_disabled)
-                love.graphics.printf(item.name, 55 + itemPadding, y + itemPadding, layout.selWidth - 10 - (2 * itemPadding), "left")
+                local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
+                love.graphics.printf(item.name, 55, textY, layout.selWidth - 50, "left")
             else
                 if item.selected then
                     love.graphics.setColor(theme.colors.selection_accent)
                 end
                 
-                local iconToDraw = item.icon or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
+                local iconToDraw = item.icon
+                if not iconToDraw and item.isDir then
+                    iconToDraw = utils.getSystemIcon(item.name)
+                end
+                if item.fullPath == "@Favorites/" then
+                    iconToDraw = iconFavorite
+                end
+                if not iconToDraw and item.system then
+                    iconToDraw = utils.getSystemContentIcon(item.system) or utils.getSystemIcon(item.system)
+                end
+                iconToDraw = iconToDraw or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
                 local drawScale = layout.iconScale
                 
-                if iconToDraw == currentSystemContentIcon or iconToDraw == item.icon then
-                    drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
+                if iconToDraw == iconFavorite then
+                    drawScale = (layout.rowHeight * 0.55) / iconToDraw:getHeight() -- Icono de favoritos más pequeño
+                elseif iconToDraw ~= iconFolder and iconToDraw ~= iconRom then
+                    drawScale = (layout.rowHeight * 0.80) / iconToDraw:getHeight() -- Reducido de 0.8 para hacer el icono ~4px más pequeño
                 end
                 
-                local drawY = y + itemPadding + (rectH - iconToDraw:getHeight() * drawScale) / 2
-                love.graphics.draw(iconToDraw, 25 + itemPadding, drawY, 0, drawScale, drawScale)
+                local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
+                love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
                 
+                local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
+
                 local availableWidth
-                if launchMode == "Juego Unico" then
+                if showSystemIcons then
                     local systems = {}
                     local seen = {}
                     if item.versions then
@@ -1175,7 +1335,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     if totalW < 0 then totalW = 0 end
                     
                     local startX = layout.scrollbarX - totalW - 5
-                    availableWidth = startX - (55 + itemPadding) - 10
+                    availableWidth = startX - 55 - 10
                 else
                     -- Calcular etiqueta SD
                     local label = item.sourceLabel
@@ -1184,11 +1344,22 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         elseif romPath:find("/mnt/sdcard") then label = "SD2" end
                     end
                     
-                    local labelWidth = 0
-                    if label then labelWidth = fontList:getWidth(label) end
-                    
-                    -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(5)
-                    availableWidth = layout.selWidth - (55 + itemPadding) - labelWidth - 5
+                    -- Calcular espacio disponible para el nombre: Ancho total - offset(40) - padding(5)
+                    availableWidth = layout.selWidth - 45
+                end
+
+                local textX = 55
+                local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+
+                if isFav then
+                    -- Draw favorite icon
+                    love.graphics.setColor(1, 1, 1)
+                    local favH = 16
+                    local favScale = favH / iconFavorite:getHeight()
+                    local favY = y + (layout.rowHeight - favH) / 2
+                    love.graphics.draw(iconFavorite, textX, favY, 0, favScale, favScale)
+                    textX = textX + (iconFavorite:getWidth() * favScale) + 5
+                    availableWidth = availableWidth - ((iconFavorite:getWidth() * favScale) + 5)
                 end
 
                 local nameToDraw = item.name
@@ -1201,16 +1372,16 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 
                 -- Centrar el texto verticalmente en la fila
-                local textY = y + itemPadding + (rectH - fontList:getHeight()) / 2
+                local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
                 
                 if i == selectedIndex then
-                    love.graphics.print(nameToDraw, 55 + itemPadding, textY)
-                    love.graphics.print(nameToDraw, 56 + itemPadding, textY)
+                    love.graphics.print(nameToDraw, textX, textY)
+                    love.graphics.print(nameToDraw, textX + 1, textY)
                 else
-                    love.graphics.print(nameToDraw, 55 + itemPadding, textY)
+                    love.graphics.print(nameToDraw, textX, textY)
                 end
 
-                if launchMode == "Juego Unico" then
+                if showSystemIcons then
                     -- Dibujar iconos de sistemas apilados a la derecha
                     local systems = {}
                     local seen = {}
@@ -1229,11 +1400,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local startX = layout.scrollbarX - totalW - 5
                     
                     for idx, sys in ipairs(systems) do
-                        local icon = getSystemIcon(sys)
+                        local icon = utils.getSystemIcon(sys)
                         if icon then
-                            love.graphics.setColor(1, 1, 1)
                             local scale = iconSize / icon:getHeight()
-                            love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + itemPadding + (rectH - iconSize)/2, 0, scale, scale)
+                            love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
                         end
                     end
                 else
@@ -1242,7 +1412,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         if romPath:find("/mnt/mmc") then label = "SD1"
                         elseif romPath:find("/mnt/sdcard") then label = "SD2" end
                     end
-                    if label then
+                    if label and label ~= "Fav" then
                     -- Colores distintivos para SD
                     if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
                     elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
@@ -1254,7 +1424,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         local r, g, b = love.graphics.getColor()
                         love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
                     end
-                    love.graphics.printf(label, sdColX, y + itemPadding, sdColW, "center")
+                    love.graphics.printf(label, sdColX, textY, sdColW, "center")
                     end
                 end
             end
@@ -1271,70 +1441,67 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
         -- Boxart (Frontal)
         if currentImage then
             local scale = previewBoxW / currentImage:getWidth()
+            love.graphics.setColor(theme.colors.text_white)
             local imgW = currentImage:getWidth() * scale
-            local imgH = currentImage:getHeight() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            
-            -- Set up and apply shader for fade effect
-            love.graphics.setShader(fadeShader)
-            fadeShader:send("backgroundColor", {theme.colors.background[1], theme.colors.background[2], theme.colors.background[3], 1.0}) -- Background color with opaque alpha
-            fadeShader:send("fadeWidth", 50.0) -- Fade width in pixels
-            fadeShader:send("imageXCoord", imgX)
-            fadeShader:send("imageWidthCoord", imgW)
-            fadeShader:send("imageOpacity", 0.3) -- Overall opacity of the image
-            
             love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
-            love.graphics.setShader() -- Reset shader
-            
-            previewY = previewY + imgH + 15
+            previewY = previewY + (currentImage:getHeight() * scale) + 15
         end
 
         -- Screenshot (Pantalla)
         if currentScreenshot then
             local scale = previewBoxW / currentScreenshot:getWidth()
+            love.graphics.setColor(theme.colors.text_white)
             local imgW = currentScreenshot:getWidth() * scale
-            local imgH = currentScreenshot:getHeight() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
-            
-            -- Set up and apply shader for fade effect
-            love.graphics.setShader(fadeShader)
-            fadeShader:send("backgroundColor", {theme.colors.background[1], theme.colors.background[2], theme.colors.background[3], 1.0}) -- Background color with opaque alpha
-            fadeShader:send("fadeWidth", 50.0) -- Fade width in pixels
-            fadeShader:send("imageXCoord", imgX)
-            fadeShader:send("imageWidthCoord", imgW)
-            fadeShader:send("imageOpacity", 0.3) -- Overall opacity of the image
-            
             love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
-            love.graphics.setShader() -- Reset shader
+        end
+    end
+
+    -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado (Overlay)
+    if files[selectedIndex] then
+        local rawName = files[selectedIndex].name
+        local nameNoExt = rawName:gsub("%.[^%.]+$", "")
+        
+        if #nameNoExt > 25 then
+            love.graphics.setFont(fontMedium)
+            local width, wrapped = fontMedium:getWrap(nameNoExt, w - 20)
+            local textH = #wrapped * fontMedium:getHeight()
+            local padding = 8
+            local bgH = textH + padding * 2
+            local bgY = h - 35 - bgH -- Position above bottom bar
+            
+            love.graphics.setColor(0, 0, 0, 0.8)
+            love.graphics.rectangle("fill", 0, bgY, w, bgH)
+            
+            love.graphics.setColor(theme.colors.text_white)
+            love.graphics.printf(nameNoExt, 10, bgY + padding, w - 20, "center")
         end
     end
 end
 
 local function draw()
-    log("draw called")
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
 
-    if state == "SCRAPER_VIEW" or state == "SCRAPING_IN_PROGRESS" or state == "SCRAPER_RESULTS" or state == "INFO_VIEW" or state == "SCRAPER_OPTIONS" then
-        if state == "INFO_VIEW" then
-            drawInfoView()
-        else
-            drawScraperView()
-        end
+    if state == "SCRAPER_VIEW" or state == "SCRAPING_IN_PROGRESS" or state == "SCRAPER_RESULTS" or state == "SCRAPER_OPTIONS" then
+        drawScraperView()
         if state == "SCRAPER_OPTIONS" or closingMenu then
-            drawSideMenu()
+            drawOverlayMenus()
         end
-        drawHelpOverlay()
+        drawOverlayMenus() -- For Help
         return -- No dibujar la lista debajo
     end
     
     if state == "SAVE_MANAGER" then
         drawSaveManager()
+        drawOverlayMenus() -- For Help
         return
     end
     
     if state == "CLEANUP_MENU" then
         drawCleanupMenu()
+        drawOverlayMenus() -- For Help
         return
     end
     
@@ -1374,6 +1541,9 @@ local function draw()
     end
 
     local previewBoxX = sdColX - previewBoxW - 10
+    if romPath == "@Favorites/" then
+         previewBoxX = layout.scrollbarX - previewBoxW - 10
+    end
 
     if showPreview then
         layout.selWidth = previewBoxX - 20 -- Ajustar lista al espacio restante
@@ -1404,7 +1574,7 @@ local function draw()
     love.graphics.printf(displayPath, 0, 45, w, "center")
 
     -- Mensaje de indexación en "Modo Único" si el índice no está listo
-    if launchMode == "Juego Unico" and isVirtualRoot and not romIndex then
+    if launchMode == "Juego Unico" and isVirtualRoot and not romIndex and #files == 0 then
         love.graphics.setFont(fontTitle)
         love.graphics.setColor(theme.colors.text_white)
         love.graphics.printf("Indexando ROMs...", 0, h/2 - 20, w, "center")
@@ -1412,16 +1582,23 @@ local function draw()
         love.graphics.setColor(theme.colors.text_dim)
         local msg = isIndexing and indexStateMessage or "Cargando índice..."
         love.graphics.printf(msg, 0, h/2 + 20, w, "center")
+        
+        drawOverlayMenus()
+        
         drawBottomBar()
-        drawHelpOverlay()
         return
+    end
+
+    -- Mensaje si la lista está vacía (y no estamos indexando)
+    if #files == 0 and not isIndexing then
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_dim)
+        love.graphics.printf("No se encontraron elementos.", 0, h/2, w, "center")
     end
 
     drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
 
-    if state == "OPTIONS_MENU" or state == "DELETE_MENU" or closingMenu then
-        drawSideMenu()
-    end
+    drawOverlayMenus()
 
     -- Barra de estado
     drawBottomBar()
@@ -1430,21 +1607,27 @@ local function draw()
     drawJumpLetter()
 
     -- Draw Search UI if active
-    if state == "SEARCH" then
+    if state == "SEARCH" or keyboardAnim > 0 then
+        local t = keyboardAnim
+        local ease = 1 - (1 - t)^3
+        local panelH = 250
+        local currentY = h - (panelH * ease)
+
         -- Fondo oscuro para el teclado
-        love.graphics.setColor(0, 0, 0, 0.9)
-        love.graphics.rectangle("fill", 0, h - 280, w, 280)
+        love.graphics.setColor(0, 0, 0, 0.9 * ease)
+        love.graphics.rectangle("fill", 0, currentY, w, panelH)
         
         -- Barra de búsqueda
-        love.graphics.setColor(theme.colors.text_white)
+        local r, g, b = unpack(theme.colors.text_white)
+        love.graphics.setColor(r, g, b, ease)
         love.graphics.setFont(fontTitle)
-        love.graphics.printf("Buscar: " .. searchQuery .. "_", 0, h - 270, w, "center")
+        love.graphics.printf("Buscar: " .. searchQuery .. "_", 20, currentY + 10, w - 40, "left")
         
         -- Teclado Virtual
         love.graphics.setFont(fontMedium)
         local keySize = 40
         local spacing = 5
-        local startY = h - 230
+        local startY = currentY + 50
         
         -- Calcular ancho del bloque principal (10 teclas)
         local mainBlockWidth = 10 * (keySize + spacing) - spacing
@@ -1471,14 +1654,18 @@ local function draw()
                     if r == 4 then x = x + (keySize/2) end
                 end
                 
+                local col
                 if r == keyboardRow and c == keyboardCol then
-                    love.graphics.setColor(theme.colors.selection_accent)
+                    col = theme.colors.selection_accent
                 else
-                    love.graphics.setColor(theme.colors.placeholder_background)
+                    col = theme.colors.placeholder_background
                 end
+                local cr, cg, cb = unpack(col)
+                love.graphics.setColor(cr, cg, cb, ease)
                 love.graphics.rectangle("fill", x, y, kW, kH, 5)
                 
-                love.graphics.setColor(theme.colors.text_white)
+                local tr, tg, tb = unpack(theme.colors.text_white)
+                love.graphics.setColor(tr, tg, tb, ease)
                 love.graphics.printf(key, x, y + 10, kW, "center")
             end
         end
@@ -1486,19 +1673,16 @@ local function draw()
 
     -- Indicador de indexación en segundo plano
     if isIndexing then
-        -- Punto parpadeante
-        local alpha = math.abs(math.sin(love.timer.getTime() * 5))
-        love.graphics.setColor(theme.colors.selection_accent[1], theme.colors.selection_accent[2], theme.colors.selection_accent[3], alpha)
-        love.graphics.circle("fill", w - 20, 20, 6)
+        -- Punto parpadeante en la esquina superior derecha
+        love.graphics.setFont(fontTitle) -- Usar fuente grande para el punto
+        love.graphics.setColor(theme.colors.selection_accent)
+        
+        local current_time = love.timer.getTime()
+        local blink = (math.sin(current_time * 8) + 1) / 2 -- Parpadeo suave
+        
+        love.graphics.setColor(theme.colors.selection_accent[1], theme.colors.selection_accent[2], theme.colors.selection_accent[3], blink)
+        love.graphics.print("•", w - 30, 5)
     end
-
-    -- Draw Clock
-    love.graphics.setFont(fontMedium)
-    love.graphics.setColor(theme.colors.text_bright)
-    local currentTime = os.date("%H:%M")
-    love.graphics.print(currentTime, 10, 10)
-
-    drawHelpOverlay()
 end
 
 return draw

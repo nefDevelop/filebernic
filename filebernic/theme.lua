@@ -1,3 +1,6 @@
+---@diagnostic disable: undefined-global
+---@diagnostic disable: undefined-field
+
 local theme = {}
 
 -- Path to the new font
@@ -16,8 +19,8 @@ theme.colors = {
     text_dim = {0.7, 0.7, 0.7},
     text_disabled = {0.5, 0.5, 0.5},
 
-    overlay_dark = {0, 0, 0, 0.5},
-    side_menu_background = {0.15, 0.15, 0.17, 0.98},
+    overlay_dark = {0, 0, 0, 0.75},
+    side_menu_background = {0.15, 0.15, 0.17, 1.0},
     side_menu_separator = {0.3, 0.3, 0.3},
 
     list_selection = {0.2, 0.4, 0.8},

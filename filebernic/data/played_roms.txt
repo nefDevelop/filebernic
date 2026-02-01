@@ -1,4 +1,1 @@
-/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Adventure Island II - Aliens in Paradise (USA, Europe).gb
-/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Arcade Classics - Battlezone & Super Breakout (USA, Europe).gb
-/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Arcade Classic No. 1 - Asteroids & Missile Command (USA, Europe).gb
-/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Adventure Island (USA, Europe).gb
+/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Adventure Island II (UE) [!].gb

@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-global
+
 function love.conf(t)
   t.version = "11.4" -- Ajustado a la versión de Scrappy
   t.console = false

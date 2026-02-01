@@ -1,30 +1,79 @@
+---@diagnostic disable: undefined-global
+---@diagnostic disable: undefined-field
 local M = {}
 local utils = require "utils"
 
 function M.getArtPathForSystem(systemName)
-    log("getArtPathForSystem called with systemName: " .. tostring(systemName))
     if not systemName or systemName == "" then return nil end
     
     local baseMuosPath
-    if io.open("/mnt/mmc", "r") then
+    local f = io.open("/mnt/mmc", "r")
+    if f then
+        f:close()
         baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
     else
         local cwd = love.filesystem.getSource()
         if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
         baseMuosPath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
     end
+    
+    -- Resolver mayúsculas/minúsculas del directorio del sistema
+    local h = io.popen('ls -p "'..baseMuosPath..'" 2>/dev/null')
+    if h then
+        for line in h:lines() do
+            if line:sub(-1) == "/" then
+                local dir = line:sub(1, -2)
+                if dir:lower() == systemName:lower() then
+                    return baseMuosPath .. dir .. "/box/"
+                end
+            end
+        end
+        h:close()
+    end
     return baseMuosPath .. systemName .. "/box/"
 end
 
 function M.hasRoms(path, validExtensions)
-    log("hasRoms called with path: " .. tostring(path))
+    local handle = io.popen('ls -p "'..path..'"')
+    if handle then
+        for line in handle:lines() do
+            if line:sub(-1) ~= "/" then
+                local ext = line:match("[^%.]+$")
+                if ext and validExtensions[ext:lower()] then
+                    handle:close()
+                    return true
+                end
+            end
+        end
+        handle:close()
+        return false
+    end
+    
+    -- Fallback: os.execute to temp file (if popen fails due to resource limits)
+    local tmpFile = "/tmp/filebernic_hasroms.txt"
+    os.execute('ls -p "'..path..'" > '..tmpFile..' 2>/dev/null')
+    local f = io.open(tmpFile, "r")
+    if f then
+        for line in f:lines() do
+            if line:sub(-1) ~= "/" then
+                local ext = line:match("[^%.]+$")
+                if ext and validExtensions[ext:lower()] then
+                    f:close()
+                    return true
+                end
+            end
+        end
+        f:close()
+        return false
+    end
+
+    -- Fallback: Intentar usar love.filesystem si io.popen falla
     local items = love.filesystem.getDirectoryItems(path)
-    for _, item_name in ipairs(items) do
-        local full_item_path = path .. "/" .. item_name
-        if love.filesystem.isFile(full_item_path) then
-            local ext = item_name:match("[^%.]+$")
+    if items then
+        for _, item in ipairs(items) do
+            local ext = item:match("[^%.]+$")
             if ext and validExtensions[ext:lower()] then
-                return true
+                if love.filesystem.isFile(path .. item) then return true end
             end
         end
     end
@@ -33,7 +82,6 @@ end
 
 -- Helper para escapar caracteres XML
 local function escapeXML(s)
-    log("escapeXML called")
     if not s then return "" end
     s = s:gsub("&", "&amp;")
     s = s:gsub("<", "&lt;")
@@ -43,9 +91,51 @@ local function escapeXML(s)
     return s
 end
 
+function M.findInGamelist(romFullPath, romFilename)
+    if not romFullPath then return nil end
+    local dir = romFullPath:match("(.*/)")
+    if not dir then return nil end
+    local xmlPath = dir .. "gamelist.xml"
+    
+    local f = io.open(xmlPath, "r")
+    if not f then return nil end
+    local content = f:read("*all")
+    f:close()
+    
+    -- Buscar bloque del juego específico
+    local searchPath = "./" .. romFilename
+    local escapedPath = searchPath:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    
+    local gameBlock = nil
+    for block in content:gmatch("<game>(.-)</game>") do
+        if block:find("<path>%s*" .. escapedPath .. "%s*</path>") then
+            gameBlock = block
+            break
+        end
+    end
+    
+    if gameBlock then
+        local desc = gameBlock:match("<desc>(.-)</desc>")
+        local year = gameBlock:match("<releasedate>(%d%d%d%d)")
+        local img = gameBlock:match("<image>(.-)</image>")
+        
+        if desc then desc = desc:gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", "\""):gsub("&apos;", "'") end
+        
+        local absImgPath = nil
+        if img then
+            -- Resolver ruta relativa de la imagen
+            if img:sub(1,2) == "./" then absImgPath = dir .. img:sub(3)
+            elseif img:sub(1,1) ~= "/" then absImgPath = dir .. img
+            else absImgPath = img end
+        end
+        
+        return { description = desc, year = year, imagePath = absImgPath, source = "Gamelist.xml" }
+    end
+    return nil
+end
+
 -- Función para actualizar gamelist.xml
 local function updateGamelistXML(romPath, metadata, action)
-    log("updateGamelistXML called with romPath: " .. tostring(romPath) .. ", action: " .. tostring(action))
     local dir = romPath:match("(.*/)")
     if not dir then return end
     local filename = romPath:match("([^/]+)$")
@@ -93,18 +183,39 @@ local function updateGamelistXML(romPath, metadata, action)
     end
 end
 
+function M.saveFavorites(favoriteRoms, json_encode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/favorites.json", "w")
+    if f then
+        f:write(json_encode(favoriteRoms))
+        f:close()
+    end
+end
+
+function M.loadFavorites(json_decode)
+    local path = love.filesystem.getSource() .. "/data/favorites.json"
+    local f = io.open(path, "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        return json_decode(content) or {}
+    end
+    return {}
+end
+
 function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
-    log("updateSystemForFile called")
     local currentPath = item.fullPath or (romPath .. item.name)
     local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
     
-    if detectedSystem and detectedSystem ~= systemName then
+    if detectedSystem and (detectedSystem ~= systemName or not muosArtPath or muosArtPath == "") then
         systemName = detectedSystem
         
         -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
         -- Recalcular rutas de arte
         local baseMuosPath = ""
-        if io.open("/mnt/mmc", "r") then
+        local f = io.open("/mnt/mmc", "r")
+        if f then
+             f:close()
              baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
         else
              local cwd = love.filesystem.getSource()
@@ -121,7 +232,6 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
 end
 
 function M.deleteGameMedia(romPath)
-    log("deleteGameMedia called with romPath: " .. tostring(romPath))
     local system = romPath:match("ROMS/([^/]+)/")
     if not system then return end
     
@@ -130,7 +240,10 @@ function M.deleteGameMedia(romPath)
     
     -- Base path for catalogue (usually on SD1 in muOS)
     local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
-    if not io.open("/mnt/mmc", "r") then
+    local f = io.open("/mnt/mmc", "r")
+    if f then
+        f:close()
+    else
         -- Simulator fallback
         local cwd = love.filesystem.getSource()
         if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
@@ -152,14 +265,12 @@ function M.deleteGameMedia(romPath)
 end
 
 function M.addToHistory(path, playedRoms)
-    log("addToHistory called with path: " .. tostring(path))
     playedRoms[path] = true
     M.saveHistory(playedRoms)
     return playedRoms
 end
 
 function M.saveLastPlayed(path)
-    log("saveLastPlayed called with path: " .. tostring(path))
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/last_played.txt", "w")
     if f then
@@ -169,7 +280,23 @@ function M.saveLastPlayed(path)
 end
 
 function M.resolveSecondary(item)
-    log("resolveSecondary called")
+    -- Permitir input de tipo string (ruta de carpeta)
+    if type(item) == "string" then
+        local path = item
+        if path == "" then return nil end
+        local target = nil
+        if path:find("/mnt/mmc") then
+            target = path:gsub("/mnt/mmc", "/mnt/sdcard", 1)
+        elseif path:find("/mnt/sdcard") then
+            target = path:gsub("/mnt/sdcard", "/mnt/mmc", 1)
+        end
+        if target then
+            local f = io.open(target, "r")
+            if f then f:close() return target end
+        end
+        return nil
+    end
+    if not item or not item.fullPath then return nil end
     if item.secondaryPath then return item.secondaryPath end
     
     local otherSD = ""
@@ -186,25 +313,37 @@ function M.resolveSecondary(item)
     
     local secondary = otherSD .. "/ROMS/" .. system .. "/" .. item.name
     
-    if io.open(secondary, "r") then
+    local f = io.open(secondary, "r")
+    if f then
+        f:close()
         return secondary
     end
     return nil
 end
 
 function M.getTargetSDPath(item, config)
-    log("getTargetSDPath called")
-    local targetSD = config.copyToSD2 and "sdcard" or "mmc"
-    if item.sourceLabel == "SD1" then
-        targetSD = "sdcard"
-    elseif item.sourceLabel == "SD2" then
-        targetSD = "mmc"
+    local targetSD = (config and config.copyToSD2) and "sdcard" or "mmc"
+    local targetLabel = (targetSD == "sdcard") and "SD2" or "SD1"
+    
+    local srcLabel = nil
+    if type(item) == "string" then
+        if item:find("/mnt/mmc") then srcLabel = "SD1"
+        elseif item:find("/mnt/sdcard") then srcLabel = "SD2" end
+    elseif item and item.sourceLabel then
+        srcLabel = item.sourceLabel
     end
-    return "/mnt/" .. targetSD
+
+    if srcLabel == "SD1" then
+        targetSD = "sdcard"
+        targetLabel = "SD2"
+    elseif srcLabel == "SD2" then
+        targetSD = "mmc"
+        targetLabel = "SD1"
+    end
+    return "/mnt/" .. targetSD, targetLabel
 end
 
 function M.saveHistory(playedRoms)
-    log("saveHistory called")
     local dataDir = love.filesystem.getSource() .. "/data"
     local f = io.open(dataDir .. "/played_roms.txt", "w")
     if f then
@@ -216,52 +355,71 @@ function M.saveHistory(playedRoms)
 end
 
 function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
-    log("saveScrapeResult called")
+    if not muosArtPath or muosArtPath == "" then
+        if log then log("Error: muosArtPath is empty. Cannot save art.") end
+        return
+    end
     if result and result.tempPath then
         local baseName = item.name:gsub("%..-$", "")
         
         -- Asegurar directorio de destino para boxart
-        love.filesystem.createDirectory(muosArtPath)
+        os.execute("mkdir -p '" .. muosArtPath .. "'")
         
         -- Mover archivo temporal a destino final para boxart
         local destPath = muosArtPath .. baseName .. ".png"
         local finalImagePath = destPath -- Guardamos ruta absoluta para el XML
         log("Saving boxart to: " .. destPath)
         
-        local success, content = love.filesystem.read(result.tempPath)
-        if success then
-            love.filesystem.write(destPath, content)
+        local inp = io.open(result.tempPath, "rb")
+        if inp then
+            local content = inp:read("*a")
+            inp:close()
+            local out = io.open(destPath, "wb")
+            if out then
+                out:write(content)
+                out:close()
+            else
+                log("Error writing boxart file: " .. destPath)
+            end
         else
-            log("Error reading temp boxart file: " .. result.tempPath .. " - " .. tostring(content))
+            log("Error reading temp boxart file: " .. result.tempPath)
         end
         
         -- Guardar descripción
         if result.description then
-            love.filesystem.createDirectory(muosTextPath)
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
             local txtPath = muosTextPath .. baseName .. ".txt"
             log("Saving description to: " .. txtPath)
-            love.filesystem.write(txtPath, result.description)
+            local f = io.open(txtPath, "w")
+            if f then f:write(result.description) f:close() end
         end
         
         -- Guardar año
         if result.year then
-            love.filesystem.createDirectory(muosTextPath)
+            os.execute("mkdir -p '" .. muosTextPath .. "'")
             local yearPath = muosTextPath .. baseName .. ".year"
             log("Saving year to: " .. yearPath)
-            love.filesystem.write(yearPath, result.year)
+            local f = io.open(yearPath, "w")
+            if f then f:write(result.year) f:close() end
         end
         
         -- Guardar screenshot (si existe carpeta preview)
         if result.tempScreenPath and muosPreviewPath ~= "" then
-            love.filesystem.createDirectory(muosPreviewPath)
+            os.execute("mkdir -p '" .. muosPreviewPath .. "'")
             local destScreen = muosPreviewPath .. baseName .. ".png"
             log("Saving preview to: " .. destScreen)
 
-            local successScr, contentScr = love.filesystem.read(result.tempScreenPath)
-            if successScr then
-                love.filesystem.write(destScreen, contentScr)
+            local inp = io.open(result.tempScreenPath, "rb")
+            if inp then
+                local content = inp:read("*a")
+                inp:close()
+                local out = io.open(destScreen, "wb")
+                if out then
+                    out:write(content)
+                    out:close()
+                end
             else
-                log("Error reading temp screenshot file: " .. result.tempScreenPath .. " - " .. tostring(contentScr))
+                log("Error reading temp screenshot file: " .. result.tempScreenPath)
             end
         end
         
@@ -277,7 +435,6 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
 end
 
 function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getSource, io_open, coroutine_create, coroutine_yield, table_insert, table_sort)
-    log("performCleanupScan called")
     cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false, currentFile = "" }
     
     local cleanupCoroutine = coroutine_create(function()
@@ -494,7 +651,6 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
 end
 
 function M.findSaveFiles(item)
-    log("findSaveFiles called")
     local saveFiles = {}
     local saveManagerSelection = 1
     local baseName = item.name:gsub("%..-$", "")
@@ -505,7 +661,9 @@ function M.findSaveFiles(item)
     -- Rutas comunes de guardado en muOS / RetroArch
     local searchPaths = {}
     
-    if io.open("/mnt/mmc", "r") then
+    local f = io.open("/mnt/mmc", "r")
+    if f then
+        f:close()
         table.insert(searchPaths, "/mnt/mmc/MUOS/save")
         table.insert(searchPaths, "/mnt/sdcard/MUOS/save")
         table.insert(searchPaths, "/mnt/mmc/MUOS/save/state")
@@ -554,12 +712,10 @@ function M.findSaveFiles(item)
     return saveFiles, saveManagerSelection
 end
 
-function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource, io_open, log, performBackgroundIndexing, isIndexing, indexStateMessage, validExtensions, json_encode, os_execute, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-    log("startIndexingProcess called")
+function M.checkIndex(romIndex, json_decode, love_filesystem_getSource, io_open, log)
     local dataDir = love_filesystem_getSource() .. "/data"
     local indexPath = dataDir .. "/rom_index.json"
     local tsPath = dataDir .. "/rom_timestamps.json"
-    local indexCoroutine = nil
 
     local indexFile = io_open(indexPath, "r")
     local tsFile = io_open(tsPath, "r")
@@ -567,9 +723,8 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
     if not indexFile or not tsFile then
         if indexFile then indexFile:close() end
         if tsFile then tsFile:close() end
-        log("No index found. Starting background indexing.")
-        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-        return romIndex, isIndexing, indexStateMessage, indexCoroutine
+        log("No index found. Indexing needed.")
+        return nil, true -- romIndex, needsIndexing
     end
 
     -- Si los archivos existen, comprobar timestamps
@@ -577,33 +732,45 @@ function M.startIndexingProcess(romIndex, json_decode, love_filesystem_getSource
     local tsContent = tsFile:read("*a")
     tsFile:close()
     local savedTimestamps = json_decode(tsContent)
-
-    for dir, saved_ts in pairs(savedTimestamps) do
-        local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
-        if h then
-            local current_ts = h:read("*a"):gsub("%s+", "")
-            h:close()
-            if current_ts ~= "" and current_ts ~= saved_ts then
-                log("Change detected in " .. dir .. ". Re-indexing.")
-                needsReindex = true
-                break
+    
+    if not savedTimestamps then
+        log("Timestamps file corrupted. Indexing needed.")
+        needsReindex = true
+    else
+        for dir, saved_ts in pairs(savedTimestamps) do
+            local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
+            if h then
+                local current_ts = h:read("*a"):gsub("%s+", "")
+                h:close()
+                if current_ts ~= "" and current_ts ~= saved_ts then
+                    log("Change detected in " .. dir .. ". Indexing needed.")
+                    needsReindex = true
+                    break
+                end
             end
         end
     end
 
     if needsReindex then
-        isIndexing, indexStateMessage, romIndex, indexCoroutine = performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
+        return nil, true
     else
         log("Index is up to date. Loading from file.")
         local indexContent = indexFile:read("*a")
         indexFile:close()
-        romIndex = json_decode(indexContent)
+        local decoded, pos, err = json_decode(indexContent)
+        if decoded then
+            romIndex = decoded
+            log("Index loaded successfully. Items: " .. #romIndex)
+            return romIndex, false
+        else
+            log("Error decoding index JSON: " .. tostring(err))
+            log("Corrupted index. Indexing needed.")
+            return nil, true
+        end
     end
-    return romIndex
 end
 
 function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSource, io_open)
-    log("removeFromIndex called with path: " .. tostring(path))
     if not romIndex then return romIndex end
     local i = 1
     while i <= #romIndex do
@@ -644,123 +811,12 @@ function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSourc
     return romIndex
 end
 
-function M.performBackgroundIndexing(isIndexing, indexStateMessage, romIndex, validExtensions, love_filesystem_getSource, json_encode, os_execute, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, createMergedVirtualRoot, isVirtualRoot, launchMode)
-    log("performBackgroundIndexing called")
-    isIndexing = true
-    indexStateMessage = "Iniciando escaneo..."
-
-    local indexCoroutine = coroutine_create(function()
-        local newIndex = {}
-        local fileMap = {} -- Key: stem -> index in newIndex
-        local romDirs = {}
-
-        local function scanRoot(rootPath)
-            if not io_open(rootPath, "r") then return end
-            table_insert(romDirs, rootPath)
-            
-            coroutine_yield("Escaneando: " .. rootPath)
-
-            local h = io.popen('find "'..rootPath..'" -type f')
-            if h then
-                local count = 0
-                for fLine in h:lines() do
-
-                    local filename = fLine:match("([^/]+)$")
-                    if filename and filename:sub(1, 1) ~= "." then
-                        local ext = filename:match("[^%.]+$")
-                        if ext and validExtensions[ext:lower()] then
-                            local stem = filename:gsub("%.[^%.]+$", "")
-                            local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                            if groupKey == "" then groupKey = stem end
-                            
-                            count = count + 1
-                            if count % 20 == 0 then
-                                coroutine_yield(filename)
-                            end
-                            
-                            local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
-
-                            if fileMap[groupKey] then
-                                local idx = fileMap[groupKey]
-                                local item = newIndex[idx]
-                                table_insert(item.versions, {
-                                    name = filename,
-                                    fullPath = fLine,
-                                    sourceLabel = sysName,
-                                    ext = ext,
-                                    system = sysName
-                                })
-                                item.sourceLabel = "Multi"
-                            else
-                                local newItem = {
-                                    name = groupKey,
-                                    isDir = false,
-                                    fullPath = fLine,
-                                    sourceLabel = sysName,
-                                    icon = nil, -- Iconos se cargan bajo demanda
-                                    versions = {{
-                                        name = filename,
-                                        fullPath = fLine,
-                                        sourceLabel = sysName,
-                                        ext = ext,
-                                        system = sysName
-                                    }}
-                                }
-                                table_insert(newIndex, newItem)
-                                fileMap[groupKey] = #newIndex
-                            end
-                        end
-                    end
-                end
-                h:close()
-            end
-        end
-
-        scanRoot("/mnt/mmc/ROMS/")
-        scanRoot("/mnt/sdcard/ROMS/")
-        -- Fallback Simulador
-        if #newIndex == 0 then
-            local cwd = love_filesystem_getSource()
-            if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            scanRoot(cwd .. "/../Simulador_SD/")
-        end
-
-        coroutine_yield("Ordenando y guardando...")
-
-        table_sort(newIndex, function(a, b) return a.name:lower() < b.name:lower() end)
-
-        -- Guardar índice en archivo
-        local dataDir = love_filesystem_getSource() .. "/data"
-        os_execute("mkdir -p " .. dataDir)
-        local f = io_open(dataDir .. "/rom_index.json", "w")
-        if f then
-            f:write(json_encode(romIndex))
-            f:close()
-        end
-
-        -- Guardar timestamps de los directorios
-        local timestamps = {}
-        for _, dir in ipairs(romDirs) do
-            local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
-            if h then timestamps[dir] = h:read("*a"):gsub("%s+", "") h:close() end
-        end
-        local f_ts = io_open(dataDir .. "/rom_timestamps.json", "w")
-        if f_ts then
-            f_ts:write(json_encode(timestamps))
-            f_ts:close()
-        end
-
-        return newIndex
-    end)
-    return isIndexing, indexStateMessage, romIndex, indexCoroutine
-end
-
-function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect)
-    log("createMergedVirtualRoot called")
+function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect, favoriteRoms, hideFavorites)
     files = {}
     isVirtualRoot = true
     romPath = "" -- Not a real path in this view
     secondaryPath = nil
+    local targetIndex = selectedIndex or 1
     selectedIndex = 1
 
     if launchMode == "Juego Unico" then
@@ -768,10 +824,24 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
             -- El índice está listo, úsalo.
             files = {}
             for _, item in ipairs(romIndex) do
-                -- Deep copy para evitar modificar el índice original con estados temporales (ej: .selected)
+                -- Shallow copy inicial
                 local copy = {}
                 for k, v in pairs(item) do copy[k] = v end
-                table.insert(files, copy)
+                
+                -- Filtrar versiones si hideFavorites está activo
+                if hideFavorites and favoriteRoms then
+                    local filteredVersions = {}
+                    for _, v in ipairs(copy.versions) do
+                        if not favoriteRoms[v.fullPath] then
+                            table.insert(filteredVersions, v)
+                        end
+                    end
+                    copy.versions = filteredVersions
+                end
+
+                if #copy.versions > 0 then
+                    table.insert(files, copy)
+                end
             end
         else
             -- El índice no está listo, se mostrará un mensaje de "cargando" en drawing.lua
@@ -782,12 +852,11 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
         -- MODO CARPETA: Listar Sistemas (Comportamiento original)
         local dirMap = {} 
         local function scanAndAdd(scanPath, label)
-            local f = io.open(scanPath, "r")
-            if not f then return end
-            f:close()
+            if log then log("Scanning root: " .. scanPath) end
 
             local handle = io.popen('ls -p "'..scanPath..'"')
             if handle then
+                local foundCount = 0
                 for line in handle:lines() do
                     if line:sub(-1) == "/" then
                         local dirName = line:sub(1, -2)
@@ -797,21 +866,79 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                                     files[dirMap[dirName]].sourceLabel = "SD½"
                                     files[dirMap[dirName]].secondaryPath = scanPath .. line
                                 else
-                                    local icon = getSystemIcon(dirName)
+                                    local icon = getSystemIcon and getSystemIcon(dirName) or nil
                                     table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
                                     dirMap[dirName] = #files
+                                    foundCount = foundCount + 1
                                 end
                             end
                         end
                     end
                 end
                 handle:close()
+                if log then log("Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
+            else
+                if log then log("Error: Failed to open pipe for " .. scanPath .. ". Trying os.execute fallback.") end
+                local tmpFile = "/tmp/filebernic_scan.txt"
+                os.execute('ls -p "'..scanPath..'" > '..tmpFile..' 2>/dev/null')
+                local f = io.open(tmpFile, "r")
+                if f then
+                    local foundCount = 0
+                    for line in f:lines() do
+                        if line:sub(-1) == "/" then
+                            local dirName = line:sub(1, -2)
+                            if dirName ~= "BIOS" and dirName ~= "Saves" then
+                                if not hideEmpty or M.hasRoms(scanPath .. line, validExtensions) then
+                                    if dirMap[dirName] then
+                                        files[dirMap[dirName]].sourceLabel = "SD½"
+                                        files[dirMap[dirName]].secondaryPath = scanPath .. line
+                                    else
+                                        local icon = getSystemIcon and getSystemIcon(dirName) or nil
+                                        table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
+                                        dirMap[dirName] = #files
+                                        foundCount = foundCount + 1
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    f:close()
+                    if log then log("os.execute Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
+                else
+                if log then log("Error: Failed to open pipe for " .. scanPath) end
+                -- Fallback: Intentar usar love.filesystem si io.popen falla
+                local items = love.filesystem.getDirectoryItems(scanPath)
+                if items then
+                    local foundCount = 0
+                    for _, item in ipairs(items) do
+                        local fullPath = scanPath .. item
+                        if love.filesystem.isDirectory(fullPath) then
+                            local dirName = item
+                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName:sub(1,1) ~= "." then
+                                if not hideEmpty or M.hasRoms(fullPath .. "/", validExtensions) then
+                                    if dirMap[dirName] then
+                                        files[dirMap[dirName]].sourceLabel = "SD½"
+                                        files[dirMap[dirName]].secondaryPath = fullPath
+                                    else
+                                        local icon = getSystemIcon and getSystemIcon(dirName) or nil
+                                        table.insert(files, {name = dirName, isDir = true, fullPath = fullPath, sourceLabel = label, icon = icon})
+                                        dirMap[dirName] = #files
+                                        foundCount = foundCount + 1
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if log then log("Fallback Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
+                end
+            end
             end
         end
 
         scanAndAdd("/mnt/mmc/ROMS/", "SD1")
         scanAndAdd("/mnt/sdcard/ROMS/", "SD2")
 
+        -- Fallback Simulador
         if #files == 0 then
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
@@ -827,18 +954,63 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     -- Sort files alphabetically by name
     table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
 
+    -- Insert Favorites folder if there are favorites
+    local hasFavorites = false
+    if favoriteRoms then for k,v in pairs(favoriteRoms) do hasFavorites = true break end end
+    
+    if hasFavorites and not hideFavorites then
+        table.insert(files, 1, {
+            name = "Favoritos",
+            isDir = true,
+            fullPath = "@Favorites/",
+            isFavorites = true
+        })
+    end
+
     -- After sorting, find the item to select
     if pathToSelect then
-        local systemToSelect = pathToSelect:match("ROMS/([^/]+)/") or pathToSelect:match("Simulador_SD/([^/]+)/")
-        if systemToSelect then
+        if pathToSelect == "@Favorites/" then
             for i, item in ipairs(files) do
-                if item.name == systemToSelect then
+                if item.name == "Favoritos" then
                     selectedIndex = i
                     break
                 end
             end
         end
+        if launchMode == "Juego Unico" then
+             for i, item in ipairs(files) do
+                 if item.fullPath == pathToSelect then
+                     selectedIndex = i
+                     break
+                 end
+                 if item.versions then
+                     for _, v in ipairs(item.versions) do
+                         if v.fullPath == pathToSelect then
+                             selectedIndex = i
+                             break
+                         end
+                     end
+                 end
+                 if selectedIndex == i then break end
+             end
+        else
+            local systemToSelect = pathToSelect:match("ROMS/([^/]+)/") or pathToSelect:match("Simulador_SD/([^/]+)/")
+            if systemToSelect then
+                for i, item in ipairs(files) do
+                    if item.name == systemToSelect then
+                        selectedIndex = i
+                        break
+                    end
+                end
+            end
+        end
+    else
+        selectedIndex = targetIndex
     end
+
+    -- Ensure selectedIndex is within bounds
+    if selectedIndex < 1 then selectedIndex = 1 end
+    if selectedIndex > #files then selectedIndex = math.max(1, #files) end
 
     -- Back up the full list
     allFiles = {}
@@ -849,19 +1021,12 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     return files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles
 end
 
-
-
 function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
-    log("updateSystemPaths called")
+    local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
     
-    local detectedSystem, muosArtPath, muosTextPath, muosPreviewPath
-    
-    -- Create a temporary item-like table to pass to the existing logic
-    local tempItem = { fullPath = romPath }
-    
-    -- Reuse the logic from updateSystemForFile
-    detectedSystem, muosArtPath, muosTextPath, muosPreviewPath = M.updateSystemForFile(tempItem, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
-    
+    local muosArtPath = ""
+    local muosTextPath = ""
+    local muosPreviewPath = ""
     local currentSystemIcon = nil
     local currentSystemContentIcon = nil
 
@@ -869,6 +1034,22 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
         systemName = detectedSystem
         log("System detected: " .. systemName)
         
+        local baseMuosPath = ""
+        local f = io.open("/mnt/mmc", "r")
+        if f then
+             f:close()
+             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
+        else
+             local cwd = love.filesystem.getSource()
+             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+             local simPath = cwd .. "/../Simulador_SD/"
+             baseMuosPath = simPath .. "MUOS/info/catalogue/"
+        end
+        muosArtPath = baseMuosPath .. systemName .. "/box/"
+        muosTextPath = baseMuosPath .. systemName .. "/text/"
+        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+        -- Year is stored in text path with .year extension
+
         -- Buscar grupo de variantes para el sistema detectado
         local variants = utils.getSystemVariants(systemName)
         log("Variant group found for: " .. systemName)
@@ -902,14 +1083,62 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
     return systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon
 end
 
-function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles)
-    log("refreshFiles called")
+function M.fixPathCase(path)
+    if not path or path == "" then return path end
+    
+    -- Detectar si estamos en una ruta de sistema (ROMS/Sys/ o Simulador_SD/Sys/)
+    local prefix, sys, suffix = path:match("^(.*ROMS/)([^/]+)(/.*)$")
+    if not prefix then
+        prefix, sys, suffix = path:match("^(.*Simulador_SD/)([^/]+)(/.*)$")
+    end
+    
+    if prefix and sys then
+        -- Listar el directorio padre para encontrar el nombre real (con mayúsculas correctas)
+        local h = io.popen('ls -p "'..prefix..'" 2>/dev/null')
+        if h then
+            for line in h:lines() do
+                if line:sub(-1) == "/" then
+                    local realDir = line:sub(1, -2)
+                    if realDir:lower() == sys:lower() and realDir ~= sys then
+                        h:close()
+                        return prefix .. realDir .. suffix
+                    end
+                end
+            end
+            h:close()
+        end
+    end
+    return path
+end
+
+function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, log, favoriteRoms, hideFavorites)
     updateSystemPaths()
+    if romPath and romPath ~= "" and romPath:sub(-1) ~= "/" then romPath = romPath .. "/" end
     files = {}
     selectedFilesCount = 0
 
-    local lowerRomPath = romPath:lower()
-    local currentSystem = lowerRomPath:match("roms/([^/]+)/") or lowerRomPath:match("simulador_sd/([^/]+)/")
+    if romPath == "@Favorites/" then
+        for path, _ in pairs(favoriteRoms) do
+            local name = path:match("([^/]+)$")
+            local stem = name:gsub("%.[^%.]+$", "")
+            local system = path:match("ROMS/([^/]+)/") or path:match("Simulador_SD/([^/]+)/")
+            table.insert(files, {
+                name = stem,
+                fullPath = path,
+                isDir = false,
+                system = system,
+                sourceLabel = "Fav"
+            })
+        end
+        table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
+        if selectedIndex < 1 then selectedIndex = 1 end
+        if selectedIndex > #files then selectedIndex = math.max(1, #files) end
+        allFiles = {}
+        for _, item in ipairs(files) do table.insert(allFiles, item) end
+        return files, selectedFilesCount, selectedIndex, allFiles
+    end
+
+    local currentSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
 
     local fileMap = {} -- Key: filename (Folder mode) or stem (Juego Unico mode)
 
@@ -924,20 +1153,27 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
         else
             -- Listado estándar de directorio actual
             handle = io.popen('ls -p "'..path..'"')
+            if log then log("Scanning dir: " .. path) end
         end
 
         if handle then
             for line in handle:lines() do
+                -- if log then log("Found item: " .. line) end
                 local isDirectory = not isFind and (line:sub(-1) == "/")
                 local cleanName = isFind and line:match("([^/]+)$") or (isDirectory and line:sub(1, -2) or line)
                 local fullPath = isFind and line or (path .. line)
 
                 -- Filtrar archivos ocultos y asegurar nombre válido
-                if cleanName and cleanName:sub(1, 1) ~= "." then
+                if cleanName and cleanName:sub(1, 1) ~= "." and cleanName ~= "MUOS" and cleanName ~= "BIOS" and cleanName ~= "Saves" and cleanName ~= "System Volume Information" then
                 local ext = cleanName:match("[^%.]+$")
                 if isDirectory or (ext and validExtensions[ext:lower()]) then
                     local skip = false
                     if isDirectory and hideEmpty and not M.hasRoms(fullPath, validExtensions) then
+                        skip = true
+                        if log then log("Skipping empty dir: " .. cleanName) end
+                    end
+
+                    if not isDirectory and hideFavorites and favoriteRoms and favoriteRoms[fullPath] then
                         skip = true
                     end
 
@@ -963,7 +1199,6 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
                                     name = cleanName,
                                     fullPath = fullPath,
                                     sourceLabel = label,
-                                    ext = ext,
                                     system = system
                                 })
                                 item.sourceLabel = "Multi"
@@ -974,13 +1209,18 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
                         else
                             local newItem = {name = (not isDirectory and launchMode == "Juego Unico") and stem or cleanName, isDir = isDirectory, fullPath = fullPath, sourceLabel = label, system = not isDirectory and currentSystem or nil}
                             if not isDirectory and launchMode == "Juego Unico" then
-                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, ext = ext, system = system}}
+                                newItem.versions = {{name = cleanName, fullPath = fullPath, sourceLabel = label, system = system}}
                             end
                             table.insert(files, newItem)
                             fileMap[key] = #files
+                            -- if log then log("Added to list: " .. newItem.name) end
                         end
                     end
+                else
+                    if log then log("Skipping invalid ext/dir: " .. cleanName) end
                 end
+                else
+                    if log then log("Skipping filtered: " .. cleanName) end
                 end
             end
             handle:close()
@@ -1005,6 +1245,92 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
     end
 
     return files, selectedFilesCount, selectedIndex, allFiles
+end
+
+function M.logDeletion(path, json_encode, json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local logPath = dataDir .. "/deleted_roms.json"
+    
+    local logData = {}
+    local f = io.open(logPath, "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content and content ~= "" then
+            logData = json_decode(content) or {}
+        end
+    end
+    
+    table.insert(logData, {
+        date = os.date("%Y-%m-%d %H:%M:%S"),
+        path = path
+    })
+    
+    local f = io.open(logPath, "w")
+    if f then
+        f:write(json_encode(logData, {indent = true}))
+        f:close()
+    end
+end
+
+function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_encode, love_filesystem_getSource, io_open)
+    -- Crear una copia limpia de los archivos sin Userdata (imágenes) para el JSON
+    
+    -- Optimización: En modo Virtual Root (Juego Unico), guardar solo una ventana alrededor del cursor
+    local startIdx = 1
+    local endIdx = #files
+    local savedIndex = selectedIndex
+
+    if isVirtualRoot and #files > 100 then
+        startIdx = math.max(1, selectedIndex - 25)
+        endIdx = math.min(#files, selectedIndex + 25)
+        savedIndex = selectedIndex - startIdx + 1
+    end
+
+    local cache = {
+        romPath = romPath,
+        selectedIndex = savedIndex,
+        isVirtualRoot = isVirtualRoot,
+        files = {}
+    }
+    
+    for i = startIdx, endIdx do
+        local item = files[i]
+        local cleanItem = {}
+        for k, v in pairs(item) do
+            -- Excluir iconos y cualquier otro userdata
+            if type(v) ~= "userdata" then
+                cleanItem[k] = v
+            end
+        end
+        table.insert(cache.files, cleanItem)
+    end
+    
+    local dataDir = love_filesystem_getSource() .. "/data"
+    local f = io_open(dataDir .. "/view_cache.json", "w")
+    if f then
+        f:write(json_encode(cache))
+        f:close()
+    end
+end
+
+function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSystemIcon, getSystemContentIcon)
+    local path = love_filesystem_getSource() .. "/data/view_cache.json"
+    local f = io_open(path, "r")
+    if not f then return nil, nil, nil end
+    
+    local content = f:read("*a")
+    f:close()
+    
+    local cache = json_decode(content)
+    if not cache or not cache.files then return nil, nil, nil end
+    
+    -- Restaurar iconos básicos
+    for _, item in ipairs(cache.files) do
+        if item.isDir and getSystemIcon then item.icon = getSystemIcon(item.name) end
+    end
+    
+    return cache.files, cache.selectedIndex, cache.romPath, cache.isVirtualRoot
 end
 
 return M
