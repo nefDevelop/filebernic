@@ -259,6 +259,34 @@ function love.load()
         end
     end
     iconRom = State.iconRom
+
+    State.fadeShader = love.graphics.newShader([[
+        extern vec4 backgroundColor;
+        extern float fadeWidth;
+        extern float imageXCoord;
+        extern float imageWidthCoord;
+        extern float imageOpacity;
+
+        vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
+            vec4 pixel = Texel(texture, texture_coords);
+            
+            // Adjust pixel opacity first
+            pixel.a *= imageOpacity;
+
+            float distFromLeft = screen_coords.x - imageXCoord;
+            float alphaFactor = clamp(distFromLeft / fadeWidth, 0.0, 1.0);
+            
+            // Blend pixel color with background color based on alphaFactor
+            pixel.rgb = mix(backgroundColor.rgb, pixel.rgb, alphaFactor);
+            
+            // Final pixel alpha is a blend of background alpha and pixel alpha, weighted by alphaFactor
+            // Not directly fading to background alpha, but to transparent if pixel alpha is 0
+            pixel.a = mix(backgroundColor.a, pixel.a, alphaFactor); 
+            
+            return pixel;
+        }
+    ]])
+    fadeShader = State.fadeShader
     
     -- Initialize globals used in update/drawing to prevent nil errors
     menuAnim = 0

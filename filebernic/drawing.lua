@@ -963,13 +963,16 @@ local function drawGrid(w, h)
         local y = startY + r * cellH
         local item = files[i]
         
+        local cornerRadius = 8
+        local itemPadding = 5
+        
         -- Fondo selección
         if i == selectedIndex then
             love.graphics.setColor(theme.colors.selection_accent)
-            love.graphics.rectangle("fill", x + 5, y + 8, cellW - 10, cellH - 5, 5)
+            love.graphics.rectangle("fill", x + itemPadding, y + itemPadding, cellW - (2 * itemPadding), cellH - (2 * itemPadding), cornerRadius)
         end
         
-        local contentWidth = cellW - 10
+        local contentWidth = cellW - (2 * itemPadding)
 
         local imageToDraw = nil
         if not item.isDir then
@@ -988,11 +991,11 @@ local function drawGrid(w, h)
         -- Dibujar imagen o icono
         if imageToDraw then
             love.graphics.setColor(1, 1, 1)
-            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50) / imageToDraw:getHeight())
+            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50 - (2 * itemPadding)) / imageToDraw:getHeight())
             local imgW = imageToDraw:getWidth() * scale
             local imgH = imageToDraw:getHeight() * scale
-            local ix = x + 5 + (contentWidth - imgW) / 2
-            local iy = y + 10 + ((cellH - 50) - imgH) / 2
+            local ix = x + itemPadding + (contentWidth - imgW) / 2
+            local iy = y + itemPadding + ((cellH - 50 - (2 * itemPadding)) - imgH) / 2
             love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
@@ -1005,11 +1008,11 @@ local function drawGrid(w, h)
                 if not icon then icon = currentSystemContentIcon or iconRom end
             end
             
-            local availableH = cellH - 45 -- Espacio disponible restando texto y márgenes
-            local availableW = cellW - 10
+            local availableH = cellH - 45 - (2 * itemPadding) -- Espacio disponible restando texto y márgenes
+            local availableW = cellW - (2 * itemPadding)
             local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.85
-            local ix = x + (cellW - icon:getWidth()*scale)/2
-            local iy = y + 5 + (availableH - icon:getHeight()*scale)/2
+            local ix = x + itemPadding + (availableW - icon:getWidth()*scale)/2
+            local iy = y + itemPadding + (availableH - icon:getHeight()*scale)/2
             love.graphics.draw(icon, ix, iy, 0, scale, scale)
         end
         
@@ -1037,7 +1040,7 @@ local function drawGrid(w, h)
         local textBlockHeight = textFont:getHeight() * numLines
         local textY = y + cellH - 40 + (40 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(textToPrint, x + 5, textY, contentWidth, "center")
+        love.graphics.printf(textToPrint, x + itemPadding, textY, contentWidth, "center")
     end
 end
 
@@ -1100,16 +1103,37 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             local checkPath = item.fullPath or (romPath .. item.name)
             local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
             
+        local cornerRadius = 8
+        local itemPadding = 5
+
+        local cornerRadius = 8
+        local itemPadding = 5
+
+        -- Calculate visible range based on State.scroll
+        local firstVisibleItem = math.floor(State.scroll / layout.rowHeight) + 1
+        local lastVisibleItem = math.min(#files, firstVisibleItem + pageSize)
+
+        for i = firstVisibleItem, lastVisibleItem do
+            local y = layout.listY + (i - 1) * layout.rowHeight - State.scroll
+            local item = files[i]
+            
+            -- Verificar si es el último juego jugado
+            local checkPath = item.fullPath or (romPath .. item.name)
+            local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
+            
+            local rectX = 15 + itemPadding
+            local rectY = y + itemPadding
+            local rectW = layout.selWidth - (2 * itemPadding)
+            local rectH = layout.rowHeight - (2 * itemPadding)
+
             if i == selectedIndex then
-                -- Cursor gris claro
                 love.graphics.setColor(0.9, 0.9, 0.9)
-                love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
-                -- Texto e iconos en negro
-                love.graphics.setColor(0, 0, 0)
+                love.graphics.rectangle("fill", rectX, rectY, rectW, rectH, cornerRadius)
+                love.graphics.setColor(0, 0, 0) -- Texto e iconos en negro
             else
                 if isLastPlayed and markPlayed then
                     love.graphics.setColor(theme.colors.list_played_unselected)
-                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, layout.selWidth, layout.selHeight, 4)
+                    love.graphics.rectangle("fill", rectX, rectY, rectW, rectH, cornerRadius)
                 end
                 love.graphics.setColor(theme.colors.text_medium)
             end
@@ -1117,7 +1141,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             
             if item.empty then
                 love.graphics.setColor(theme.colors.text_disabled)
-                love.graphics.printf(item.name, 55, y, layout.selWidth - 10, "left")
+                love.graphics.printf(item.name, 55 + itemPadding, y + itemPadding, layout.selWidth - 10 - (2 * itemPadding), "left")
             else
                 if item.selected then
                     love.graphics.setColor(theme.colors.selection_accent)
@@ -1130,8 +1154,8 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     drawScale = (layout.rowHeight * 0.8) / iconToDraw:getHeight()
                 end
                 
-                local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
-                love.graphics.draw(iconToDraw, 25, drawY, 0, drawScale, drawScale)
+                local drawY = y + itemPadding + (rectH - iconToDraw:getHeight() * drawScale) / 2
+                love.graphics.draw(iconToDraw, 25 + itemPadding, drawY, 0, drawScale, drawScale)
                 
                 local availableWidth
                 if launchMode == "Juego Unico" then
@@ -1151,7 +1175,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     if totalW < 0 then totalW = 0 end
                     
                     local startX = layout.scrollbarX - totalW - 5
-                    availableWidth = startX - 55 - 10
+                    availableWidth = startX - (55 + itemPadding) - 10
                 else
                     -- Calcular etiqueta SD
                     local label = item.sourceLabel
@@ -1164,7 +1188,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     if label then labelWidth = fontList:getWidth(label) end
                     
                     -- Calcular espacio disponible para el nombre: Ancho total - icono(55) - label - padding(5)
-                    availableWidth = layout.selWidth - 55 - labelWidth - 5
+                    availableWidth = layout.selWidth - (55 + itemPadding) - labelWidth - 5
                 end
 
                 local nameToDraw = item.name
@@ -1177,13 +1201,13 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 
                 -- Centrar el texto verticalmente en la fila
-                local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
+                local textY = y + itemPadding + (rectH - fontList:getHeight()) / 2
                 
                 if i == selectedIndex then
-                    love.graphics.print(nameToDraw, 55, textY)
-                    love.graphics.print(nameToDraw, 56, textY)
+                    love.graphics.print(nameToDraw, 55 + itemPadding, textY)
+                    love.graphics.print(nameToDraw, 56 + itemPadding, textY)
                 else
-                    love.graphics.print(nameToDraw, 55, textY)
+                    love.graphics.print(nameToDraw, 55 + itemPadding, textY)
                 end
 
                 if launchMode == "Juego Unico" then
@@ -1209,7 +1233,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         if icon then
                             love.graphics.setColor(1, 1, 1)
                             local scale = iconSize / icon:getHeight()
-                            love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
+                            love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + itemPadding + (rectH - iconSize)/2, 0, scale, scale)
                         end
                     end
                 else
@@ -1230,7 +1254,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                         local r, g, b = love.graphics.getColor()
                         love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
                     end
-                    love.graphics.printf(label, sdColX, y, sdColW, "center")
+                    love.graphics.printf(label, sdColX, y + itemPadding, sdColW, "center")
                     end
                 end
             end
@@ -1247,20 +1271,41 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
         -- Boxart (Frontal)
         if currentImage then
             local scale = previewBoxW / currentImage:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
             local imgW = currentImage:getWidth() * scale
+            local imgH = currentImage:getHeight() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            
+            -- Set up and apply shader for fade effect
+            love.graphics.setShader(fadeShader)
+            fadeShader:send("backgroundColor", {theme.colors.background[1], theme.colors.background[2], theme.colors.background[3], 1.0}) -- Background color with opaque alpha
+            fadeShader:send("fadeWidth", 50.0) -- Fade width in pixels
+            fadeShader:send("imageXCoord", imgX)
+            fadeShader:send("imageWidthCoord", imgW)
+            fadeShader:send("imageOpacity", 0.3) -- Overall opacity of the image
+            
             love.graphics.draw(currentImage, imgX, previewY, 0, scale, scale)
-            previewY = previewY + (currentImage:getHeight() * scale) + 15
+            love.graphics.setShader() -- Reset shader
+            
+            previewY = previewY + imgH + 15
         end
 
         -- Screenshot (Pantalla)
         if currentScreenshot then
             local scale = previewBoxW / currentScreenshot:getWidth()
-            love.graphics.setColor(theme.colors.text_white)
             local imgW = currentScreenshot:getWidth() * scale
+            local imgH = currentScreenshot:getHeight() * scale
             local imgX = previewBoxX + (previewBoxW - imgW) / 2
+            
+            -- Set up and apply shader for fade effect
+            love.graphics.setShader(fadeShader)
+            fadeShader:send("backgroundColor", {theme.colors.background[1], theme.colors.background[2], theme.colors.background[3], 1.0}) -- Background color with opaque alpha
+            fadeShader:send("fadeWidth", 50.0) -- Fade width in pixels
+            fadeShader:send("imageXCoord", imgX)
+            fadeShader:send("imageWidthCoord", imgW)
+            fadeShader:send("imageOpacity", 0.3) -- Overall opacity of the image
+            
             love.graphics.draw(currentScreenshot, imgX, previewY, 0, scale, scale)
+            love.graphics.setShader() -- Reset shader
         end
     end
 end
@@ -1446,6 +1491,12 @@ local function draw()
         love.graphics.setColor(theme.colors.selection_accent[1], theme.colors.selection_accent[2], theme.colors.selection_accent[3], alpha)
         love.graphics.circle("fill", w - 20, 20, 6)
     end
+
+    -- Draw Clock
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.text_bright)
+    local currentTime = os.date("%H:%M")
+    love.graphics.print(currentTime, 10, 10)
 
     drawHelpOverlay()
 end
