@@ -1121,6 +1121,23 @@ local function drawGrid(w, h)
     local cellW = availableW / cols
     local cellH = (h - startY - 40) / rows -- Ajustamos altura de celda al nuevo espacio
     
+    -- Dibujar imagen de fondo global con dithering (basada en selección)
+    local bgImage = currentScreenshot or currentImage
+    if bgImage then
+        local scale = h / bgImage:getHeight()
+        love.graphics.setColor(1, 1, 1, 0.15) -- Más translúcido
+        local imgW = bgImage:getWidth() * scale
+        local imgX = w - imgW
+        love.graphics.draw(bgImage, imgX, 0, 0, scale, scale)
+        
+        local r, g, b = unpack(theme.colors.background)
+        love.graphics.setColor(r, g, b, 1)
+        ditherShader:send("objPos", {imgX, 0})
+        love.graphics.setShader(ditherShader)
+        love.graphics.draw(getFadeGradientMesh(), imgX, 0, 0, imgW, h)
+        love.graphics.setShader()
+    end
+
     -- Calcular fila inicial para scroll
     local currentRow = math.ceil(selectedIndex / cols)
     local startRow = math.max(1, currentRow - rows + 1)
@@ -1151,7 +1168,6 @@ local function drawGrid(w, h)
         local contentWidth = cellW - 20 -- Más margen lateral (elementos más pequeños)
 
         local imageToDraw = nil
-        local screenToDraw = nil
         if not item.isDir then
             local base = item.name:gsub("%..-$", "")
             
@@ -1169,25 +1185,7 @@ local function drawGrid(w, h)
             if artPathForItem then
                 local path = artPathForItem .. base .. ".png"
                 imageToDraw = loader:getImage(path)
-                
-                local prevPath = artPathForItem:gsub("/box/", "/preview/")
-                local scrPath = prevPath .. base .. ".png"
-                screenToDraw = loader:getImage(scrPath)
             end
-        end
-
-        -- Dibujar screenshot de fondo con dithering
-        if screenToDraw then
-            love.graphics.setColor(1, 1, 1, 0.3)
-            local sScale = math.min(cellW / screenToDraw:getWidth(), cellH / screenToDraw:getHeight())
-            local sW = screenToDraw:getWidth() * sScale
-            local sH = screenToDraw:getHeight() * sScale
-            local sX = x + (cellW - sW) / 2
-            local sY = y + (cellH - sH) / 2
-            ditherShader:send("objPos", {sX, sY})
-            love.graphics.setShader(ditherShader)
-            love.graphics.draw(screenToDraw, sX, sY, 0, sScale, sScale)
-            love.graphics.setShader()
         end
 
         -- Dibujar imagen o icono
@@ -1198,7 +1196,13 @@ local function drawGrid(w, h)
             local imgH = imageToDraw:getHeight() * scale
             local ix = x + 10 + (contentWidth - imgW) / 2
             local iy = y + 10 + ((cellH - 80) - imgH) / 2
+            
+            love.graphics.stencil(function()
+                love.graphics.rectangle("fill", ix, iy, imgW, imgH, 8)
+            end, "replace", 1)
+            love.graphics.setStencilTest("greater", 0)
             love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
+            love.graphics.setStencilTest()
         else
             love.graphics.setColor(1, 1, 1)
             local icon = item.icon
