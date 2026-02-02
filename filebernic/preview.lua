@@ -8,9 +8,10 @@ local utils = require "utils"
 local M = {}
 
 function M.load()
-    -- Clear current preview data immediately to show loading state
-    currentImage = nil
-    currentScreenshot = nil
+    -- Mark current images as invalid to trigger fade out
+    imageInvalid = true
+    screenshotInvalid = true
+    
     currentYear = nil
     currentDescription = ""
     

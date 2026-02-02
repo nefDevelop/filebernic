@@ -33,6 +33,7 @@ itemToDelete = nil
 lastPlayedRom = ""
 playedRoms = {}
 iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil
+currentImageAlpha, currentScreenshotAlpha, imageInvalid, screenshotInvalid = 0, 0, false, false
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
 inputCooldown = 0 -- Temporizador para evitar doble input

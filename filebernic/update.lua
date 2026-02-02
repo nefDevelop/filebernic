@@ -43,14 +43,22 @@ local function update(dt)
                 local imgFile = artPathForSystem .. baseName .. ".png"
                 local loadedImage = loader:getImage(imgFile)
                 if loadedImage then
-                    currentImage = loadedImage
+                    if currentImage ~= loadedImage then
+                        currentImage = loadedImage
+                        currentImageAlpha = 0
+                    end
+                    imageInvalid = false
                 end
 
                 -- Actualizar currentScreenshot
                 local scrFile = previewPathForSystem .. baseName .. ".png"
                 local loadedScreenshot = loader:getImage(scrFile)
                 if loadedScreenshot then
-                    currentScreenshot = loadedScreenshot
+                    if currentScreenshot ~= loadedScreenshot then
+                        currentScreenshot = loadedScreenshot
+                        currentScreenshotAlpha = 0
+                    end
+                    screenshotInvalid = false
                 end
 
                 -- Actualizar currentDescription
@@ -68,6 +76,20 @@ local function update(dt)
                 end
             end
         end
+    end
+
+    if imageInvalid then
+        currentImageAlpha = math.max(0, currentImageAlpha - dt * 5)
+        if currentImageAlpha == 0 then currentImage = nil end
+    elseif currentImage then
+        currentImageAlpha = math.min(1, currentImageAlpha + dt * 5)
+    end
+
+    if screenshotInvalid then
+        currentScreenshotAlpha = math.max(0, currentScreenshotAlpha - dt * 5)
+        if currentScreenshotAlpha == 0 then currentScreenshot = nil end
+    elseif currentScreenshot then
+        currentScreenshotAlpha = math.min(1, currentScreenshotAlpha + dt * 5)
     end
 
     if (state == "OPTIONS_MENU" or state == "DELETE_MENU" or state == "SCRAPER_OPTIONS" or state == "INFO_VIEW") and not closingMenu then

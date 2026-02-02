@@ -485,14 +485,14 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
     if currentImage then
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Frontal", startX, contentY, coverW, "center")
-        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.setColor(1, 1, 1, alpha * currentImageAlpha)
         love.graphics.draw(currentImage, startX, imagesY, 0, coverScale, coverScale)
     end
     if currentScreenshot then
         local drawX = startX + (currentImage and (coverW + spacing) or 0)
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Screen", drawX, contentY, screenW, "center")
-        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.setColor(1, 1, 1, alpha * currentScreenshotAlpha)
         love.graphics.draw(currentScreenshot, drawX, imagesY, 0, screenScale, screenScale)
     end
 
@@ -1124,8 +1124,12 @@ local function drawGrid(w, h)
     -- Dibujar imagen de fondo global con dithering (basada en selección)
     local bgImage = currentScreenshot or currentImage
     if bgImage then
+        local alpha = 1
+        if bgImage == currentScreenshot then alpha = currentScreenshotAlpha
+        elseif bgImage == currentImage then alpha = currentImageAlpha end
+        
         local scale = h / bgImage:getHeight()
-        love.graphics.setColor(1, 1, 1, 0.15) -- Más translúcido
+        love.graphics.setColor(1, 1, 1, 0.15 * alpha) -- Más translúcido
         local imgW = bgImage:getWidth() * scale
         local imgX = w - imgW
         love.graphics.draw(bgImage, imgX, 0, 0, scale, scale)
@@ -1190,7 +1194,9 @@ local function drawGrid(w, h)
 
         -- Dibujar imagen o icono
         if imageToDraw then
-            love.graphics.setColor(1, 1, 1)
+            if not item.alpha then item.alpha = 0 end
+            item.alpha = math.min(1, item.alpha + love.timer.getDelta() * 5)
+            love.graphics.setColor(1, 1, 1, item.alpha)
             local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 80) / imageToDraw:getHeight())
             local imgW = imageToDraw:getWidth() * scale
             local imgH = imageToDraw:getHeight() * scale
@@ -1204,6 +1210,7 @@ local function drawGrid(w, h)
             love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
             love.graphics.setStencilTest()
         else
+            item.alpha = 0 -- Reset alpha if image is lost/loading
             love.graphics.setColor(1, 1, 1)
             local icon = item.icon
             if not icon and item.isDir then
@@ -1388,8 +1395,12 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
         if showPreview then
             local bgImage = currentScreenshot or currentImage
             if bgImage then
+                local alpha = 1
+                if bgImage == currentScreenshot then alpha = currentScreenshotAlpha
+                elseif bgImage == currentImage then alpha = currentImageAlpha end
+
                 local scale = h / bgImage:getHeight()
-                love.graphics.setColor(1, 1, 1, 0.15) -- Más translúcido
+                love.graphics.setColor(1, 1, 1, 0.15 * alpha) -- Más translúcido
                 local imgW = bgImage:getWidth() * scale
                 local imgX = w - imgW
                 love.graphics.draw(bgImage, imgX, 0, 0, scale, scale)
