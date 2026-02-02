@@ -1572,7 +1572,9 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 else
                     love.graphics.setColor(1, 1, 1, 1)
                 end
-                love.graphics.draw(iconToDraw, 50, drawY, 0, drawScale, drawScale)
+                local iconW = iconToDraw:getWidth() * drawScale
+                local iconX = 30 + (70 - iconW) / 2
+                love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
                 love.graphics.setColor(tr, tg, tb, ta) -- Restaurar color del texto
 
                 if fontList:getWidth(nameToDraw) > availableWidth then
