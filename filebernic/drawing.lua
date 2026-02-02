@@ -171,7 +171,7 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         isGameOptions = true
         local name = message
         mainName = name
-        local pStart = name:find("%(")
+        local pStart = name:find("%s*%(") -- find parenthesis with optional space
         if pStart then
             mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
         end
@@ -181,11 +181,10 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
     if isGameOptions then
         -- Header Personalizado para Juego
         local name = message
-        local mainName = name:gsub("%s*$", "")
-        mainName = mainName:gsub("%.[^%.]+$", "") -- Quitar extensión del título
+        local mainName = name:gsub("%.[^%.]+$", ""):gsub("%s*$", "") -- Quitar extensión y espacios
         local extraInfo = ""
         
-        local pStart = name:find("%(")
+        local pStart = name:find("%s*%(")
         if pStart then
             mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
             extraInfo = name:sub(pStart)
@@ -193,48 +192,41 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         
         local headerY = 25
         local baseTextX = x + 20
+        local titleX = baseTextX
         
         love.graphics.setFont(fontTitle)
         
         -- Lógica para carátula a la izquierda del título
-        local coverW = 0
-        local titleX = baseTextX
+        local coverW, coverH = 0, 0
+        local titleAvailW = w - 40 -- Ancho total del panel menos paddings laterales
+        local maxCoverW = 80
         
-        -- 1. Calcular ancho disponible para el título, asumiendo un espacio para la carátula
-        local totalAvailW = w - 40 - (iconWidth > 0 and (iconWidth + 10) or 0)
-        local titleAvailW = totalAvailW
-        local coverPlaceholderW = 0
         if currentImage then
-            -- Reservar un espacio para la carátula para calcular el alto del texto
-            coverPlaceholderW = 90 -- 80px ancho + 10px margen
-            titleAvailW = totalAvailW - coverPlaceholderW - 10
+            titleX = baseTextX + maxCoverW + 10
+            titleAvailW = w - (baseTextX - x) - (maxCoverW + 10) - 20 -- panel_width - left_margin - cover_width - cover_margin - right_margin
         end
 
-        -- 2. Obtener el texto del título envuelto y su altura
+        -- Obtener el texto del título envuelto y su altura
         local _, wrappedMain = fontTitle:getWrap(mainName, titleAvailW)
         local visibleLines = math.min(#wrappedMain, 2)
         local mainH = visibleLines * fontTitle:getHeight()
         
-        -- 3. Dibujar la carátula (Tamaño fijo/máximo, no depende del texto)
-        local coverH = 0
+        -- Dibujar la carátula
         if currentImage then
             love.graphics.setColor(1, 1, 1)
-            local maxH = 120 -- Altura máxima en cabecera
-            local maxW = 80  -- Ancho máximo en cabecera
-            local coverScale = math.min(maxW / currentImage:getWidth(), maxH / currentImage:getHeight())
+            local maxH = 120
+            local coverScale = math.min(maxCoverW / currentImage:getWidth(), maxH / currentImage:getHeight())
             
             coverW = currentImage:getWidth() * coverScale
             coverH = currentImage:getHeight() * coverScale
             
             -- Centrar imagen en su slot de 80px
-            love.graphics.draw(currentImage, baseTextX + (maxW - coverW)/2, headerY, 0, coverScale, coverScale)
-            titleX = baseTextX + maxW + 10
+            love.graphics.draw(currentImage, baseTextX + (maxCoverW - coverW)/2, headerY, 0, coverScale, coverScale)
         end
         
-        -- 4. Dibujar el texto del título
+        -- Dibujar el texto del título
         love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
         
-        -- Centrar texto verticalmente respecto a la imagen si el texto es más corto
         local textStartY = headerY
         if coverH > mainH then
             textStartY = headerY + (coverH - mainH) / 2
@@ -243,22 +235,17 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         for i = 1, visibleLines do
             local line = wrappedMain[i]
             if i == visibleLines and #wrappedMain > visibleLines then
+                while fontTitle:getWidth(line .. "...") > titleAvailW and #line > 0 do
+                    line = line:sub(1, -2)
+                end
                 line = line .. "..."
             end
             love.graphics.print(line, titleX, textStartY + (i-1)*fontTitle:getHeight())
         end
+        -- Calcular la altura total del contenido para el encabezado
+        local contentH = math.max(mainH, coverH)
         
-        -- 5. Dibujar el icono del sistema a la derecha
-        -- if sysIcon then
-        --     local iconScale = iconSize / sysIcon:getHeight()
-        --     love.graphics.setColor(1, 1, 1, alpha)
-        --     love.graphics.draw(sysIcon, x + w - 20 - iconWidth, headerY, 0, iconScale, iconScale)
-        -- end
-        
-        -- 6. Calcular la altura total del contenido para el encabezado
-        local contentH = math.max(iconSize, mainH, coverH)
-        
-        -- 7. Preparar y dibujar el nuevo subtítulo
+        -- Preparar y dibujar el nuevo subtítulo
         local regionInfo = extraInfo:gsub("%.[^%.]+$", "") -- quitar extensión
         local displayName = utils.getSystemDisplayName(sysName)
         local newSubtitle = (displayName or "Sistema Desconocido") .. " " .. regionInfo
@@ -266,9 +253,10 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         if newSubtitle:gsub("%s+", "") ~= "" then
             love.graphics.setFont(fontSmall)
             love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
-            love.graphics.printf(newSubtitle, x + 20, headerY + contentH + 5, w - 40, "left")
+            local subtitleY = headerY + contentH + 5
+            love.graphics.printf(newSubtitle, x + 20, subtitleY, w - 40, "left")
             local _, wrappedExtra = fontSmall:getWrap(newSubtitle, w - 40)
-            startY = headerY + contentH + 5 + (#wrappedExtra * fontSmall:getHeight()) + 20
+            startY = subtitleY + (#wrappedExtra * fontSmall:getHeight()) + 20
         else
             startY = headerY + contentH + 20
         end
@@ -378,21 +366,20 @@ local function calculateMenuWidth(title, message, options, item, isGameOptions)
     end
 
     local mainName = title
-    local iconWidth = 0 -- Simplificación: no calculamos ancho de icono de sistema aquí para layout básico
     local coverSpace = 0
     
     if isGameOptions and message then
         -- Usar el nombre real del juego para el cálculo, no "Opciones"
         local name = message
-        mainName = name:gsub("%s*$", "")
-        mainName = mainName:gsub("%.[^%.]+$", "")
-        local pStart = name:find("%(")
+        mainName = name:gsub("%.[^%.]+$", ""):gsub("%s*$", "")
+        local pStart = name:find("%s*%(")
         if pStart then
             mainName = name:sub(1, pStart - 1):gsub("%s*$", "")
         end
         
         if currentImage then
-            coverSpace = 100 -- Espacio reservado para carátula + margen
+            -- Espacio reservado para carátula (80px) + margen (10px)
+            coverSpace = 90
         end
     end
     
@@ -401,7 +388,9 @@ local function calculateMenuWidth(title, message, options, item, isGameOptions)
     -- Ancho mínimo mayor si hay carátula para que no quede apretado
     local minW = (isGameOptions and currentImage) and 320 or 200
     
-    return math.min(w * 0.8, math.max(minW, optionsMaxW + 60, titleRequiredW))
+    local calculatedW = math.max(minW, optionsMaxW + 60, titleRequiredW)
+    
+    return math.min(w * 0.75, calculatedW)
 end
 
 local function drawHelpPanel(x, w, h, alpha)
@@ -458,42 +447,67 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
     love.graphics.printf(subtitle, x, y + 55, w, "center")
 
     local contentY = y + 100
-    local imagesY = contentY + fontMedium:getHeight() + 5
+    local imagesY = contentY + fontMedium:getHeight() + 15
     local availableH = h - imagesY - 40 - 120
     
     local spacing = 20
     local coverW, screenW = 0, 0
-    local coverScale, screenScale = 1, 1
+    local coverScale, screenScale = 0, 0
+    local finalImageH = 0
+
+    if currentImage and currentScreenshot then
+        local ar1 = currentImage:getWidth() / currentImage:getHeight()
+        local ar2 = currentScreenshot:getWidth() / currentScreenshot:getHeight()
+        local totalAvailW = w - 40
+        
+        -- Calcular la altura si las imágenes llenaran el ancho disponible
+        local heightForWidth = (totalAvailW - spacing) / (ar1 + ar2)
+        
+        -- La altura final es el mínimo entre el espacio vertical y el calculado para el ancho
+        finalImageH = math.min(availableH, heightForWidth)
+        
+        coverScale = finalImageH / currentImage:getHeight()
+        screenScale = finalImageH / currentScreenshot:getHeight()
+    elseif currentImage then
+        coverScale = math.min(1, availableH / currentImage:getHeight())
+        local maxW = w - 40
+        if currentImage:getWidth() * coverScale > maxW then
+            coverScale = maxW / currentImage:getWidth()
+        end
+        finalImageH = currentImage:getHeight() * coverScale
+    elseif currentScreenshot then
+        screenScale = math.min(1, availableH / currentScreenshot:getHeight())
+        local maxW = w - 40
+        if currentScreenshot:getWidth() * screenScale > maxW then
+            screenScale = maxW / currentScreenshot:getWidth()
+        end
+        finalImageH = currentScreenshot:getHeight() * screenScale
+    end
 
     if currentImage then
-        coverScale = math.min(1, availableH / currentImage:getHeight())
-        local maxW = (w - 40 - spacing) / 2
-        if currentImage:getWidth() * coverScale > maxW then coverScale = maxW / currentImage:getWidth() end
         coverW = currentImage:getWidth() * coverScale
     end
     if currentScreenshot then
-        screenScale = math.min(1, availableH / currentScreenshot:getHeight())
-        local maxW = (w - 40 - spacing) / 2
-        if currentScreenshot:getWidth() * screenScale > maxW then screenScale = maxW / currentScreenshot:getWidth() end
         screenW = currentScreenshot:getWidth() * screenScale
     end
 
     local totalW = coverW + (currentImage and currentScreenshot and spacing or 0) + screenW
     local startX = x + (w - totalW) / 2
+    local drawY = imagesY + (availableH - finalImageH) / 2
     
     love.graphics.setFont(fontMedium)
     if currentImage then
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Frontal", startX, contentY, coverW, "center")
         love.graphics.setColor(1, 1, 1, alpha * currentImageAlpha)
-        love.graphics.draw(currentImage, startX, imagesY, 0, coverScale, coverScale)
+        love.graphics.draw(currentImage, startX, drawY, 0, coverScale, coverScale)
     end
     if currentScreenshot then
         local drawX = startX + (currentImage and (coverW + spacing) or 0)
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Screen", drawX, contentY, screenW, "center")
         love.graphics.setColor(1, 1, 1, alpha * currentScreenshotAlpha)
-        love.graphics.draw(currentScreenshot, drawX, imagesY, 0, screenScale, screenScale)
+        love.graphics.draw(currentScreenshot, drawX, drawY, 0, screenScale, screenScale)
     end
 
     local textY = imagesY + availableH + 15
@@ -1649,10 +1663,45 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
 
     -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado (Overlay)
     if files[selectedIndex] then
-        local rawName = files[selectedIndex].name
+        local item = files[selectedIndex]
+        local rawName = item.name
         local nameNoExt = rawName:gsub("%.[^%.]+$", "")
         
-        if #nameNoExt > 25 then
+        -- Recalcular el ancho disponible para el texto para decidir si mostrar el overlay
+        local availableWidth
+        local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
+
+        if showSystemIcons then
+            local systems = {}
+            local seen = {}
+            if item.versions then
+                for _, v in ipairs(item.versions) do
+                    if v.system and not seen[v.system] then
+                        seen[v.system] = true
+                        table.insert(systems, v.system)
+                    end
+                end
+            end
+            local iconSize = 20
+            local spacing = 2
+            local totalW = #systems * (iconSize + spacing) - spacing
+            if totalW < 0 then totalW = 0 end
+            
+            local startX = layout.scrollbarX - totalW - 5
+            availableWidth = startX - 85 - 10
+        else
+            availableWidth = layout.selWidth - 75
+        end
+
+        local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+        if isFav then
+            local favH = 16
+            local favScale = favH / iconFavorite:getHeight()
+            local favOffset = (iconFavorite:getWidth() * favScale) + 5
+            availableWidth = availableWidth - favOffset
+        end
+        
+        if fontList:getWidth(nameNoExt) > availableWidth then
             love.graphics.setFont(fontMedium)
             local width, wrapped = fontMedium:getWrap(nameNoExt, w - 20)
             local textH = #wrapped * fontMedium:getHeight()
