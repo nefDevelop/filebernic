@@ -111,9 +111,9 @@ function Loader:getImage(path)
     return nil
   end
 
-  if type(data) == 'userdata' and data:typeOf('Image') then
+  if (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('Image') then
     return data -- Already a decoded, cached image.
-  elseif type(data) == 'userdata' and data:typeOf('FileData') then
+  elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
     -- The FileData is ready. Try to decode it as an Image.
     local success, imageData = pcall(love.image.newImageData, data)
     if success then
@@ -144,7 +144,7 @@ function Loader:getText(path)
 
   if type(data) == 'string' then
     return data -- Already a decoded, cached string.
-  elseif type(data) == 'userdata' and data:typeOf('FileData') then
+  elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
     -- The FileData is ready. Decode it as a string.
     local content = data:getString()
     self.cache[path] = content -- Cache the final string.

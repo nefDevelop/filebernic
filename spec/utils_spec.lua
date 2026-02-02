@@ -95,27 +95,27 @@ describe("filebernic.utils", function()
     end)
 
     it("should extract system from fullPath (roms)", function()
-      local item = { fullPath = "/roms/SNES/game.zip" }
-      assert.are.equal("snes", utils.getSystemNameForItem(item))
+      local item = { fullPath = "/mnt/mmc/ROMS/SNES/game.zip" }
+      assert.are.equal("SNES", utils.getSystemNameForItem(item))
     end)
 
     it("should extract system from fullPath (simulador_sd)", function()
-      local item = { fullPath = "/simulador_sd/GBA/game.zip" }
-      assert.are.equal("gba", utils.getSystemNameForItem(item))
+      local item = { fullPath = "/Simulador_SD/GBA/game.zip" }
+      assert.are.equal("GBA", utils.getSystemNameForItem(item))
     end)
 
     it("should use global systemName as a fallback when not in virtual root", function()
       _G.isVirtualRoot = false
       _G.systemName = "GBC"
       local item = {}
-      assert.are.equal("GBC", utils.getSystemNameForItem(item))
+      assert.are.equal("GBC", utils.getSystemNameForItem(item, "GBC", false))
     end)
 
     it("should not use global systemName if isVirtualRoot is true", function()
       _G.isVirtualRoot = true
       _G.systemName = "GBC"
       local item = {}
-      assert.is.falsy(utils.getSystemNameForItem(item))
+      assert.is.falsy(utils.getSystemNameForItem(item, _G.systemName, _G.isVirtualRoot))
     end)
 
     it("should extract system from file extension as a last resort", function()

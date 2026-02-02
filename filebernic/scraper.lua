@@ -38,7 +38,7 @@ function M.getScrapeResults(item, config, log, systemName)
 
     -- 2. TheGamesDB
     if config.scraperApi == "all" or config.scraperApi == "thegamesdb" then
-        local apikey = config.thegamesdb_apikey
+        local apikey = config.thegamesdb_apikey or ""
         
         local skipTGDB = false
         if apikey == "" then
@@ -164,7 +164,7 @@ function M.getScrapeResults(item, config, log, systemName)
                          screenshotPath = tempScreenPath,
                          tempScreenPath = tempScreenPath,
                          description = "Libretro no proporciona descripciones.",
-                         region = "Libretro: " .. fullName,
+                         region = "Libretro (" .. label .. "): " .. fullName,
                          tempPath = tempImgPath,
                          source = "Libretro"
                      })

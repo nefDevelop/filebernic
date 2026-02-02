@@ -1,7 +1,14 @@
 package.path = "./filebernic/?.lua;" .. package.path
 
+_G.love = {
+  filesystem = {
+    getSource = function() end
+  }
+}
+
 describe("State", function()
   local State = require("filebernic.state")
+  local json = require("libs.dkjson")
   local mock_love_fs = { source = "/mock/source" }
   local mock_io = {}
   local mock_os = {}
@@ -35,7 +42,7 @@ describe("State", function()
     io.open = function(path, mode)
       if mode == "w" then
         return {
-          write = function(content) mock_io.written_files[path] = content end,
+          write = function(self, content) mock_io.written_files[path] = content end,
           close = function() end
         }
       elseif mode == "r" then
@@ -50,14 +57,14 @@ describe("State", function()
     end
   end)
 
-  after_each(function() {
+  after_each(function()
     -- Restore
     love.filesystem.getSource = original_love_fs_getSource
     io.open = original_io_open
     os.execute = original_os_execute
     json.encode = original_json_encode
     json.decode = original_json_decode
-  })
+  end)
 
   describe("saveAppState", function()
     it("should create data directory", function()
@@ -77,19 +84,19 @@ describe("State", function()
       assert.are.equal("ROMS/NES", mock_json.encoded_data.romPath)
     end)
 
-    it("should normalize /mnt/sdcard/ROMS/ paths", function() {
+    it("should normalize /mnt/sdcard/ROMS/ paths", function()
       local path = "/mnt/sdcard/ROMS/SNES"
       State.saveAppState(path, 1, false, true, "list", "auto", false)
       assert.are.equal("ROMS/SNES", mock_json.encoded_data.romPath)
-    })
+    end)
 
-    it("should normalize Simulador_SD paths", function() {
+    it("should normalize Simulador_SD paths", function()
       local path = "/some/path/Simulador_SD/GBA"
       State.saveAppState(path, 1, false, true, "list", "auto", false)
       assert.are.equal("ROMS/GBA", mock_json.encoded_data.romPath)
     end)
 
-    it("should save all state fields correctly", function() {
+    it("should save all state fields correctly", function()
       State.saveAppState("/path", 123, true, false, "grid", "manual", true)
       local data = mock_json.encoded_data
       assert.are.equal("/path", data.romPath)
@@ -102,10 +109,10 @@ describe("State", function()
     end)
   end)
 
-  describe("loadConfig", function() {
+  describe("loadConfig", function()
     local defaultConfig = { theme = "dark", volume = 10 }
 
-    it("should load and merge config from existing file", function() {
+    it("should load and merge config from existing file", function()
       mock_io.read_files["/mock/source/data/config.json"] = "json_content"
       mock_json.decoded_data = { theme = "light", show_hidden = true }
       
@@ -116,12 +123,12 @@ describe("State", function()
       assert.is_true(config.show_hidden) -- Added from loaded
     end)
 
-    it("should return defaults if config file does not exist", function() {
+    it("should return defaults if config file does not exist", function()
       local config = State.loadConfig(defaultConfig)
       assert.are.same(defaultConfig, config)
     end)
 
-    it("should create a new config file with defaults if it does not exist", function() {
+    it("should create a new config file with defaults if it does not exist", function()
       State.loadConfig(defaultConfig)
       -- Check that it was written
       assert.is_not_nil(mock_io.written_files["/mock/source/data/config.json"])
