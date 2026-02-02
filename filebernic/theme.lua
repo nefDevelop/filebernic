@@ -24,8 +24,8 @@ theme.colors = {
     side_menu_separator = {0.3, 0.3, 0.3},
 
     list_selection = {0.2, 0.4, 0.8},
-    list_played_selected = {0.2, 0.7, 0.3},
-    list_played_unselected = {0.2, 0.7, 0.3, 0.4},
+    list_played_selected = {0.05, 0.35, 0.1},
+    list_played_unselected = {0.05, 0.35, 0.1},
     
     selection_accent = {0.2, 0.6, 1}, -- Used for menus and selected file text
     

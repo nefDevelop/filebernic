@@ -5,8 +5,9 @@ local utils = require "utils"
 local unpack = table.unpack or unpack
 
 local ditherShader = love.graphics.newShader[[
+    extern vec2 objPos;
     vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
-        vec2 p = floor(screen_coords.xy / 3.0);
+        vec2 p = floor((screen_coords.xy - objPos) / 3.0);
         int x = int(mod(p.x, 4.0));
         int y = int(mod(p.y, 4.0));
         float t = 0.0;
@@ -1114,9 +1115,11 @@ end
 local function drawGrid(w, h)
     local cols = gridCols
     local rows = 3
-    local cellW = w / cols
-    local cellH = (h - 110) / rows -- Restar header/footer (Aumentado margen inferior para evitar solape y texto)
-    local startY = 50
+    local startY = 80 -- Bajamos el inicio para no pisar "Todos los sistemas"
+    local marginX = 30
+    local availableW = w - (marginX * 2)
+    local cellW = availableW / cols
+    local cellH = (h - startY - 40) / rows -- Ajustamos altura de celda al nuevo espacio
     
     -- Calcular fila inicial para scroll
     local currentRow = math.ceil(selectedIndex / cols)
@@ -1131,13 +1134,24 @@ local function drawGrid(w, h)
         local r = math.floor(relIndex / cols)
         local c = relIndex % cols
         
-        local x = c * cellW
+        local x = marginX + c * cellW
         local y = startY + r * cellH
         local item = files[i]
         
-        local contentWidth = cellW - 10
+        local checkPath = item.fullPath or (romPath .. item.name)
+        local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
+        local playedSystem = item.system
+
+        if launchMode == "Juego Unico" and item.versions then
+             for _, v in ipairs(item.versions) do
+                 if playedRoms[v.fullPath] then isLastPlayed = true playedSystem = v.system break end
+             end
+        end
+
+        local contentWidth = cellW - 20 -- Más margen lateral (elementos más pequeños)
 
         local imageToDraw = nil
+        local screenToDraw = nil
         if not item.isDir then
             local base = item.name:gsub("%..-$", "")
             
@@ -1155,17 +1169,35 @@ local function drawGrid(w, h)
             if artPathForItem then
                 local path = artPathForItem .. base .. ".png"
                 imageToDraw = loader:getImage(path)
+                
+                local prevPath = artPathForItem:gsub("/box/", "/preview/")
+                local scrPath = prevPath .. base .. ".png"
+                screenToDraw = loader:getImage(scrPath)
             end
+        end
+
+        -- Dibujar screenshot de fondo con dithering
+        if screenToDraw then
+            love.graphics.setColor(1, 1, 1, 0.3)
+            local sScale = math.min(cellW / screenToDraw:getWidth(), cellH / screenToDraw:getHeight())
+            local sW = screenToDraw:getWidth() * sScale
+            local sH = screenToDraw:getHeight() * sScale
+            local sX = x + (cellW - sW) / 2
+            local sY = y + (cellH - sH) / 2
+            ditherShader:send("objPos", {sX, sY})
+            love.graphics.setShader(ditherShader)
+            love.graphics.draw(screenToDraw, sX, sY, 0, sScale, sScale)
+            love.graphics.setShader()
         end
 
         -- Dibujar imagen o icono
         if imageToDraw then
             love.graphics.setColor(1, 1, 1)
-            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 50) / imageToDraw:getHeight())
+            local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 80) / imageToDraw:getHeight())
             local imgW = imageToDraw:getWidth() * scale
             local imgH = imageToDraw:getHeight() * scale
-            local ix = x + 5 + (contentWidth - imgW) / 2
-            local iy = y + 10 + ((cellH - 50) - imgH) / 2
+            local ix = x + 10 + (contentWidth - imgW) / 2
+            local iy = y + 10 + ((cellH - 80) - imgH) / 2
             love.graphics.draw(imageToDraw, ix, iy, 0, scale, scale)
         else
             love.graphics.setColor(1, 1, 1)
@@ -1182,8 +1214,8 @@ local function drawGrid(w, h)
                 if not icon then icon = currentSystemContentIcon or iconRom end
             end
             
-            local availableH = cellH - 45 -- Espacio disponible restando texto y márgenes
-            local availableW = cellW - 10
+            local availableH = cellH - 65 -- Menos altura disponible para el icono
+            local availableW = cellW - 20
             local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.7
             local ix = x + (cellW - icon:getWidth()*scale)/2
             local iy = y + 5 + (availableH - icon:getHeight()*scale)/2
@@ -1208,7 +1240,11 @@ local function drawGrid(w, h)
                 local sys = systems[idx]
                 local sIcon = utils.getSystemIcon(sys)
                 if sIcon then
-                    love.graphics.setColor(1, 1, 1, 0.9)
+                    if isLastPlayed and markPlayed and sys == playedSystem then
+                        love.graphics.setColor(0.2, 0.8, 0.3) -- Verde más brillante para que se vea el icono
+                    else
+                        love.graphics.setColor(1, 1, 1, 0.9)
+                    end
                     local scale = iconSize / sIcon:getHeight()
                     love.graphics.draw(sIcon, iconX - iconSize, iconY, 0, scale, scale)
                     iconX = iconX - iconSize - 2
@@ -1219,7 +1255,7 @@ local function drawGrid(w, h)
         -- Fondo selección (Dibujado DESPUÉS de la imagen para que esta quede al fondo)
         if i == selectedIndex then
             love.graphics.setColor(1, 1, 1, 0.2) -- Blanco translúcido
-            love.graphics.rectangle("fill", x + 5, y + 7, cellW - 10, cellH - 3, 20)
+            love.graphics.rectangle("fill", x + 2, y + 2, cellW - 4, cellH - 2, 15)
         end
 
         -- Texto
@@ -1248,9 +1284,24 @@ local function drawGrid(w, h)
 
         local numLines = (#wrappedLines >= 2) and 2 or 1
         local textBlockHeight = textFont:getHeight() * numLines
-        local textY = y + cellH - 40 + (40 - textBlockHeight) / 2
+        local textY = y + cellH - 50 + (50 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
         love.graphics.printf(textToPrint, x + 5, textY, contentWidth, "center")
+
+        if isLastPlayed and markPlayed and launchMode ~= "Juego Unico" then
+             local pIcon = iconRom
+             local sys = playedSystem
+             if not sys then sys = utils.getSystemNameForItem(item) end
+             if sys then pIcon = utils.getSystemIcon(sys) or iconRom end
+             
+             local iconSize = 24
+             local iconX = x + cellW - iconSize - 8
+             local iconY = y + cellH - 40 - iconSize
+             
+             love.graphics.setColor(0.2, 0.8, 0.3) -- Verde más brillante para que se vea el icono
+             local scale = iconSize / pIcon:getHeight()
+             love.graphics.draw(pIcon, iconX, iconY, 0, scale, scale)
+        end
     end
 end
 
@@ -1341,6 +1392,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 
                 local r, g, b = unpack(theme.colors.background)
                 love.graphics.setColor(r, g, b, 1)
+                ditherShader:send("objPos", {imgX, 0})
                 love.graphics.setShader(ditherShader)
                 love.graphics.draw(getFadeGradientMesh(), imgX, 0, 0, imgW, h)
                 love.graphics.setShader()
@@ -1361,13 +1413,8 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             if item.empty then
                 love.graphics.setColor(theme.colors.text_disabled)
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
-                love.graphics.printf(item.name, 85, textY, layout.selWidth - 80, "left")
+                love.graphics.printf(item.name, 100, textY, layout.selWidth - 80, "left")
             else
-                if item.selected then
-                    love.graphics.setColor(theme.colors.selection_accent)
-                else
-                    love.graphics.setColor(1, 1, 1, 1) -- Resetear color para evitar que el selector afecte al siguiente icono
-                end
                 
                 local iconToDraw = item.icon
                 if not iconToDraw and item.isDir then
@@ -1389,7 +1436,6 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 
                 local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
-                love.graphics.draw(iconToDraw, 35, drawY, 0, drawScale, drawScale)
                 
                 local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
 
@@ -1424,7 +1470,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     availableWidth = layout.selWidth - 75
                 end
 
-                local textX = 85
+                local textX = 100
                 local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
                 local favOffset = 0
 
@@ -1448,7 +1494,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 local currentSelWidth = layout.selWidth
                 if launchMode == "Folder" then
                     local textW = fontList:getWidth(nameToDraw)
-                    -- Text starts at 85. Selector starts at 15. Width = (85 - 15) + textW + padding(20)
+                    -- Text starts at 100. Selector starts at 30. Width = (100 - 30) + textW + padding(20)
                     currentSelWidth = 70 + favOffset + textW + 20
                     if currentSelWidth > layout.selWidth then currentSelWidth = layout.selWidth end
                 end
@@ -1456,7 +1502,26 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 -- Fondo selección (Dibujado DESPUÉS del icono pero ANTES del texto)
                 if i == selectedIndex then
                     love.graphics.setColor(1, 1, 1, 0.1) -- Blanco más translúcido
-                    love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                    love.graphics.rectangle("fill", 30, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                    
+                    if isLastPlayed and markPlayed then
+                        love.graphics.setColor(theme.colors.list_played_selected)
+                        local inset = 4
+                        local rx = 30 + inset
+                        local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
+                        local rw = currentSelWidth - (inset * 2)
+                        local rh = layout.selHeight - (inset * 2)
+                        
+                        love.graphics.stencil(function()
+                            love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
+                        end, "replace", 1)
+                        love.graphics.setStencilTest("greater", 0)
+                        ditherShader:send("objPos", {rx, ry})
+                        love.graphics.setShader(ditherShader)
+                        love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
+                        love.graphics.setShader()
+                        love.graphics.setStencilTest()
+                    end
                     
                     -- Configurar color de texto para seleccionado
                     if item.pendingDelete then
@@ -1467,12 +1532,33 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 else
                     if isLastPlayed and markPlayed then
                         love.graphics.setColor(theme.colors.list_played_unselected)
+                        local inset = 4
+                        local rx = 30 + inset
+                        local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
+                        local rw = currentSelWidth - (inset * 2)
+                        local rh = layout.selHeight - (inset * 2)
+                        love.graphics.stencil(function()
+                            love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
+                        end, "replace", 1)
+                        love.graphics.setStencilTest("greater", 0)
+                        ditherShader:send("objPos", {rx, ry})
                         love.graphics.setShader(ditherShader)
-                        love.graphics.rectangle("fill", 15, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                        love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
                         love.graphics.setShader()
+                        love.graphics.setStencilTest()
                     end
                     love.graphics.setColor(theme.colors.text_medium)
                 end
+
+                -- Dibujar icono después del fondo/resaltado para que quede encima
+                local tr, tg, tb, ta = love.graphics.getColor() -- Guardar color del texto
+                if item.selected then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                else
+                    love.graphics.setColor(1, 1, 1, 1)
+                end
+                love.graphics.draw(iconToDraw, 50, drawY, 0, drawScale, drawScale)
+                love.graphics.setColor(tr, tg, tb, ta) -- Restaurar color del texto
 
                 if fontList:getWidth(nameToDraw) > availableWidth then
                     while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
@@ -1593,7 +1679,7 @@ local function draw()
     
     -- Layout dinámico
     -- Scrollbar fija a la derecha
-    local scrollbarMargin = 10
+    local scrollbarMargin = 20
     layout.scrollbarX = w - scrollbarMargin
     
     -- Columna SD (derecha de la imagen, izquierda del scroll)
@@ -1632,9 +1718,9 @@ local function draw()
     end
 
     if launchMode == "Juego Unico" then
-        layout.selWidth = layout.scrollbarX - 15
+        layout.selWidth = layout.scrollbarX - 30
     else
-        layout.selWidth = sdColX - 20
+        layout.selWidth = sdColX - 30
     end
 
     -- Mensaje de indexación en "Modo Único" si el índice no está listo
