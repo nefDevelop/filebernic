@@ -819,13 +819,14 @@ local function drawScraperView()
 end
 
 local function drawScrollbar()
+    local scrollW = 2
     love.graphics.setColor(theme.colors.scrollbar_background)
-    love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, 4, layout.scrollbarH)
+    love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, scrollW, layout.scrollbarH)
     if #files > 1 then
         local h = layout.scrollbarH / (#files / 14)
         local y = layout.listY + ((selectedIndex - 1) / (#files - 1)) * (layout.scrollbarH - h)
         love.graphics.setColor(theme.colors.scrollbar_handle)
-        love.graphics.rectangle("fill", layout.scrollbarX, y, 4, math.max(10, h))
+        love.graphics.rectangle("fill", layout.scrollbarX, y, scrollW, math.max(10, h))
     end
 end
 
@@ -1366,7 +1367,27 @@ local function drawJumpLetter()
     love.graphics.print(jumpLetter, drawX, drawY, 0, scale, scale, textW / 2, textH / 2)
 end
 
+local internetStatus = false
+local lastInternetCheck = -10
+
 local function drawBattery(x, y)
+    local now = love.timer.getTime()
+    if now - lastInternetCheck > 5 then
+        lastInternetCheck = now
+        local f = io.open("/sys/class/net/wlan0/operstate", "r")
+        if f then
+            local status = f:read("*a")
+            f:close()
+            internetStatus = (status and status:match("up")) ~= nil
+        else
+            internetStatus = false
+        end
+    end
+
+    if internetStatus then love.graphics.setColor(theme.colors.text_white)
+    else love.graphics.setColor(theme.colors.text_disabled) end
+    love.graphics.circle("fill", x - 26 - 8, y + 7, 3)
+
     local state, percent = love.system.getPowerInfo()
     -- Si no se detecta batería (PC/Simulador), mostramos 100% para visualizar el icono
     if state == "nobattery" or not percent then
@@ -1485,7 +1506,8 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local totalW = #systems * (iconSize + spacing) - spacing
                     if totalW < 0 then totalW = 0 end
                     
-                    local startX = layout.scrollbarX - totalW - 20
+                    local cursorRight = layout.selX + layout.selWidth
+                    local startX = cursorRight - totalW - 20
                     availableWidth = startX - 85 - 10
                 else
                     -- Calcular etiqueta SD
@@ -1496,10 +1518,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     end
                     
                     -- Calcular espacio disponible para el nombre: Ancho total - offset(70) - padding(5)
-                    availableWidth = layout.selWidth - 75
+                    availableWidth = sdColX - (layout.selX + 70) - 10
                 end
 
-                local textX = 100
+                local textX = layout.selX + 70
                 local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
                 local favOffset = 0
 
@@ -1531,12 +1553,12 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 -- Fondo selección (Dibujado DESPUÉS del icono pero ANTES del texto)
                 if i == selectedIndex then
                     love.graphics.setColor(1, 1, 1, 0.1) -- Blanco más translúcido
-                    love.graphics.rectangle("fill", 30, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
+                    love.graphics.rectangle("fill", layout.selX, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
                     
                     if isLastPlayed and markPlayed then
                         love.graphics.setColor(theme.colors.list_played_selected)
                         local inset = 4
-                        local rx = 30 + inset
+                        local rx = layout.selX + inset
                         local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
                         local rw = currentSelWidth - (inset * 2)
                         local rh = layout.selHeight - (inset * 2)
@@ -1562,7 +1584,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     if isLastPlayed and markPlayed then
                         love.graphics.setColor(theme.colors.list_played_unselected)
                         local inset = 4
-                        local rx = 30 + inset
+                        local rx = layout.selX + inset
                         local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
                         local rw = currentSelWidth - (inset * 2)
                         local rh = layout.selHeight - (inset * 2)
@@ -1587,7 +1609,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     love.graphics.setColor(1, 1, 1, 1)
                 end
                 local iconW = iconToDraw:getWidth() * drawScale
-                local iconX = 30 + (70 - iconW) / 2
+                local iconX = layout.selX + (70 - iconW) / 2
                 love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
                 love.graphics.setColor(tr, tg, tb, ta) -- Restaurar color del texto
 
@@ -1624,7 +1646,8 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local iconSize = 20
                     local spacing = 2
                     local totalW = #systems * (iconSize + spacing) - spacing
-                    local startX = layout.scrollbarX - totalW - 20
+                    local cursorRight = layout.selX + layout.selWidth
+                    local startX = cursorRight - totalW - 20
                     
                     for idx, sys in ipairs(systems) do
                         local icon = utils.getSystemIcon(sys)
@@ -1687,10 +1710,11 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             local totalW = #systems * (iconSize + spacing) - spacing
             if totalW < 0 then totalW = 0 end
             
-            local startX = layout.scrollbarX - totalW - 20
+            local cursorRight = layout.selX + layout.selWidth
+            local startX = cursorRight - totalW - 20
             availableWidth = startX - 85 - 10
         else
-            availableWidth = layout.selWidth - 75
+            availableWidth = sdColX - (layout.selX + 70) - 10
         end
 
         local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
@@ -1745,12 +1769,17 @@ local function draw()
     
     -- Layout dinámico
     -- Scrollbar fija a la derecha
-    local scrollbarMargin = 20
-    layout.scrollbarX = w - scrollbarMargin
+    layout.scrollbarX = w - 2
+    layout.scrollbarH = h - layout.listY - 30
     
-    -- Columna SD (derecha de la imagen, izquierda del scroll)
+    local margin = 30
+    layout.selX = margin
+    layout.selWidth = (w - margin) - layout.selX
+
+    -- Columna SD (alineada a la derecha dentro del cursor)
     local sdColW = 40
-    local sdColX = layout.scrollbarX - sdColW - 5
+    local cursorRight = layout.selX + layout.selWidth
+    local sdColX = cursorRight - sdColW - 20
     
     local showPreview = (currentImage ~= nil or currentScreenshot ~= nil)
     local previewBoxW = 200 -- Valor por defecto
@@ -1781,12 +1810,6 @@ local function draw()
     local previewBoxX = sdColX - previewBoxW - 10
     if romPath == "@Favorites/" then
          previewBoxX = layout.scrollbarX - previewBoxW - 10
-    end
-
-    if launchMode == "Juego Unico" then
-        layout.selWidth = layout.scrollbarX - 30
-    else
-        layout.selWidth = sdColX - 30
     end
 
     -- Mensaje de indexación en "Modo Único" si el índice no está listo
