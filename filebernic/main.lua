@@ -75,6 +75,7 @@ searchQuery = ""
 menuStack = {}
 focusedItem = nil
 allFiles = {}
+previewItem = nil -- For storing the item whose preview is being displayed
 -- Indexing
 romIndex = nil
 isIndexing = false

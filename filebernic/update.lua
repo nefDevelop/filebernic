@@ -15,10 +15,13 @@ local function update(dt)
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     
     -- Lógica para actualizar las variables de previsualización de forma asíncrona
-    local item = focusedItem
+    -- Use previewItem as the source of truth for what to display
+    local item = previewItem
+
     if not item then
+        -- If there's no specific preview item, we're in a directory or empty list.
+        -- The fade out logic below will handle clearing the images.
         if #files == 0 then
-            -- Clear all previews if no files
             currentImage = nil
             currentScreenshot = nil
             currentYear = nil
@@ -26,12 +29,11 @@ local function update(dt)
             currentSystemIcon = nil
             currentSystemContentIcon = nil
         end
-        item = files[selectedIndex]
     end
 
     if item and not item.isDir then
         local baseName = item.name:gsub("%..-$", "")
-        local itemSystemName = utils.getSystemNameForItem(item, systemName, isVirtualRoot)
+        local itemSystemName = utils.getSystemNameForItem(item, nil, isVirtualRoot)
         
         if itemSystemName then
             local artPathForSystem = filesystem.getArtPathForSystem(itemSystemName)

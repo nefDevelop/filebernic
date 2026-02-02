@@ -1485,7 +1485,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local totalW = #systems * (iconSize + spacing) - spacing
                     if totalW < 0 then totalW = 0 end
                     
-                    local startX = layout.scrollbarX - totalW - 5
+                    local startX = layout.scrollbarX - totalW - 20
                     availableWidth = startX - 85 - 10
                 else
                     -- Calcular etiqueta SD
@@ -1624,7 +1624,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     local iconSize = 20
                     local spacing = 2
                     local totalW = #systems * (iconSize + spacing) - spacing
-                    local startX = layout.scrollbarX - totalW - 5
+                    local startX = layout.scrollbarX - totalW - 20
                     
                     for idx, sys in ipairs(systems) do
                         local icon = utils.getSystemIcon(sys)
@@ -1687,7 +1687,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             local totalW = #systems * (iconSize + spacing) - spacing
             if totalW < 0 then totalW = 0 end
             
-            local startX = layout.scrollbarX - totalW - 5
+            local startX = layout.scrollbarX - totalW - 20
             availableWidth = startX - 85 - 10
         else
             availableWidth = layout.selWidth - 75
