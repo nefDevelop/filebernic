@@ -91,12 +91,14 @@ local function drawBottomBar()
     local textH = fontMedium:getHeight()
     local textY = barCenterY - textH / 2
     
+    -- Altura deseada en píxeles para los iconos en la barra inferior.
+    -- Esto asegura que se vean del mismo tamaño en cualquier resolución.
+    local desiredIconHeight = 22
     local x = 20
-    local scale = 0.8
 
     local function drawHint(icon, text)
-        local iconH = icon:getHeight() * scale
-        local iconY = barCenterY - iconH / 2
+        local scale = desiredIconHeight / icon:getHeight()
+        local iconY = barCenterY - (icon:getHeight() * scale) / 2
         love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
         love.graphics.print(text, x, textY)
@@ -113,9 +115,9 @@ local function drawBottomBar()
         drawHint(buttonIcons.start, "Opciones")
         -- Select button with offset
         local icon = buttonIcons.select
+        local scale = desiredIconHeight / icon:getHeight()
         local text = "Salir"
-        local iconH = icon:getHeight() * scale
-        local iconY = barCenterY - iconH / 2
+        local iconY = barCenterY - (icon:getHeight() * scale) / 2
         love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
         love.graphics.print(text, x, textY)

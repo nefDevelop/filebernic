@@ -572,11 +572,13 @@ function love.load(arg)
 
     -- Load theme and fonts
     theme = require "theme"
-    fontList = theme.fonts.list
-    fontTitle = theme.fonts.title
-    fontSmall = theme.fonts.small
-    fontMedium = theme.fonts.medium
-    fontHuge = theme.fonts.huge
+
+    local fontPath = "assets/Onest-VariableFont.ttf"
+    fontSmall = love.graphics.newFont(fontPath, 16)
+    fontMedium = love.graphics.newFont(fontPath, 20)
+    fontList = love.graphics.newFont(fontPath, 24)
+    fontTitle = love.graphics.newFont(fontPath, 30)
+    fontHuge = love.graphics.newFont(fontPath, 80)
 
     -- Define Help Data
     helpData = {
