@@ -573,12 +573,16 @@ function love.load(arg)
     -- Load theme and fonts
     theme = require "theme"
 
-    local fontPath = "assets/Onest-VariableFont.ttf"
-    fontSmall = love.graphics.newFont(fontPath, 16)
-    fontMedium = love.graphics.newFont(fontPath, 20)
-    fontList = love.graphics.newFont(fontPath, 24)
-    fontTitle = love.graphics.newFont(fontPath, 30)
-    fontHuge = love.graphics.newFont(fontPath, 80)
+    -- Configuración de Fuentes
+    -- Puedes asignar archivos diferentes a estas variables según lo necesites
+    local uiFontPath = "assets/Onest-VariableFont.ttf"
+    local listFontPath = "assets/Onest-VariableFont.ttf" -- Ejemplo: "assets/OtraFuente.ttf"
+
+    fontSmall = love.graphics.newFont(uiFontPath, 16)    -- Textos pequeños, ayudas
+    fontMedium = love.graphics.newFont(uiFontPath, 20)   -- Textos generales
+    fontList = love.graphics.newFont(listFontPath, 24)   -- Lista de juegos (importante que sea legible)
+    fontTitle = love.graphics.newFont(uiFontPath, 30)    -- Títulos de menús
+    fontHuge = love.graphics.newFont(uiFontPath, 80)     -- Letra grande de salto rápido
 
     -- Define Help Data
     helpData = {

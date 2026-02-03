@@ -1,7 +1,7 @@
 Simulador_SD
 *.muxapp
 .log
-view_cachejson
+view_cache.json
 app_state.json
 
 *.png
