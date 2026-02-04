@@ -1287,8 +1287,11 @@ local function drawGrid(w, h)
         end
 
         -- Texto
-        love.graphics.setFont(fontMedium)
         local textFont = fontMedium
+        if i == selectedIndex then
+            textFont = fontSelected
+        end
+        love.graphics.setFont(textFont)
         local displayName = item.name
         if not item.isDir then
             displayName = displayName:gsub("%.[^%.]+$", "")
@@ -1417,10 +1420,10 @@ local function drawBattery(x, y)
         love.graphics.rectangle("fill", x - batW + margin, y + margin, fill, batH - (margin * 2))
         
         -- Texto porcentaje
-        love.graphics.setFont(fontSmall)
+        love.graphics.setFont(fontBattery)
         love.graphics.setColor(theme.colors.text_bright)
         local text = percent .. "%"
-        love.graphics.print(text, x - batW - fontSmall:getWidth(text) - 5, y - 2)
+        love.graphics.print(text, x - batW - fontBattery:getWidth(text) - 5, y - 2)
     end
 end
 
@@ -1826,7 +1829,7 @@ local function draw()
 
         -- Título (Indexación)
         love.graphics.setColor(theme.colors.text_bright)
-        love.graphics.setFont(fontList)
+        love.graphics.setFont(fontTopBar)
         love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
         love.graphics.print(os.date("%H:%M"), 20, 15)
         drawBattery(w - 25, 20)
@@ -1859,7 +1862,7 @@ local function draw()
 
     -- Título (Dibujado después de la lista para quedar encima del fondo/dithering)
     love.graphics.setColor(theme.colors.text_bright)
-    love.graphics.setFont(fontList)
+    love.graphics.setFont(fontTopBar)
     love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
     love.graphics.print(os.date("%H:%M"), 20, 15)
     drawBattery(w - 25, 20)

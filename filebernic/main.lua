@@ -49,7 +49,7 @@ gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"
 selectedFilesCount = 0
 theme = nil
-fontList, fontTitle, fontSmall, fontMedium, fontHuge = nil, nil, nil, nil, nil
+fontList, fontTitle, fontSmall, fontMedium, fontHuge, fontTopBar, fontSelected, fontBattery = nil, nil, nil, nil, nil, nil, nil, nil
 menuOptions = {"Borrar"}
 menuSelection = 1
 menuTitle = ""
@@ -574,15 +574,18 @@ function love.load(arg)
     theme = require "theme"
 
     -- Configuración de Fuentes
-    -- Puedes asignar archivos diferentes a estas variables según lo necesites
-    local uiFontPath = "assets/Onest-VariableFont.ttf"
-    local listFontPath = "assets/Onest-VariableFont.ttf" -- Ejemplo: "assets/OtraFuente.ttf"
+    local mainFontPath = "assets/fonts/SNPro-Regular.ttf"
+    local selectedFontPath = "assets/fonts/SNPro-Black.ttf"
+    local topBarFontPath = "assets/fonts/JetBrainsMono-Regular.ttf"
 
-    fontSmall = love.graphics.newFont(uiFontPath, 16)    -- Textos pequeños, ayudas
-    fontMedium = love.graphics.newFont(uiFontPath, 20)   -- Textos generales
-    fontList = love.graphics.newFont(listFontPath, 24)   -- Lista de juegos (importante que sea legible)
-    fontTitle = love.graphics.newFont(uiFontPath, 30)    -- Títulos de menús
-    fontHuge = love.graphics.newFont(uiFontPath, 80)     -- Letra grande de salto rápido
+    fontSmall = love.graphics.newFont(mainFontPath, 16)    -- Textos pequeños, ayudas
+    fontMedium = love.graphics.newFont(mainFontPath, 20)   -- Textos generales
+    fontList = love.graphics.newFont(mainFontPath, 24)   -- Lista de juegos (importante que sea legible)
+    fontTitle = love.graphics.newFont(mainFontPath, 30)    -- Títulos de menús
+    fontHuge = love.graphics.newFont(mainFontPath, 80)     -- Letra grande de salto rápido
+    fontTopBar = love.graphics.newFont(topBarFontPath, 24) -- Fuente para la barra de título
+    fontSelected = love.graphics.newFont(selectedFontPath, 20) -- Fuente para elemento seleccionado (900)
+    fontBattery = love.graphics.newFont(topBarFontPath, 16) -- Fuente para el porcentaje de batería
 
     -- Define Help Data
     helpData = {
