@@ -1463,7 +1463,7 @@ local function drawTopBar(w, h)
     love.graphics.setFont(fontClock)
     love.graphics.print(os.date("%H:%M"), 20, topBarCenterY - fontClock:getHeight()/2)
     -- Batería
-    drawBattery(w - 25, topBarCenterY + 3)
+    drawBattery(w - 20, topBarCenterY + 3)
 end
 
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
