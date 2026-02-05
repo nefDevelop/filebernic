@@ -6,3 +6,6 @@ app_state.json
 
 *.png
 *.svg
+filebernic/data/log/filebernic.log
+filebernic/data/view_cache.json
+filebernic/data/app_state.json

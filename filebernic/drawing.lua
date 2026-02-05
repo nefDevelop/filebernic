@@ -1375,7 +1375,9 @@ end
 local internetStatus = false
 local lastInternetCheck = -10
 
-local function drawBattery(x, y)
+local batteryImageCache = {}
+
+local function drawBattery(x, centerY)
     local now = love.timer.getTime()
     if now - lastInternetCheck > 5 then
         lastInternetCheck = now
@@ -1391,40 +1393,77 @@ local function drawBattery(x, y)
 
     if internetStatus then love.graphics.setColor(theme.colors.text_white)
     else love.graphics.setColor(theme.colors.text_disabled) end
-    love.graphics.circle("fill", x - 26 - 8, y + 7, 3)
+    love.graphics.circle("fill", x - 26 - 8, centerY, 3)
 
     local state, percent = love.system.getPowerInfo()
-    -- Si no se detecta batería (PC/Simulador), mostramos 100% para visualizar el icono
     if state == "nobattery" or not percent then
         percent = 100
+        state = "charged"
     end
 
-    local batW, batH = 26, 14
-    local nippleW, nippleH = 3, 6
-    
-    -- Icono Batería (Alineado a la derecha en x)
-    love.graphics.setColor(theme.colors.text_bright)
-    love.graphics.rectangle("line", x - batW, y, batW, batH, 2)
-    love.graphics.rectangle("fill", x, y + (batH - nippleH)/2, nippleW, nippleH) -- Polo positivo
-
-    if percent then
-        local margin = 2
-        local maxFill = batW - (margin * 2)
-        local fill = math.max(0, maxFill * (percent / 100))
-        
-        if state == "charging" then
-            love.graphics.setColor(0.2, 1, 0.2)
-        elseif percent <= 20 then
-            love.graphics.setColor(1, 0.2, 0.2)
+    local imageName
+    if state == "charging" then
+        imageName = "charging"
+    else
+        if percent > 80 then imageName = "100"
+        elseif percent > 60 then imageName = "80"
+        elseif percent > 40 then imageName = "60"
+        elseif percent > 20 then imageName = "40"
+        else imageName = "20"
         end
-        love.graphics.rectangle("fill", x - batW + margin, y + margin, fill, batH - (margin * 2))
-        
-        -- Texto porcentaje
-        love.graphics.setFont(fontBattery)
-        love.graphics.setColor(theme.colors.text_bright)
-        local text = percent .. "%"
-        love.graphics.print(text, x - batW - fontBattery:getWidth(text) - 5, y - 2)
     end
+
+    local imagePath = "assets/battery/battery_" .. imageName .. ".png"
+
+    if not batteryImageCache[imagePath] then
+        local success, img = pcall(love.graphics.newImage, imagePath)
+        if success then
+            batteryImageCache[imagePath] = img
+        else
+            batteryImageCache[imagePath] = "error"
+        end
+    end
+
+    local img = batteryImageCache[imagePath]
+    if img and img ~= "error" then
+        local r, g, b, a = 1, 1, 1, 1
+        if state ~= "charging" then
+            if percent < 5 then
+                r, g, b = 1, 0.2, 0.2
+                a = (math.sin(love.timer.getTime() * 10) + 1) / 2
+            elseif percent < 10 then
+                r, g, b = 1, 0.2, 0.2
+            end
+        end
+        love.graphics.setColor(r, g, b, a)
+        local imgW, imgH = img:getWidth(), img:getHeight()
+        love.graphics.draw(img, x - imgW, centerY - imgH/2)
+    else
+        -- Fallback: Dibujar icono programáticamente sin texto
+        local batW, batH = 26, 14
+        local nippleW, nippleH = 3, 6
+        local batY = centerY - batH/2
+        love.graphics.setColor(theme.colors.text_bright)
+        love.graphics.rectangle("line", x - batW, batY, batW, batH, 2)
+        love.graphics.rectangle("fill", x, batY + (batH - nippleH)/2, nippleW, nippleH)
+        local margin = 2; local maxFill = batW - (margin * 2); local fill = math.max(0, maxFill * (percent / 100))
+        if state == "charging" then love.graphics.setColor(0.2, 1, 0.2)
+        elseif percent <= 20 then love.graphics.setColor(1, 0.2, 0.2) end
+        love.graphics.rectangle("fill", x - batW + margin, batY + margin, fill, batH - (margin * 2))
+    end
+end
+
+local function drawTopBar(w, h)
+    local topBarCenterY = 22
+    -- Título
+    love.graphics.setColor(theme.colors.text_bright)
+    love.graphics.setFont(fontTopBar)
+    love.graphics.printf("FileBernic Rom Manager", 0, topBarCenterY - fontTopBar:getHeight()/2, w, "center")
+    -- Reloj
+    love.graphics.setFont(fontClock)
+    love.graphics.print(os.date("%H:%M"), 20, topBarCenterY - fontClock:getHeight()/2)
+    -- Batería
+    drawBattery(w - 25, topBarCenterY + 3)
 end
 
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
@@ -1831,7 +1870,8 @@ local function draw()
         love.graphics.setColor(theme.colors.text_bright)
         love.graphics.setFont(fontTopBar)
         love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
-        love.graphics.print(os.date("%H:%M"), 20, 15)
+        love.graphics.setFont(fontClock)
+        love.graphics.print(os.date("%H:%M"), 20, 17)
         drawBattery(w - 25, 20)
         love.graphics.setFont(fontSmall)
         local displayPath = isVirtualRoot and "Todos los Sistemas" or romPath
@@ -1861,11 +1901,7 @@ local function draw()
     drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
 
     -- Título (Dibujado después de la lista para quedar encima del fondo/dithering)
-    love.graphics.setColor(theme.colors.text_bright)
-    love.graphics.setFont(fontTopBar)
-    love.graphics.printf("FileBernic Rom Manager", 0, 15, w, "center")
-    love.graphics.print(os.date("%H:%M"), 20, 15)
-    drawBattery(w - 25, 20)
+    drawTopBar(w, h)
     
     -- Path actual
     love.graphics.setFont(fontSmall)
