@@ -1391,9 +1391,13 @@ local function drawBattery(x, centerY)
         end
     end
 
-    if internetStatus then love.graphics.setColor(theme.colors.text_white)
-    else love.graphics.setColor(theme.colors.text_disabled) end
-    love.graphics.circle("fill", x - 26 - 8, centerY, 3)
+    if iconNetwork then
+        if internetStatus then love.graphics.setColor(1, 1, 1, 1)
+        else love.graphics.setColor(0.5, 0.5, 0.5, 1) end
+        local scale = 14 / iconNetwork:getHeight()
+        local nw = iconNetwork:getWidth() * scale
+        love.graphics.draw(iconNetwork, x - 26 - 8 - nw, centerY - (iconNetwork:getHeight() * scale) / 2, 0, scale, scale)
+    end
 
     local state, percent = love.system.getPowerInfo()
     if state == "nobattery" or not percent then

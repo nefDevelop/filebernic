@@ -32,7 +32,7 @@ state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRA
 itemToDelete = nil
 lastPlayedRom = ""
 playedRoms = {}
-iconFolder, iconRom, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil
+iconFolder, iconRom, iconNetwork, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil
 currentImageAlpha, currentScreenshotAlpha, imageInvalid, screenshotInvalid = 0, 0, false, false
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
@@ -558,6 +558,7 @@ function love.load(arg)
     iconFolder = love.graphics.newImage("assets/folder.png")
     iconRom = love.graphics.newImage("assets/roms.png")
     iconFavorite = love.graphics.newImage("assets/media/favorites-content.png")
+    iconNetwork = love.graphics.newImage("assets/media/network.png")
     
     buttonIcons = {
         a = love.graphics.newImage("assets/button/gamepad/small/a.png"),
