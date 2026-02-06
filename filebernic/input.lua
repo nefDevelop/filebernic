@@ -358,13 +358,11 @@ function stateHandlers.OPTIONS_MENU(key)
                 files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
                 preview.load()
             end
-        elseif optText:match("Vista:") then
+        elseif optText:match("Vista") then
             viewMode = (viewMode == "LIST") and "GRID" or "LIST"
-            local newVal = "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula")
-            local newIcon = (viewMode == "LIST") and iconList or iconGrid
+            local newVal = "Vista: " .. viewMode
             if type(opt) == "table" then 
                 opt.text = newVal 
-                opt.icon = newIcon
             else 
                 menuOptions[menuSelection] = newVal 
             end
@@ -1168,8 +1166,7 @@ local function keypressed(key)
             if romPath ~= "@Favorites/" then
                 table.insert(menuOptions, {text = "Modo: " .. launchMode, icon = iconGame})
             end
-            local viewIcon = (viewMode == "LIST") and iconList or iconGrid
-            table.insert(menuOptions, {text = "Vista: " .. (viewMode == "LIST" and "Lista" or "Cuadrícula"), icon = viewIcon})
+            table.insert(menuOptions, {text = "Vista: " .. viewMode, icon = iconFolder})
             table.insert(menuOptions, {text = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"), icon = iconHide})
             table.insert(menuOptions, {text = "Marcar Jugado: " .. (markPlayed and "Si" or "No"), icon = iconRom})
             table.insert(menuOptions, {text = "Ocultar Favoritos: " .. (hideFavorites and "ON" or "OFF"), icon = iconHide})

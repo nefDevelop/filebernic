@@ -589,6 +589,7 @@ function love.load(arg)
     local mainFontPath = "assets/fonts/SNPro-Regular.ttf"
     local selectedFontPath = "assets/fonts/SNPro-Black.ttf"
     local topBarFontPath = "assets/fonts/JetBrainsMono-Regular.ttf"
+    local clockFontPath = "assets/fonts/JetBrainsMono-Bold.ttf"
 
     fontSmall = love.graphics.newFont(mainFontPath, 16)    -- Textos pequeños, ayudas
     fontMedium = love.graphics.newFont(mainFontPath, 20)   -- Textos generales
@@ -596,7 +597,7 @@ function love.load(arg)
     fontTitle = love.graphics.newFont(mainFontPath, 30)    -- Títulos de menús
     fontHuge = love.graphics.newFont(mainFontPath, 80)     -- Letra grande de salto rápido
     fontTopBar = love.graphics.newFont(topBarFontPath, 24) -- Fuente para la barra de título
-    fontClock = love.graphics.newFont(selectedFontPath, 20)  -- Fuente para el reloj
+    fontClock = love.graphics.newFont(clockFontPath, 20)  -- Fuente para el reloj
     fontSelected = love.graphics.newFont(selectedFontPath, 20) -- Fuente para elemento seleccionado (900)
 
     -- Define Help Data

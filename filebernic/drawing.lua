@@ -364,6 +364,40 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
                 local iconW = toggleIcon:getWidth() * scale
                 love.graphics.setColor(toggleColor[1], toggleColor[2], toggleColor[3], alpha)
                 love.graphics.draw(toggleIcon, x + w - 20 - iconW, centerY - iconH/2, 0, scale, scale)
+            elseif label == "Vista" then
+                local iconSize = 16
+                local spacing = 8
+                
+                -- Icono Grid (Derecha)
+                local gridScale = iconSize / iconGrid:getHeight()
+                local gridW = iconGrid:getWidth() * gridScale
+                local gridColor = (value == "GRID") and {1, 1, 1} or {0.4, 0.4, 0.4}
+                love.graphics.setColor(gridColor[1], gridColor[2], gridColor[3], alpha)
+                love.graphics.draw(iconGrid, x + w - 20 - gridW, centerY - iconSize/2, 0, gridScale, gridScale)
+                
+                -- Icono List (Izquierda de Grid)
+                local listScale = iconSize / iconList:getHeight()
+                local listW = iconList:getWidth() * listScale
+                local listColor = (value == "LIST") and {1, 1, 1} or {0.4, 0.4, 0.4}
+                love.graphics.setColor(listColor[1], listColor[2], listColor[3], alpha)
+                love.graphics.draw(iconList, x + w - 20 - gridW - spacing - listW, centerY - iconSize/2, 0, listScale, listScale)
+            elseif label == "Modo" then
+                local iconSize = 16
+                local spacing = 8
+                
+                -- Icono Juego Unico (Derecha)
+                local gameScale = iconSize / iconGame:getHeight()
+                local gameW = iconGame:getWidth() * gameScale
+                local gameColor = (value == "Juego Unico") and {1, 1, 1} or {0.4, 0.4, 0.4}
+                love.graphics.setColor(gameColor[1], gameColor[2], gameColor[3], alpha)
+                love.graphics.draw(iconGame, x + w - 20 - gameW, centerY - iconSize/2, 0, gameScale, gameScale)
+                
+                -- Icono Folder (Izquierda de Game)
+                local folderScale = iconSize / iconFolder:getHeight()
+                local folderW = iconFolder:getWidth() * folderScale
+                local folderColor = (value == "Folder") and {1, 1, 1} or {0.4, 0.4, 0.4}
+                love.graphics.setColor(folderColor[1], folderColor[2], folderColor[3], alpha)
+                love.graphics.draw(iconFolder, x + w - 20 - gameW - spacing - folderW, centerY - iconSize/2, 0, folderScale, folderScale)
             else
                 love.graphics.setColor(vc)
                 local valW = fontList:getWidth(value)
@@ -397,6 +431,10 @@ local function calculateMenuWidth(title, message, options, item, isGameOptions)
         local label, val = text:match("^(.-):%s*(.+)$")
         if label and (val == "ON" or val == "OFF" or val == "Si" or val == "No") then
              width = fontList:getWidth(label .. ":") + 50 -- Ancho etiqueta + espacio fijo para icono
+        elseif label == "Vista" then
+             width = fontList:getWidth(label .. ":") + 80 -- Espacio para dos iconos
+        elseif label == "Modo" then
+             width = fontList:getWidth(label .. ":") + 80 -- Espacio para dos iconos
         else
              width = fontList:getWidth(text)
         end
@@ -1369,7 +1407,7 @@ local function drawGrid(w, h)
         local textBlockHeight = textFont:getHeight() * numLines
         local textY = y + cellH - 50 + (50 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(textToPrint, x + 5, textY, contentWidth, "center")
+        love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
 
         if isLastPlayed and markPlayed and launchMode ~= "Juego Unico" then
              local pIcon = iconRom
