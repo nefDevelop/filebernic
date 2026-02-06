@@ -32,7 +32,7 @@ state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRA
 itemToDelete = nil
 lastPlayedRom = ""
 playedRoms = {}
-iconFolder, iconRom, iconNetwork, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil
+iconFolder, iconRom, iconNetwork, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 currentImageAlpha, currentScreenshotAlpha, imageInvalid, screenshotInvalid = 0, 0, false, false
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
@@ -555,20 +555,23 @@ function love.load(arg)
     muosTextPath = baseMuosPath .. systemName .. "/text/"
     muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
     
-    iconFolder = love.graphics.newImage("assets/folder.png")
-    iconRom = love.graphics.newImage("assets/roms.png")
-    iconFavorite = love.graphics.newImage("assets/media/favorites-content.png")
-    iconNetwork = love.graphics.newImage("assets/media/network.png")
+    iconFolder = love.graphics.newImage("assets/ui/folder.png")
+    iconRom = love.graphics.newImage("assets/ui/roms.png")
+    iconFavorite = love.graphics.newImage("assets/ui/favorites-content.png")
+    iconNetwork = love.graphics.newImage("assets/ui/network.png")
+    imgNoImage = love.graphics.newImage("assets/ui/noImage.png")
+    imgOn = love.graphics.newImage("assets/ui/on.png")
+    imgOff = love.graphics.newImage("assets/ui/off.png")
     
     buttonIcons = {
-        a = love.graphics.newImage("assets/button/gamepad/small/a.png"),
-        b = love.graphics.newImage("assets/button/gamepad/small/b.png"),
-        y = love.graphics.newImage("assets/button/gamepad/small/y.png"),
-        x = love.graphics.newImage("assets/button/gamepad/small/x.png"),
-        select = love.graphics.newImage("assets/button/gamepad/small/select.png"),
-        start = love.graphics.newImage("assets/button/gamepad/small/start.png"),
-        l1 = love.graphics.newImage("assets/button/gamepad/small/l1.png"),
-        r1 = love.graphics.newImage("assets/button/gamepad/small/r1.png")
+        a = love.graphics.newImage("assets/button/a.png"),
+        b = love.graphics.newImage("assets/button/b.png"),
+        y = love.graphics.newImage("assets/button/y.png"),
+        x = love.graphics.newImage("assets/button/x.png"),
+        select = love.graphics.newImage("assets/button/select.png"),
+        start = love.graphics.newImage("assets/button/start.png"),
+        l1 = love.graphics.newImage("assets/button/l1.png"),
+        r1 = love.graphics.newImage("assets/button/r1.png")
     }
 
     -- Load theme and fonts

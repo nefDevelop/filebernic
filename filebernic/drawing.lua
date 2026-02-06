@@ -330,9 +330,30 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         if label and value then
             love.graphics.setColor(lc)
             love.graphics.print(label .. ":", x + 20, textY)
-            love.graphics.setColor(vc)
-            local valW = fontList:getWidth(value)
-            love.graphics.print(value, x + w - 20 - valW, textY)
+            
+            -- Lógica para interruptores (ON/OFF/Si/No)
+            local toggleIcon = nil
+            local toggleColor = nil
+            
+            if value == "ON" or value == "Si" then
+                toggleIcon = imgOn
+                toggleColor = {0.2, 1, 0.2} -- Verde
+            elseif value == "OFF" or value == "No" then
+                toggleIcon = imgOff
+                toggleColor = {0.6, 0.6, 0.6} -- Gris
+            end
+            
+            if toggleIcon then
+                local iconH = 16
+                local scale = iconH / toggleIcon:getHeight()
+                local iconW = toggleIcon:getWidth() * scale
+                love.graphics.setColor(toggleColor[1], toggleColor[2], toggleColor[3], alpha)
+                love.graphics.draw(toggleIcon, x + w - 20 - iconW, centerY - iconH/2, 0, scale, scale)
+            else
+                love.graphics.setColor(vc)
+                local valW = fontList:getWidth(value)
+                love.graphics.print(value, x + w - 20 - valW, textY)
+            end
         elseif icon then
             love.graphics.setColor(1, 1, 1, alpha)
             local iconH = 24
@@ -428,10 +449,11 @@ local function drawHelpPanel(x, w, h, alpha)
         local iconH = item.icon:getHeight() * iconScale
         local iconY = centerY - iconH / 2
         local textY = centerY - fontMedium:getHeight() / 2
+        local iconW = item.icon:getWidth() * iconScale
 
         love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
         love.graphics.draw(item.icon, contentX + 20, iconY, 0, iconScale, iconScale)
-        love.graphics.print(item.text, contentX + 60, textY)
+        love.graphics.print(item.text, contentX + 20 + iconW + 10, textY)
     end
 end
 
@@ -443,6 +465,8 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
     local sysName = utils.getSystemNameForItem(currentItem)
     local displayName = utils.getSystemDisplayName(sysName)
     local subtitle = (displayName or "Desconocido") .. " " .. regionInfo
+
+    local coverImg = currentImage or imgNoImage
 
     love.graphics.setFont(fontMedium)
     love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
@@ -457,8 +481,8 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
     local coverScale, screenScale = 0, 0
     local finalImageH = 0
 
-    if currentImage and currentScreenshot then
-        local ar1 = currentImage:getWidth() / currentImage:getHeight()
+    if coverImg and currentScreenshot then
+        local ar1 = coverImg:getWidth() / coverImg:getHeight()
         local ar2 = currentScreenshot:getWidth() / currentScreenshot:getHeight()
         local totalAvailW = w - 40
         
@@ -468,15 +492,15 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
         -- La altura final es el mínimo entre el espacio vertical y el calculado para el ancho
         finalImageH = math.min(availableH, heightForWidth)
         
-        coverScale = finalImageH / currentImage:getHeight()
+        coverScale = finalImageH / coverImg:getHeight()
         screenScale = finalImageH / currentScreenshot:getHeight()
-    elseif currentImage then
-        coverScale = math.min(1, availableH / currentImage:getHeight())
+    elseif coverImg then
+        coverScale = math.min(1, availableH / coverImg:getHeight())
         local maxW = w - 40
-        if currentImage:getWidth() * coverScale > maxW then
-            coverScale = maxW / currentImage:getWidth()
+        if coverImg:getWidth() * coverScale > maxW then
+            coverScale = maxW / coverImg:getWidth()
         end
-        finalImageH = currentImage:getHeight() * coverScale
+        finalImageH = coverImg:getHeight() * coverScale
     elseif currentScreenshot then
         screenScale = math.min(1, availableH / currentScreenshot:getHeight())
         local maxW = w - 40
@@ -486,26 +510,26 @@ local function drawMediaDetailContent(currentItem, x, y, w, h, alpha)
         finalImageH = currentScreenshot:getHeight() * screenScale
     end
 
-    if currentImage then
-        coverW = currentImage:getWidth() * coverScale
+    if coverImg then
+        coverW = coverImg:getWidth() * coverScale
     end
     if currentScreenshot then
         screenW = currentScreenshot:getWidth() * screenScale
     end
 
-    local totalW = coverW + (currentImage and currentScreenshot and spacing or 0) + screenW
+    local totalW = coverW + (coverImg and currentScreenshot and spacing or 0) + screenW
     local startX = x + (w - totalW) / 2
     local drawY = imagesY + (availableH - finalImageH) / 2
     
     love.graphics.setFont(fontMedium)
-    if currentImage then
+    if coverImg then
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Frontal", startX, contentY, coverW, "center")
-        love.graphics.setColor(1, 1, 1, alpha * currentImageAlpha)
-        love.graphics.draw(currentImage, startX, drawY, 0, coverScale, coverScale)
+        love.graphics.setColor(1, 1, 1, alpha * (currentImage and currentImageAlpha or 1))
+        love.graphics.draw(coverImg, startX, drawY, 0, coverScale, coverScale)
     end
     if currentScreenshot then
-        local drawX = startX + (currentImage and (coverW + spacing) or 0)
+        local drawX = startX + (coverImg and (coverW + spacing) or 0)
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
         love.graphics.printf("Screen", drawX, contentY, screenW, "center")
         love.graphics.setColor(1, 1, 1, alpha * currentScreenshotAlpha)
@@ -1206,6 +1230,11 @@ local function drawGrid(w, h)
             if artPathForItem then
                 local path = artPathForItem .. base .. ".png"
                 imageToDraw = loader:getImage(path)
+                
+                -- Si no hay imagen y no es directorio, usar noImage
+                if not imageToDraw then
+                    imageToDraw = imgNoImage
+                end
             end
         end
 
