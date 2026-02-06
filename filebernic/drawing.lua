@@ -306,9 +306,9 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
                 love.graphics.rectangle("fill", x, rowY, w, rowHeight)
             end
 
-            if type(option) == "string" and option:find("Borrar") then
+            if text:find("Borrar") then
                 labelColor = {1, 0.4, 0.4} -- Rojo suave
-            elseif type(option) == "string" and option:find("Limpieza") then
+            elseif text:find("Limpieza") then
                 labelColor = {0.8, 0.1, 0.1} -- Rojo oscuro
             else
                 labelColor = theme.colors.text_dim
@@ -316,10 +316,7 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
             valueColor = theme.colors.selection_accent -- Otro tono (Azul claro)
         end
 
-        local label, value = nil, nil
-        if type(option) == "string" then
-            label, value = option:match("^(.-):%s*(.+)$")
-        end
+        local label, value = text:match("^(.-):%s*(.+)$")
 
         local textY = centerY - fontList:getHeight() / 2
 
@@ -327,9 +324,27 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
         local lc = {labelColor[1], labelColor[2], labelColor[3], (labelColor[4] or 1) * alpha}
         local vc = {valueColor[1], valueColor[2], valueColor[3], (valueColor[4] or 1) * alpha}
 
+        local textX = x + 20
+        if icon then
+            local iconH = 18
+            local baseColor = theme.colors.selection_accent
+            if icon == iconTrash then baseColor = {1, 0.4, 0.4} end
+            
+            local iconColor = (i == selection and isFocused) and theme.colors.text_white or baseColor
+ 
+            if icon == iconReload then
+                iconH = 15 -- Reducir tamaño visual para que no se vea enorme
+            end
+
+            love.graphics.setColor(iconColor[1], iconColor[2], iconColor[3], alpha)
+            local scale = iconH / icon:getHeight()
+            love.graphics.draw(icon, x + 20, centerY - iconH/2, 0, scale, scale)
+            textX = x + 55
+        end
+
         if label and value then
             love.graphics.setColor(lc)
-            love.graphics.print(label .. ":", x + 20, textY)
+            love.graphics.print(label .. ":", textX, textY)
             
             -- Lógica para interruptores (ON/OFF/Si/No)
             local toggleIcon = nil
@@ -354,16 +369,9 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
                 local valW = fontList:getWidth(value)
                 love.graphics.print(value, x + w - 20 - valW, textY)
             end
-        elseif icon then
-            love.graphics.setColor(1, 1, 1, alpha)
-            local iconH = 24
-            local scale = iconH / icon:getHeight()
-            love.graphics.draw(icon, x + 20, centerY - iconH/2, 0, scale, scale)
-            love.graphics.setColor(lc)
-            drawTrimmed(text, x + 55, textY, w - 75, fontList)
         else
             love.graphics.setColor(lc)
-            drawTrimmed(text, x + 20, textY, w - 40, fontList)
+            drawTrimmed(text, textX, textY, w - (textX - x) - 20, fontList)
         end
     end
 
@@ -383,7 +391,16 @@ local function calculateMenuWidth(title, message, options, item, isGameOptions)
     local optionsMaxW = 0
     for _, opt in ipairs(options) do
         local text = type(opt) == "table" and opt.text or opt
-        local width = fontList:getWidth(text)
+        local width = 0
+        
+        -- Estabilizar ancho para interruptores (evita que el panel cambie de tamaño entre ON/OFF)
+        local label, val = text:match("^(.-):%s*(.+)$")
+        if label and (val == "ON" or val == "OFF" or val == "Si" or val == "No") then
+             width = fontList:getWidth(label .. ":") + 50 -- Ancho etiqueta + espacio fijo para icono
+        else
+             width = fontList:getWidth(text)
+        end
+
         if type(opt) == "table" and opt.icon then width = width + 35 end
         if width > optionsMaxW then optionsMaxW = width end
     end
@@ -1244,6 +1261,9 @@ local function drawGrid(w, h)
             item.alpha = math.min(1, item.alpha + love.timer.getDelta() * 5)
             love.graphics.setColor(1, 1, 1, item.alpha)
             local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 80) / imageToDraw:getHeight())
+            if imageToDraw == imgNoImage then
+                scale = scale * 0.5
+            end
             local imgW = imageToDraw:getWidth() * scale
             local imgH = imageToDraw:getHeight() * scale
             local ix = x + 10 + (contentWidth - imgW) / 2
@@ -1274,6 +1294,9 @@ local function drawGrid(w, h)
             local availableH = cellH - 65 -- Menos altura disponible para el icono
             local availableW = cellW - 20
             local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.7
+            if icon == iconFolder then
+                scale = scale * 0.7 -- Reducir tamaño de carpetas
+            end
             local ix = x + (cellW - icon:getWidth()*scale)/2
             local iy = y + 5 + (availableH - icon:getHeight()*scale)/2
             love.graphics.draw(icon, ix, iy, 0, scale, scale)
@@ -1501,6 +1524,8 @@ end
 
 local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
     if viewMode == "GRID" then
+
+
         drawGrid(w, h)
     else
         -- Columna de Vista Previa (Boxart + Screenshot) - DIBUJADO AL FONDO
@@ -1543,8 +1568,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 love.graphics.printf(item.name, 100, textY, layout.selWidth - 80, "left")
             else
                 
-                local iconToDraw = item.icon
-                if not iconToDraw and item.isDir then
+
+             local iconToDraw = item.icon
+
+             if not iconToDraw and item.isDir then
                     iconToDraw = utils.getSystemIcon(item.name)
                 end
                 if item.fullPath == "@Favorites/" then
@@ -1679,16 +1706,12 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
 
                 -- Dibujar icono después del fondo/resaltado para que quede encima
-                local tr, tg, tb, ta = love.graphics.getColor() -- Guardar color del texto
-                if item.selected then
-                    love.graphics.setColor(theme.colors.selection_accent)
-                else
-                    love.graphics.setColor(1, 1, 1, 1)
-                end
+                local tr, tg, tb, ta = love.graphics.getColor()
+                love.graphics.setColor(1, 1, 1, 1)
                 local iconW = iconToDraw:getWidth() * drawScale
                 local iconX = layout.selX + (70 - iconW) / 2
                 love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
-                love.graphics.setColor(tr, tg, tb, ta) -- Restaurar color del texto
+                love.graphics.setColor(tr, tg, tb, ta)
 
                 if fontList:getWidth(nameToDraw) > availableWidth then
                     while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
@@ -1698,7 +1721,11 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 
                 -- Centrar el texto verticalmente en la fila
+
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
+
+
+
                 
                 if i == selectedIndex then
                     love.graphics.print(nameToDraw, textX, textY)

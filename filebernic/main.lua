@@ -32,7 +32,7 @@ state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRA
 itemToDelete = nil
 lastPlayedRom = ""
 playedRoms = {}
-iconFolder, iconRom, iconNetwork, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+iconFolder, iconRom, iconNetwork, iconReload, iconTrash, iconHide, iconInfo, iconSaveStates, iconList, iconGrid, iconGame, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 currentImageAlpha, currentScreenshotAlpha, imageInvalid, screenshotInvalid = 0, 0, false, false
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
@@ -559,6 +559,14 @@ function love.load(arg)
     iconRom = love.graphics.newImage("assets/ui/roms.png")
     iconFavorite = love.graphics.newImage("assets/ui/favorites-content.png")
     iconNetwork = love.graphics.newImage("assets/ui/network.png")
+    iconReload = love.graphics.newImage("assets/ui/reload.png")
+    iconTrash = love.graphics.newImage("assets/ui/trash.png")
+    iconHide = love.graphics.newImage("assets/ui/hide.png")
+    iconInfo = love.graphics.newImage("assets/ui/info.png")
+    iconSaveStates = love.graphics.newImage("assets/ui/savestates.png")
+    iconList = love.graphics.newImage("assets/ui/list.png")
+    iconGrid = love.graphics.newImage("assets/ui/grid.png")
+    iconGame = love.graphics.newImage("assets/ui/game.png")
     imgNoImage = love.graphics.newImage("assets/ui/noImage.png")
     imgOn = love.graphics.newImage("assets/ui/on.png")
     imgOff = love.graphics.newImage("assets/ui/off.png")
@@ -588,7 +596,7 @@ function love.load(arg)
     fontTitle = love.graphics.newFont(mainFontPath, 30)    -- Títulos de menús
     fontHuge = love.graphics.newFont(mainFontPath, 80)     -- Letra grande de salto rápido
     fontTopBar = love.graphics.newFont(topBarFontPath, 24) -- Fuente para la barra de título
-    fontClock = love.graphics.newFont(topBarFontPath, 20)  -- Fuente para el reloj
+    fontClock = love.graphics.newFont(selectedFontPath, 20)  -- Fuente para el reloj
     fontSelected = love.graphics.newFont(selectedFontPath, 20) -- Fuente para elemento seleccionado (900)
 
     -- Define Help Data
