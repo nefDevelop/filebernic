@@ -106,47 +106,47 @@ local function drawBottomBar()
     end
 
     if state == "LIST" then
-        drawHint(buttonIcons.a, "Ok")
-        drawHint(buttonIcons.b, "Back")
-        drawHint(buttonIcons.y, "Menu")
+        drawHint(buttonIcons.a, L.get("enter"))
+        drawHint(buttonIcons.b, L.get("back"))
+        drawHint(buttonIcons.y, L.get("options"))
         if launchMode ~= "Juego Unico" then
-            drawHint(buttonIcons.x, "Select")
+            drawHint(buttonIcons.x, L.get("mark"))
         end
-        drawHint(buttonIcons.start, "Opciones")
+        drawHint(buttonIcons.start, L.get("config"))
         -- Select button with offset
         local icon = buttonIcons.select
         local scale = desiredIconHeight / icon:getHeight()
-        local text = "Salir"
+        local text = L.get("exit")
         local iconY = barCenterY - (icon:getHeight() * scale) / 2
         love.graphics.draw(icon, x, iconY, 0, scale, scale)
         x = x + (icon:getWidth() * scale) + 5
         love.graphics.print(text, x, textY)
     elseif state == "DELETE_MENU" or state == "POST_GAME" then
-        drawHint(buttonIcons.a, "Confirmar")
-        drawHint(buttonIcons.b, "Cancelar")
+        drawHint(buttonIcons.a, L.get("confirm"))
+        drawHint(buttonIcons.b, L.get("cancel"))
     elseif state == "INFO_VIEW" then
-        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.b, L.get("back"))
     elseif state == "OPTIONS_MENU" then
-        drawHint(buttonIcons.a, "Seleccionar")
-        drawHint(buttonIcons.b, "Cerrar")
-        drawHint(buttonIcons.r1, "Ayuda")
-        drawHint(buttonIcons.select, "Salir")
+        drawHint(buttonIcons.a, L.get("accept"))
+        drawHint(buttonIcons.b, L.get("back"))
+        drawHint(buttonIcons.r1, L.get("help"))
+        drawHint(buttonIcons.select, L.get("exit"))
     elseif state == "SCRAPER_VIEW" then
-        drawHint(buttonIcons.a, "Buscar")
-        drawHint(buttonIcons.b, "Volver")
-        drawHint(buttonIcons.y, "Opciones")
+        drawHint(buttonIcons.a, L.get("search"))
+        drawHint(buttonIcons.b, L.get("back"))
+        drawHint(buttonIcons.y, L.get("options"))
     elseif state == "SCRAPER_OPTIONS" then
-        drawHint(buttonIcons.a, "Seleccionar")
-        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.a, L.get("accept"))
+        drawHint(buttonIcons.b, L.get("back"))
     elseif state == "SCRAPER_RESULTS" then
-        drawHint(buttonIcons.a, "Guardar")
-        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.a, L.get("save"))
+        drawHint(buttonIcons.b, L.get("back"))
     elseif state == "SAVE_MANAGER" then
-        drawHint(buttonIcons.a, "Copiar a otra SD")
-        drawHint(buttonIcons.b, "Volver")
+        drawHint(buttonIcons.a, L.get("copy"))
+        drawHint(buttonIcons.b, L.get("back"))
     elseif state == "CLEANUP_MENU" then
-        drawHint(buttonIcons.a, "Acción")
-        drawHint(buttonIcons.b, "Salir")
+        drawHint(buttonIcons.a, L.get("delete"))
+        drawHint(buttonIcons.b, L.get("back"))
     end
 end
 
@@ -278,7 +278,7 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
     end
 
     -- Opciones
-    love.graphics.setFont(fontList)
+    love.graphics.setFont(fontMedium)
     local rowHeight = 40
     for i, option in ipairs(options) do
         local rowY = startY + (i-1) * rowHeight
@@ -318,94 +318,74 @@ local function drawMenuContent(title, message, options, selection, item, x, w, h
 
         local label, value = text:match("^(.-):%s*(.+)$")
 
-        local textY = centerY - fontList:getHeight() / 2
+        local textY = centerY - fontMedium:getHeight() / 2
 
         -- Aplicar alpha a los colores de texto
         local lc = {labelColor[1], labelColor[2], labelColor[3], (labelColor[4] or 1) * alpha}
         local vc = {valueColor[1], valueColor[2], valueColor[3], (valueColor[4] or 1) * alpha}
 
         local textX = x + 20
-        if icon then
-            local iconH = 18
-            local baseColor = theme.colors.selection_accent
-            if icon == iconTrash then baseColor = {1, 0.4, 0.4} end
-            
-            local iconColor = (i == selection and isFocused) and theme.colors.text_white or baseColor
- 
-            if icon == iconReload then
-                iconH = 15 -- Reducir tamaño visual para que no se vea enorme
-            end
+        
+        local iconSlotW = 30
+        local slotSpacing = 5
+        local marginRight = 20
 
-            love.graphics.setColor(iconColor[1], iconColor[2], iconColor[3], alpha)
-            local scale = iconH / icon:getHeight()
-            love.graphics.draw(icon, x + 20, centerY - iconH/2, 0, scale, scale)
-            textX = x + 55
+        local function drawIconCentered(img, slotIdx, color)
+             if not img then return end
+             local iconH = 18
+             if img == iconReload then iconH = 15 end
+             
+             local scale = iconH / img:getHeight()
+             local iconW = img:getWidth() * scale
+             
+             local slotCenterX
+             if slotIdx == 2 then -- Rightmost
+                 slotCenterX = x + w - marginRight - (iconSlotW / 2)
+             else -- Left of Rightmost
+                 slotCenterX = x + w - marginRight - iconSlotW - slotSpacing - (iconSlotW / 2)
+             end
+             
+             love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * alpha)
+             love.graphics.draw(img, slotCenterX - (iconW / 2), centerY - iconH/2, 0, scale, scale)
         end
 
         if label and value then
             love.graphics.setColor(lc)
             love.graphics.print(label .. ":", textX, textY)
             
-            -- Lógica para interruptores (ON/OFF/Si/No)
-            local toggleIcon = nil
-            local toggleColor = nil
-            
-            if value == "ON" or value == "Si" then
-                toggleIcon = imgOn
-                toggleColor = {0.2, 1, 0.2} -- Verde
-            elseif value == "OFF" or value == "No" then
-                toggleIcon = imgOff
-                toggleColor = {0.6, 0.6, 0.6} -- Gris
-            end
-            
-            if toggleIcon then
-                local iconH = 16
-                local scale = iconH / toggleIcon:getHeight()
-                local iconW = toggleIcon:getWidth() * scale
-                love.graphics.setColor(toggleColor[1], toggleColor[2], toggleColor[3], alpha)
-                love.graphics.draw(toggleIcon, x + w - 20 - iconW, centerY - iconH/2, 0, scale, scale)
+            if value == "ON" or value == "Si" or value == "OFF" or value == "No" then
+                local toggleIcon = (value == "ON" or value == "Si") and imgOn or imgOff
+                local toggleColor = (value == "ON" or value == "Si") and {0.2, 1, 0.2} or {0.6, 0.6, 0.6}
+                drawIconCentered(toggleIcon, 2, toggleColor)
             elseif label == "Vista" then
-                local iconSize = 16
-                local spacing = 8
-                
-                -- Icono Grid (Derecha)
-                local gridScale = iconSize / iconGrid:getHeight()
-                local gridW = iconGrid:getWidth() * gridScale
                 local gridColor = (value == "GRID") and {1, 1, 1} or {0.4, 0.4, 0.4}
-                love.graphics.setColor(gridColor[1], gridColor[2], gridColor[3], alpha)
-                love.graphics.draw(iconGrid, x + w - 20 - gridW, centerY - iconSize/2, 0, gridScale, gridScale)
-                
-                -- Icono List (Izquierda de Grid)
-                local listScale = iconSize / iconList:getHeight()
-                local listW = iconList:getWidth() * listScale
                 local listColor = (value == "LIST") and {1, 1, 1} or {0.4, 0.4, 0.4}
-                love.graphics.setColor(listColor[1], listColor[2], listColor[3], alpha)
-                love.graphics.draw(iconList, x + w - 20 - gridW - spacing - listW, centerY - iconSize/2, 0, listScale, listScale)
+                drawIconCentered(iconList, 1, listColor)
+                drawIconCentered(iconGrid, 2, gridColor)
             elseif label == "Modo" then
-                local iconSize = 16
-                local spacing = 8
-                
-                -- Icono Juego Unico (Derecha)
-                local gameScale = iconSize / iconGame:getHeight()
-                local gameW = iconGame:getWidth() * gameScale
                 local gameColor = (value == "Juego Unico") and {1, 1, 1} or {0.4, 0.4, 0.4}
-                love.graphics.setColor(gameColor[1], gameColor[2], gameColor[3], alpha)
-                love.graphics.draw(iconGame, x + w - 20 - gameW, centerY - iconSize/2, 0, gameScale, gameScale)
-                
-                -- Icono Folder (Izquierda de Game)
-                local folderScale = iconSize / iconFolder:getHeight()
-                local folderW = iconFolder:getWidth() * folderScale
                 local folderColor = (value == "Folder") and {1, 1, 1} or {0.4, 0.4, 0.4}
-                love.graphics.setColor(folderColor[1], folderColor[2], folderColor[3], alpha)
-                love.graphics.draw(iconFolder, x + w - 20 - gameW - spacing - folderW, centerY - iconSize/2, 0, folderScale, folderScale)
+                drawIconCentered(iconFolder, 1, folderColor)
+                drawIconCentered(iconGame, 2, gameColor)
             else
                 love.graphics.setColor(vc)
-                local valW = fontList:getWidth(value)
+                local valW = fontMedium:getWidth(value)
                 love.graphics.print(value, x + w - 20 - valW, textY)
             end
         else
             love.graphics.setColor(lc)
-            drawTrimmed(text, textX, textY, w - (textX - x) - 20, fontList)
+            local rightMargin = 20
+            if icon then
+                local baseColor = theme.colors.selection_accent
+                if icon == iconTrash then baseColor = {1, 0.4, 0.4} end
+                
+                local iconColor = (i == selection and isFocused) and theme.colors.text_white or baseColor
+     
+                drawIconCentered(icon, 2, iconColor)
+                rightMargin = marginRight + iconSlotW + 10
+            end
+            love.graphics.setColor(lc)
+            drawTrimmed(text, textX, textY, w - (textX - x) - rightMargin, fontMedium)
         end
     end
 
@@ -421,7 +401,7 @@ end
 
 local function calculateMenuWidth(title, message, options, item, isGameOptions)
     local w, h = love.graphics.getDimensions()
-    love.graphics.setFont(fontList)
+    love.graphics.setFont(fontMedium)
     local optionsMaxW = 0
     for _, opt in ipairs(options) do
         local text = type(opt) == "table" and opt.text or opt
@@ -430,13 +410,13 @@ local function calculateMenuWidth(title, message, options, item, isGameOptions)
         -- Estabilizar ancho para interruptores (evita que el panel cambie de tamaño entre ON/OFF)
         local label, val = text:match("^(.-):%s*(.+)$")
         if label and (val == "ON" or val == "OFF" or val == "Si" or val == "No") then
-             width = fontList:getWidth(label .. ":") + 50 -- Ancho etiqueta + espacio fijo para icono
+             width = fontMedium:getWidth(label .. ":") + 50 -- Ancho etiqueta + espacio fijo para icono
         elseif label == "Vista" then
-             width = fontList:getWidth(label .. ":") + 80 -- Espacio para dos iconos
+             width = fontMedium:getWidth(label .. ":") + 80 -- Espacio para dos iconos
         elseif label == "Modo" then
-             width = fontList:getWidth(label .. ":") + 80 -- Espacio para dos iconos
+             width = fontMedium:getWidth(label .. ":") + 80 -- Espacio para dos iconos
         else
-             width = fontList:getWidth(text)
+             width = fontMedium:getWidth(text)
         end
 
         if type(opt) == "table" and opt.icon then width = width + 35 end
@@ -507,8 +487,8 @@ local function drawHelpPanel(x, w, h, alpha)
         local iconW = item.icon:getWidth() * iconScale
 
         love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
-        love.graphics.draw(item.icon, contentX + 20, iconY, 0, iconScale, iconScale)
-        love.graphics.print(item.text, contentX + 20 + iconW + 10, textY)
+        love.graphics.print(L.get(item.text), contentX + 20, textY)
+        love.graphics.draw(item.icon, contentX + w - 20 - iconW, iconY, 0, iconScale, iconScale)
     end
 end
 
@@ -1378,9 +1358,6 @@ local function drawGrid(w, h)
 
         -- Texto
         local textFont = fontMedium
-        if i == selectedIndex then
-            textFont = fontSelected
-        end
         love.graphics.setFont(textFont)
         local displayName = item.name
         if not item.isDir then
@@ -1407,7 +1384,12 @@ local function drawGrid(w, h)
         local textBlockHeight = textFont:getHeight() * numLines
         local textY = y + cellH - 50 + (50 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
+        if i == selectedIndex then
+            love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
+            love.graphics.printf(textToPrint, x + 11, textY, contentWidth, "center")
+        else
+            love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
+        end
 
         if isLastPlayed and markPlayed and launchMode ~= "Juego Unico" then
              local pIcon = iconRom
@@ -1484,7 +1466,8 @@ local function drawBattery(x, centerY)
     if iconNetwork then
         if internetStatus then love.graphics.setColor(1, 1, 1, 1)
         else love.graphics.setColor(0.5, 0.5, 0.5, 1) end
-        local scale = 14 / iconNetwork:getHeight()
+        local targetH = 18
+        local scale = targetH / iconNetwork:getHeight()
         local nw = iconNetwork:getWidth() * scale
         love.graphics.draw(iconNetwork, x - 26 - 8 - nw, centerY - (iconNetwork:getHeight() * scale) / 2, 0, scale, scale)
     end
