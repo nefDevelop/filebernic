@@ -7,6 +7,7 @@ utils = require "utils"
 Loader = require "loader"
 State = require "state"
 preview = require "preview"
+require "locale" -- Cargar sistema de traducción
 
 -- Variables de configuración y estado
 DEBUG = 2 -- 0: No logs, 1: Errors only, 2: All logs
@@ -19,7 +20,8 @@ systemName = ""
 romPath = ""
 config = {
     scraperApi = "all", -- Opciones: "all", "libretro", "thegamesdb"
-    thegamesdb_apikey = ""
+    thegamesdb_apikey = "",
+    language = nil -- Idioma por defecto (nil para auto-detectar)
 }
 scraperApi = config.scraperApi
 secondaryPath = nil
@@ -50,7 +52,7 @@ launchMode = "Folder" -- "Folder" or "Juego Unico"
 selectedFilesCount = 0
 theme = nil
 fontList, fontTitle, fontSmall, fontMedium, fontHuge, fontTopBar, fontSelected, fontClock = nil, nil, nil, nil, nil, nil, nil, nil
-menuOptions = {"Borrar"}
+menuOptions = {} -- Inicializar vacío, se llenará dinámicamente
 menuSelection = 1
 menuTitle = ""
 menuMessage = ""
@@ -603,46 +605,58 @@ function love.load(arg)
     -- Define Help Data
     helpData = {
         LIST = {
-            {icon=buttonIcons.a, text="Entrar/Jugar"},
-            {icon=buttonIcons.b, text="Subir/Atrás"},
-            {icon=buttonIcons.y, text="Opciones"},
-            {icon=buttonIcons.x, text="Seleccionar"},
-            {icon=buttonIcons.start, text="Config"},
-            {icon=buttonIcons.select, text="Salir"},
-            {icon=buttonIcons.l1, text="Buscar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.a, text="accept"},
+            {icon=buttonIcons.b, text="back"},
+            {icon=buttonIcons.y, text="options"},
+            {icon=buttonIcons.x, text="mark"},
+            {icon=buttonIcons.start, text="config"},
+            {icon=buttonIcons.select, text="exit"},
+            {icon=buttonIcons.l1, text="search"},
+            {icon=buttonIcons.r1, text="help"}
         },
         CLEANUP_MENU = {
-            {icon=buttonIcons.l1, text="Cambiar Columna"},
-            {icon=buttonIcons.a, text="Acción"},
-            {icon=buttonIcons.b, text="Salir"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.l1, text="change_col"},
+            {icon=buttonIcons.a, text="delete"},
+            {icon=buttonIcons.b, text="back"},
+            {icon=buttonIcons.r1, text="help"}
         },
         INFO_VIEW = {
-            {icon=buttonIcons.b, text="Volver"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.b, text="back"},
+            {icon=buttonIcons.r1, text="help"}
         },
         SCRAPER_VIEW = {
-            {icon=buttonIcons.a, text="Buscar"},
-            {icon=buttonIcons.y, text="Opciones"},
-            {icon=buttonIcons.b, text="Volver"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.a, text="search"},
+            {icon=buttonIcons.y, text="options"},
+            {icon=buttonIcons.b, text="back"},
+            {icon=buttonIcons.r1, text="help"}
         },
         OPTIONS_MENU = {
-            {icon=buttonIcons.a, text="Seleccionar"},
-            {icon=buttonIcons.b, text="Cerrar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.a, text="accept"},
+            {icon=buttonIcons.b, text="back"},
+            {icon=buttonIcons.r1, text="help"}
         },
         DEFAULT = {
-            {icon=buttonIcons.a, text="Aceptar"},
-            {icon=buttonIcons.b, text="Cancelar"},
-            {icon=buttonIcons.r1, text="Ayuda"}
+            {icon=buttonIcons.a, text="confirm"},
+            {icon=buttonIcons.b, text="cancel"},
+            {icon=buttonIcons.r1, text="help"}
         }
     }
 
     -- Cargar configuración global (API keys, etc)
     config = State.loadConfig(config)
     scraperApi = config.scraperApi
+
+    -- Detectar idioma si no está forzado en config
+    if not config.language then
+        local sysLang = os.getenv("LANG")
+        if sysLang then
+            local lowerLang = sysLang:lower()
+            if lowerLang:match("^es") then config.language = "es"
+            elseif lowerLang:match("^en") then config.language = "en"
+            end
+        end
+    end
+    L.current = config.language or "es" -- Establecer idioma actual (fallback a español)
 
     -- Cargar configuración guardada
     local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")

@@ -35,6 +35,7 @@ SET_VAR "system" "foreground_process" "love"
 export LD_LIBRARY_PATH="$APP_DIR/libs:$LD_LIBRARY_PATH"
 LOGFILE="${LOGDIR}/filebernic.log"
 echo "[DEBUG] Running as user: $(whoami)" >>"$LOGFILE"
+echo "[DEBUG] LANG: $LANG" >>"$LOGFILE"
 echo "[DEBUG] Environment variables:" >>"$LOGFILE"
 env >>"$LOGFILE"
 

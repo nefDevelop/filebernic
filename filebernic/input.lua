@@ -207,14 +207,14 @@ function stateHandlers.OPTIONS_MENU(key)
              local opt = menuOptions[menuSelection]
              local optText = type(opt) == "table" and opt.text or opt
              
-             if optText == "Info" then
+             if optText == L.get("info") then
                  preview.load()
                  state = "INFO_VIEW"
-             elseif optText == "Scraper" then
+             elseif optText == L.get("scraper") then
                  state = "SCRAPER_VIEW"
-             elseif optText:match("Save Games") then
+             elseif optText:match(L.get("save_games")) then
                  state = "SAVE_MANAGER"
-             elseif optText == "Borrar" then
+             elseif optText == L.get("delete") then
                  local fullPath = focusedItem.fullPath
                  deleteGameMedia(fullPath)
                  local success, err = os.remove(fullPath)
@@ -236,14 +236,14 @@ function stateHandlers.OPTIONS_MENU(key)
                  state = "LIST"
                  menuStack = {}
                  focusedItem = nil
-             elseif optText:match("Favorito") then
+             elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
                  local fullPath = focusedItem.fullPath
                  if favoriteRoms[fullPath] then
                      favoriteRoms[fullPath] = nil
-                     if type(opt) == "table" then opt.text = "Añadir a Favoritos" else menuOptions[menuSelection] = "Añadir a Favoritos" end
+                     if type(opt) == "table" then opt.text = L.get("add_favorite") else menuOptions[menuSelection] = L.get("add_favorite") end
                  else
                      favoriteRoms[fullPath] = true
-                     if type(opt) == "table" then opt.text = "Quitar de Favoritos" else menuOptions[menuSelection] = "Quitar de Favoritos" end
+                     if type(opt) == "table" then opt.text = L.get("remove_favorite") else menuOptions[menuSelection] = L.get("remove_favorite") end
                  end
                  filesystem.saveFavorites(favoriteRoms, json.encode)
                  if isVirtualRoot and launchMode == "Juego Unico" then
@@ -255,7 +255,7 @@ function stateHandlers.OPTIONS_MENU(key)
              return
         end
 
-        if menuTitle == "Versión" then
+        if menuTitle == L.get("version") then
              local item = files[selectedIndex]
              if item and item.versions and item.versions[menuSelection] then
                  local v = item.versions[menuSelection]
@@ -303,7 +303,7 @@ function stateHandlers.OPTIONS_MENU(key)
                 state = "SCRAPER_VIEW"
                 inputCooldown = 0.2
             end
-        elseif optText == "Borrar de SD1" then
+        elseif optText == L.get("delete_sd1") then
             local item = files[selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
@@ -323,7 +323,7 @@ function stateHandlers.OPTIONS_MENU(key)
                 refreshFiles()
             end
             state = "LIST"
-        elseif optText == "Borrar de SD2" then
+        elseif optText == L.get("delete_sd2") then
             local item = files[selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
@@ -343,54 +343,56 @@ function stateHandlers.OPTIONS_MENU(key)
                 refreshFiles()
             end
             state = "LIST"
-        elseif optText:match("Modo:") then
+        elseif optText:match(L.get("mode") .. ":") then
             launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
-            local newVal = "Modo: " .. launchMode
+            local displayMode = (launchMode == "Folder") and L.get("folder") or L.get("single_game")
+            local newVal = L.get("mode") .. ": " .. displayMode
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
             State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
             files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, pathForSelection, favoriteRoms, hideFavorites)
             preview.load()
-        elseif optText:match("Ocultar vacíos") then
+        elseif optText:match(L.get("hide_empty")) then
             hideEmpty = not hideEmpty
-            local newVal = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF")
+            local newVal = L.get("hide_empty") .. ": " .. (hideEmpty and L.get("on") or L.get("off"))
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
             if isVirtualRoot then 
                 files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
                 preview.load()
             end
-        elseif optText:match("Vista") then
+        elseif optText:match(L.get("view")) then
             viewMode = (viewMode == "LIST") and "GRID" or "LIST"
-            local newVal = "Vista: " .. viewMode
+            local displayView = (viewMode == "LIST") and L.get("list") or L.get("grid")
+            local newVal = L.get("view") .. ": " .. displayView
             if type(opt) == "table" then 
                 opt.text = newVal 
             else 
                 menuOptions[menuSelection] = newVal 
             end
             State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
-        elseif optText == "Limpieza" then
+        elseif optText == L.get("cleanup") then
             state = "CLEANUP_MENU"
             cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
             inputCooldown = 0.2
-        elseif optText:match("Marcar Jugado") then
+        elseif optText:match(L.get("mark_played")) then
             markPlayed = not markPlayed
-            local newVal = "Marcar Jugado: " .. (markPlayed and "Si" or "No")
+            local newVal = L.get("mark_played") .. ": " .. (markPlayed and L.get("yes") or L.get("no"))
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
             State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
-        elseif optText:match("Ocultar Favoritos") then
+        elseif optText:match(L.get("hide_favorites")) then
             hideFavorites = not hideFavorites
-            local newVal = "Ocultar Favoritos: " .. (hideFavorites and "ON" or "OFF")
+            local newVal = L.get("hide_favorites") .. ": " .. (hideFavorites and L.get("on") or L.get("off"))
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
             State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
             refreshFiles()
-        elseif optText:match("Favorito") then
+        elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
             local item = files[selectedIndex]
             local path = item.fullPath
             if favoriteRoms[path] then
                 favoriteRoms[path] = nil
-                if type(opt) == "table" then opt.text = "Añadir a Favoritos" else menuOptions[menuSelection] = "Añadir a Favoritos" end
+                if type(opt) == "table" then opt.text = L.get("add_favorite") else menuOptions[menuSelection] = L.get("add_favorite") end
             else
                 favoriteRoms[path] = true
-                if type(opt) == "table" then opt.text = "Quitar de Favoritos" else menuOptions[menuSelection] = "Quitar de Favoritos" end
+                if type(opt) == "table" then opt.text = L.get("remove_favorite") else menuOptions[menuSelection] = L.get("remove_favorite") end
             end
             filesystem.saveFavorites(favoriteRoms, json.encode)
             if isVirtualRoot then
@@ -398,11 +400,11 @@ function stateHandlers.OPTIONS_MENU(key)
             else
                 refreshFiles()
             end
-        elseif optText == "Re-indexar" then
+        elseif optText == L.get("reindex") then
             forceReindex()
             state = "LIST" -- Cerrar menú y volver a lista (que mostrará estado de indexación)
-        elseif optText:match("Copiar") or optText:match("Mover") then
-            local isMove = optText:match("Mover")
+        elseif optText:match(L.get("copy")) or optText:match(L.get("move_to"):match("^(.*)%s")) then -- Match "Mover a" prefix
+            local isMove = optText:match(L.get("move_to"):match("^(.*)%s"))
             local targetDir, _ = filesystem.getTargetSDPath(romPath, config)
             
             if targetDir then
@@ -430,14 +432,14 @@ function stateHandlers.OPTIONS_MENU(key)
                 refreshFiles()
                 state = "LIST"
             end
-        elseif optText:match("Save Games") then
+        elseif optText:match(L.get("save_games")) then
             state = "SAVE_MANAGER"
         end
         inputCooldown = 0.2
     elseif key == "tab" then
-         if menuTitle == "Configuración" then return end
+         if menuTitle == L.get("config") then return end
 
-         if menuTitle == "Versión" then
+         if menuTitle == L.get("version") then
              local item = files[selectedIndex]
              local ver = item.versions[menuSelection]
              
@@ -450,15 +452,15 @@ function stateHandlers.OPTIONS_MENU(key)
              })
              focusedItem = ver
              
-             menuTitle = "Opciones: " .. ver.name
+             menuTitle = L.get("options") .. ": " .. ver.name
              menuMessage = ver.name
              findSaveFiles(ver)
-             menuOptions = {"Info", "Scraper", "Save Games (" .. #saveFiles .. ")", "Borrar"}
+             menuOptions = {L.get("info"), L.get("scraper"), L.get("save_games") .. " (" .. #saveFiles .. ")", L.get("delete")}
              
              if favoriteRoms[ver.fullPath] then
-                 table.insert(menuOptions, 2, "Quitar de Favoritos")
+                 table.insert(menuOptions, 2, L.get("remove_favorite"))
              else
-                 table.insert(menuOptions, 2, "Añadir a Favoritos")
+                 table.insert(menuOptions, 2, L.get("add_favorite"))
              end
 
              menuSelection = 1
@@ -502,7 +504,7 @@ end
 -- Manejador para Opciones de Scraper
 function stateHandlers.SCRAPER_OPTIONS(key)
     if key == "return" or key == "kpenter" then
-        if menuOptions[menuSelection] == "Limpiar" then
+        if menuOptions[menuSelection] == L.get("clean") then
             local item = files[selectedIndex]
             local baseName = item.name:gsub("%..-$", "")
             os.remove(muosArtPath .. baseName .. ".png")
@@ -534,10 +536,10 @@ function stateHandlers.SCRAPER_VIEW(key)
         startScraping()
     elseif key == "tab" then -- 'y' button
         state = "SCRAPER_OPTIONS"
-        menuTitle = "Opciones"
+        menuTitle = L.get("options")
         menuAnim = 0
         menuMessage = ""
-        menuOptions = {"Limpiar"}
+        menuOptions = {L.get("clean")}
         menuSelection = 1
         log("Menu opened: " .. menuTitle)
         inputCooldown = 0.2
@@ -726,7 +728,7 @@ end
 -- Manejador para Menú de Borrado
 function stateHandlers.DELETE_MENU(key)
     if key == "return" or key == "space" or key == "kpenter" then
-        if menuOptions[menuSelection] == "Borrar" then
+        if menuOptions[menuSelection] == L.get("delete") then
             if selectedFilesCount > 0 then
                 for _, item in ipairs(files) do
                     if item.selected then
@@ -936,7 +938,7 @@ local function handleListInput(key)
                 if #item.versions > 1 then
                     state = "OPTIONS_MENU"
                     menuAnim = 0
-                    menuTitle = "Versión"
+                    menuTitle = L.get("version")
                     log("Menu opened: " .. menuTitle .. " for " .. item.name)
                     menuMessage = item.name
                     menuOptions = {}
@@ -1017,7 +1019,7 @@ local function handleListInput(key)
                     -- Open the version selection menu, same as 'A'
                     state = "OPTIONS_MENU"
                     menuAnim = 0
-                    menuTitle = "Versión"
+                    menuTitle = L.get("version")
                     log("Menu opened: " .. menuTitle .. " for " .. item.name)
                     menuMessage = item.name
                     menuOptions = {}
@@ -1042,10 +1044,10 @@ local function handleListInput(key)
 
                 state = "OPTIONS_MENU"
                 menuAnim = 0
-                menuTitle = "Opciones:"
+                menuTitle = L.get("options") .. ":"
                 menuStack = {}
                 if selectedFilesCount > 0 then
-                    menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
+                    menuMessage = L.get("delete_selected_msg", selectedFilesCount)
                 else
                     menuMessage = item.name
                 end
@@ -1054,36 +1056,36 @@ local function handleListInput(key)
                 menuOptions = {}
                 -- 1. Info (Solo individual)
                 if selectedFilesCount <= 1 then
-                    table.insert(menuOptions, {text="Info", icon=iconInfo})
+                    table.insert(menuOptions, {text=L.get("info"), icon=iconInfo})
                 end
                 -- Favoritos
                 if favoriteRoms[item.fullPath] then
-                    table.insert(menuOptions, {text="Quitar de Favoritos", icon=iconFavorite})
+                    table.insert(menuOptions, {text=L.get("remove_favorite"), icon=iconFavorite})
                 else
-                    table.insert(menuOptions, {text="Añadir a Favoritos", icon=iconFavorite})
+                    table.insert(menuOptions, {text=L.get("add_favorite"), icon=iconFavorite})
                 end
-                table.insert(menuOptions, {text="Scraper", icon=iconNetwork})
+                table.insert(menuOptions, {text=L.get("scraper"), icon=iconNetwork})
                 
                 -- 2. Copiar / Mover
                 if item.sourceLabel ~= "SD½" then
                     local _, targetLabel = filesystem.getTargetSDPath(item.fullPath, config)
                     if targetLabel then
-                        table.insert(menuOptions, {text="Copiar a " .. targetLabel, icon=iconFolder})
-                        table.insert(menuOptions, {text="Mover a " .. targetLabel, icon=iconFolder})
+                        table.insert(menuOptions, {text=L.get("copy_to", targetLabel), icon=iconFolder})
+                        table.insert(menuOptions, {text=L.get("move_to", targetLabel), icon=iconFolder})
                     end
                 end
                 
                 -- 3. Save Games
                 findSaveFiles(item)
-                table.insert(menuOptions, {text="Save Games (" .. #saveFiles .. ")", icon=iconSaveStates})
+                table.insert(menuOptions, {text=L.get("save_games") .. " (" .. #saveFiles .. ")", icon=iconSaveStates})
                 
                 -- 4. Borrar (Al final)
                 if not item.isFavorites then
                     if item.sourceLabel == "SD½" then
-                        table.insert(menuOptions, {text="Borrar de SD1", icon=iconTrash})
-                        table.insert(menuOptions, {text="Borrar de SD2", icon=iconTrash})
+                        table.insert(menuOptions, {text=L.get("delete_sd1"), icon=iconTrash})
+                        table.insert(menuOptions, {text=L.get("delete_sd2"), icon=iconTrash})
                     else
-                        table.insert(menuOptions, {text="Borrar", icon=iconTrash})
+                        table.insert(menuOptions, {text=L.get("delete"), icon=iconTrash})
                     end
                 end
                 
@@ -1149,7 +1151,7 @@ local function keypressed(key)
     end
 
     if key == "f1" then -- Start button
-        if state == "OPTIONS_MENU" and menuTitle == "Configuración" then
+        if state == "OPTIONS_MENU" and menuTitle == L.get("config") then
             closingMenu = true
             log("Configuration Menu exited")
             inputCooldown = 0.2
@@ -1158,20 +1160,22 @@ local function keypressed(key)
             log("Opening Configuration Menu")
             state = "OPTIONS_MENU"
             menuAnim = 0
-            menuTitle = "Configuración"
+            menuTitle = L.get("config")
             menuStack = {}
             menuMessage = ""
             menuSelection = 1
             menuOptions = {}
+            local displayMode = (launchMode == "Folder") and L.get("folder") or L.get("single_game")
+            local displayView = (viewMode == "LIST") and L.get("list") or L.get("grid")
             if romPath ~= "@Favorites/" then
-                table.insert(menuOptions, {text = "Modo: " .. launchMode, icon = iconGame})
+                table.insert(menuOptions, {text = L.get("mode") .. ": " .. displayMode, icon = iconGame})
             end
-            table.insert(menuOptions, {text = "Vista: " .. viewMode, icon = iconFolder})
-            table.insert(menuOptions, {text = "Ocultar vacíos: " .. (hideEmpty and "ON" or "OFF"), icon = iconHide})
-            table.insert(menuOptions, {text = "Marcar Jugado: " .. (markPlayed and "Si" or "No"), icon = iconRom})
-            table.insert(menuOptions, {text = "Ocultar Favoritos: " .. (hideFavorites and "ON" or "OFF"), icon = iconHide})
-            table.insert(menuOptions, {text = "Re-indexar", icon = iconReload})
-            table.insert(menuOptions, {text = "Limpieza", icon = iconTrash})
+            table.insert(menuOptions, {text = L.get("view") .. ": " .. displayView, icon = iconFolder})
+            table.insert(menuOptions, {text = L.get("hide_empty") .. ": " .. (hideEmpty and L.get("on") or L.get("off")), icon = iconHide})
+            table.insert(menuOptions, {text = L.get("mark_played") .. ": " .. (markPlayed and L.get("yes") or L.get("no")), icon = iconRom})
+            table.insert(menuOptions, {text = L.get("hide_favorites") .. ": " .. (hideFavorites and L.get("on") or L.get("off")), icon = iconHide})
+            table.insert(menuOptions, {text = L.get("reindex"), icon = iconReload})
+            table.insert(menuOptions, {text = L.get("cleanup"), icon = iconTrash})
             inputCooldown = 0.2
             return
         end

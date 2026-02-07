@@ -1,0 +1,209 @@
+local locale = {}
+
+-- Idioma por defecto
+locale.current = "es"
+
+-- Tabla de traducciones
+locale.data = {
+    es = {
+        -- Acciones / Botones
+        play = "Jugar",
+        back = "Atrás",
+        options = "Opciones",
+        mark = "Marcar",
+        config = "Config",
+        exit = "Salir",
+        search = "Buscar",
+        help = "Ayuda",
+        confirm = "Confirmar",
+        cancel = "Cancelar",
+        accept = "Aceptar",
+        delete = "Borrar",
+        copy = "Copiar",
+        save = "Guardar",
+        change_col = "Cambiar Columna",
+        
+        -- Títulos y Mensajes
+        app_title = "FileBernic Rom Manager",
+        no_items = "No se encontraron elementos.",
+        indexing = "Indexando ROMs...",
+        
+        -- Menú Configuración
+        mode = "Modo",
+        view = "Vista",
+        hide_empty = "Ocultar vacíos",
+        mark_played = "Marcar Jugado",
+        hide_favorites = "Ocultar Favoritos",
+        reindex = "Re-indexar",
+        cleanup = "Limpieza",
+        
+        -- Valores
+        yes = "Si",
+        no = "No",
+        on = "ON",
+        off = "OFF",
+        
+        -- Nuevas traducciones
+        info = "Info",
+        scraper = "Scraper",
+        save_games = "Save Games",
+        add_favorite = "Añadir a Favoritos",
+        remove_favorite = "Quitar de Favoritos",
+        copy_to = "Copiar a %s",
+        move_to = "Mover a %s",
+        delete_sd1 = "Borrar de SD1",
+        delete_sd2 = "Borrar de SD2",
+        confirm_delete = "Confirmar Borrado",
+        delete_selected_msg = "¿Borrar %d archivos seleccionados?",
+        delete_file_msg = "¿Borrar este archivo?\n%s",
+        version = "Versión",
+        clean = "Limpiar",
+        save_manager_title = "Gestor de Partidas (Save Games)",
+        no_saves_found = "No se encontraron partidas guardadas.",
+        cleanup_title = "Limpieza de Archivos",
+        scan = "BUSCAR",
+        scanning_files = "Escaneando archivos...",
+        orphan_states = "States Huérfanos",
+        duplicate_games = "Juegos Duplicados",
+        orphan_images = "Imágenes Huérfanas",
+        delete_all_states = "BORRAR TODOS LOS STATES",
+        action_delete_all_orphans = "Acción: Borrar TODOS los estados huérfanos",
+        orphan_state = "Estado Huérfano",
+        orphan_image = "Imagen Huérfana",
+        duplicate_game = "Juego Duplicado",
+        file_label = "Archivo: %s",
+        path_label = "Ruta: %s",
+        system_label = "Sistema: %s | Ubicación: %s",
+        location_label = "Ubicación: %s",
+        confirm_action = "¿Confirmar Acción?",
+        all_systems = "Todos los Sistemas",
+        loading_index = "Cargando índice...",
+        search_label = "Buscar: %s_",
+        scraper_title = "Scraper: %s",
+        search_data = "Buscar Datos",
+        scraping_db = "Consultando bases de datos...",
+        scraping_batch = "Scraping en Lote",
+        processing = "Procesando: %s",
+        successes_failures = "Éxitos: %d | Fallos: %d",
+        results = "Resultados:",
+        no_results = "No se encontraron resultados.",
+        front = "Frontal",
+        screen = "Screen",
+        no_screen = "No Screen",
+        no_desc = "Sin descripción",
+        no_info = "Sin información.",
+        no_images_info = "No hay imágenes ni información disponible.",
+        folder = "Folder",
+        single_game = "Juego Unico",
+        grid = "GRID",
+        list = "LIST",
+    },
+    en = {
+        -- Actions / Buttons
+        play = "Play",
+        back = "Back",
+        options = "Options",
+        mark = "Mark",
+        config = "Config",
+        exit = "Exit",
+        search = "Search",
+        help = "Help",
+        confirm = "Confirm",
+        cancel = "Cancel",
+        accept = "Accept",
+        delete = "Delete",
+        copy = "Copy",
+        save = "Save",
+        change_col = "Change Column",
+        
+        -- Titles & Messages
+        app_title = "FileBernic Rom Manager",
+        no_items = "No items found.",
+        indexing = "Indexing ROMs...",
+        
+        -- Config Menu
+        mode = "Mode",
+        view = "View",
+        hide_empty = "Hide Empty",
+        mark_played = "Mark Played",
+        hide_favorites = "Hide Favorites",
+        reindex = "Re-index",
+        cleanup = "Cleanup",
+        
+        -- Values
+        yes = "Yes",
+        no = "No",
+        on = "ON",
+        off = "OFF",
+        
+        -- New translations
+        info = "Info",
+        scraper = "Scraper",
+        save_games = "Save Games",
+        add_favorite = "Add to Favorites",
+        remove_favorite = "Remove from Favorites",
+        copy_to = "Copy to %s",
+        move_to = "Move to %s",
+        delete_sd1 = "Delete from SD1",
+        delete_sd2 = "Delete from SD2",
+        confirm_delete = "Confirm Delete",
+        delete_selected_msg = "Delete %d selected files?",
+        delete_file_msg = "Delete this file?\n%s",
+        version = "Version",
+        clean = "Clean",
+        save_manager_title = "Save Game Manager",
+        no_saves_found = "No save games found.",
+        cleanup_title = "File Cleanup",
+        scan = "SCAN",
+        scanning_files = "Scanning files...",
+        orphan_states = "Orphan States",
+        duplicate_games = "Duplicate Games",
+        orphan_images = "Orphan Images",
+        delete_all_states = "DELETE ALL STATES",
+        action_delete_all_orphans = "Action: Delete ALL orphan states",
+        orphan_state = "Orphan State",
+        orphan_image = "Orphan Image",
+        duplicate_game = "Duplicate Game",
+        file_label = "File: %s",
+        path_label = "Path: %s",
+        system_label = "System: %s | Location: %s",
+        location_label = "Location: %s",
+        confirm_action = "Confirm Action?",
+        all_systems = "All Systems",
+        loading_index = "Loading index...",
+        search_label = "Search: %s_",
+        scraper_title = "Scraper: %s",
+        search_data = "Search Data",
+        scraping_db = "Querying databases...",
+        scraping_batch = "Batch Scraping",
+        processing = "Processing: %s",
+        successes_failures = "Successes: %d | Failures: %d",
+        results = "Results:",
+        no_results = "No results found.",
+        front = "Front",
+        screen = "Screen",
+        no_screen = "No Screen",
+        no_desc = "No description",
+        no_info = "No information.",
+        no_images_info = "No images or information available.",
+        folder = "Folder",
+        single_game = "Single Game",
+        grid = "GRID",
+        list = "LIST",
+    }
+}
+
+-- Función para obtener texto traducido
+function locale.get(key, ...)
+    local langData = locale.data[locale.current] or locale.data["es"]
+    local text = langData[key] or key -- Si no existe la clave, devuelve la clave misma
+    if ... then
+        return string.format(text, ...)
+    end
+    return text
+end
+
+-- Atajo global L.get("clave")
+_G.L = locale
+
+return locale
