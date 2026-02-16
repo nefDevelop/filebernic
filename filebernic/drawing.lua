@@ -1638,19 +1638,56 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 love.graphics.printf(item.name, 100, textY, layout.selWidth - 80, "left")
                 -- No dibujar nada más para elementos vacíos
             else
+                -- Pre-calcular nameToDraw y favOffset para este item para calcular el ancho del selector
+                local nameToDrawForWidth = item.name
+                if not item.isDir then
+                    nameToDrawForWidth = nameToDrawForWidth:gsub("%.[^%.]+$", "")
+                end
+
+                local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+                local favOffset = 0
+                if isFav then
+                    favOffset = (iconFavorite:getWidth() * favScale) + 5
+                end
+
+                local currentItemSelWidth = layout.selWidth
+                if launchMode == "Folder" or launchMode == "Juego Unico" then
+                    -- Calcular el ancho disponible para el texto, considerando el offset del icono y el padding
+                    local tempAvailableWidth = sdColX - (layout.selX + 70) - 10
+                    local trimmedNameForWidth = nameToDrawForWidth
+                    if fontList:getWidth(trimmedNameForWidth) > tempAvailableWidth then
+                        while fontList:getWidth(trimmedNameForWidth .. "...") > tempAvailableWidth and #trimmedNameForWidth > 0 do
+                            trimmedNameForWidth = trimmedNameForWidth:sub(1, -2)
+                        end
+                        trimmedNameForWidth = trimmedNameForWidth .. "..."
+                    end
+                    local textW = fontList:getWidth(trimmedNameForWidth)
+                    currentItemSelWidth = 70 + favOffset + textW + 20
+                    if currentItemSelWidth > layout.selWidth then currentItemSelWidth = layout.selWidth end
+                end
+
                 -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
                 if isLastPlayed and markPlayed then
                     -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado, sino el de "no seleccionado".
                     local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
                     love.graphics.setColor(ditherColor)
                     local inset = 4
-                    local rx = layout.selX + inset
-                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
-                    local rw = layout.selWidth - (inset * 2) -- Usar el ancho completo del layout.selWidth para el fondo
-                    local rh = layout.selHeight - (inset * 2)
+                    local rx = layout.selX -- Inicia en la misma X que el selector
+                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 -- Inicia en la misma Y que el selector
+                    
+                    -- Determine the width for the dithered background
+                    local ditherWidth
+                    if i == selectedIndex then
+                        ditherWidth = actualCurrentSelWidth -- Usar el ancho precalculado para el elemento seleccionado
+                    else
+                        ditherWidth = currentItemSelWidth + 2 -- Usar el ancho calculado para este elemento específico, con el ajuste de +2px
+                    end
+                    
+                    local rw = ditherWidth -- El ancho del dithering es el mismo que el del selector
+                    local rh = layout.selHeight -- La altura del dithering es la misma que la del selector
                     
                     love.graphics.stencil(function()
-                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
+                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22) -- Usar el mismo radio de esquina que el selector
                     end, "replace", 1)
                     love.graphics.setStencilTest("greater", 0)
                     ditherShader:send("objPos", {rx, ry})
