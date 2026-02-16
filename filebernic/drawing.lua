@@ -1667,35 +1667,6 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
 
                 -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
-                if isLastPlayed and markPlayed then
-                    -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado, sino el de "no seleccionado".
-                    local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
-                    love.graphics.setColor(ditherColor)
-                    local inset = 4
-                    local rx = layout.selX -- Inicia en la misma X que el selector
-                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 -- Inicia en la misma Y que el selector
-                    
-                    -- Determine the width for the dithered background
-                    local ditherWidth
-                    if i == selectedIndex then
-                        ditherWidth = actualCurrentSelWidth -- Usar el ancho precalculado para el elemento seleccionado
-                    else
-                        ditherWidth = currentItemSelWidth + 2 -- Usar el ancho calculado para este elemento específico, con el ajuste de +2px
-                    end
-                    
-                    local rw = ditherWidth -- El ancho del dithering es el mismo que el del selector
-                    local rh = layout.selHeight -- La altura del dithering es la misma que la del selector
-                    
-                    love.graphics.stencil(function()
-                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22) -- Usar el mismo radio de esquina que el selector
-                    end, "replace", 1)
-                    love.graphics.setStencilTest("greater", 0)
-                    ditherShader:send("objPos", {rx, ry})
-                    love.graphics.setShader(ditherShader)
-                    love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
-                    love.graphics.setShader()
-                    love.graphics.setStencilTest()
-                end
                 -- Determinar icono a dibujar
              local iconToDraw = item.icon
              if not iconToDraw and item.isDir then
@@ -1747,36 +1718,56 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     availableWidth = sdColX - (layout.selX + 70) - 10
                 end
 
+               -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
+                if isLastPlayed and markPlayed then
+                    -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado, sino el de "no seleccionado".
+                    local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
+                    love.graphics.setColor(ditherColor)
+                    local inset = 8 -- 2px por cada lado (arriba, abajo, izquierda, derecha)
+                    local rx = layout.selX + inset/2 -- Inicia en la misma X que el selector, más 2px
+                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset/2 -- Inicia en la misma Y que el selector, más 2px
+                    
+                    -- Determine the width for the dithered background
+                    local ditherWidth
+                    if i == selectedIndex then
+                        ditherWidth = actualCurrentSelWidth -- Usar el ancho precalculado para el elemento seleccionado
+                    else
+                        ditherWidth = currentItemSelWidth + 2 -- Usar el ancho calculado para este elemento específico, con el ajuste de +2px
+                    end
+                    
+                    local rw = ditherWidth - inset -- El ancho del dithering es el mismo que el del selector, menos 4px
+                    local rh = layout.selHeight - inset -- La altura del dithering es la misma que la del selector, menos 4px
+                    
+                    love.graphics.stencil(function()
+                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset/2) -- Usar el mismo radio de esquina que el selector, ajustado
+                    end, "replace", 1)
+                    love.graphics.setStencilTest("greater", 0)
+                    ditherShader:send("objPos", {rx, ry})
+                    love.graphics.setShader(ditherShader)
+                    love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
+                    love.graphics.setShader()
+                    love.graphics.setStencilTest()
+                end
+
                 -- Dibujar icono principal (carpeta/rom/sistema)
                 love.graphics.setColor(1, 1, 1, 1) -- Siempre blanco opaco para el icono
                 local iconX = layout.selX + (70 - iconToDraw:getWidth() * drawScale) / 2
                 love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
 
                 local textX = layout.selX + 70
-                local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
-                local favOffset = 0
-
-                if isFav then
-                    -- Draw favorite icon
-                    love.graphics.draw(iconFavorite, textX, y + (layout.rowHeight - iconFavorite:getHeight() * favScale) / 2, 0, favScale, favScale)
-                    favOffset = (iconFavorite:getWidth() * favScale) + 5
-                    textX = textX + favOffset
-                    availableWidth = availableWidth - favOffset
-                end
-
                 local nameToDraw = item.name
                 if not item.isDir then
                     nameToDraw = nameToDraw:gsub("%.[^%.]+$", "")
                 end
 
                 -- Determinar color de texto
-                local textColor = theme.colors.text_medium -- Por defecto para no seleccionado, no marcado
-                if item.pendingDelete then
-                    textColor = (i == selectedIndex) and {1, 0, 0} or {0.8, 0.2, 0.2} -- Rojo para marcado (brillante si seleccionado, desaturado si no)
-                elseif item.selected then -- Nuevo: Color para archivos marcados con 'X'
-                    textColor = (i == selectedIndex) and {1, 0.8, 0.4} or {0.8, 0.6, 0.3} -- Naranja/Amarillo (brillante si seleccionado, desaturado si no)
-                elseif i == selectedIndex then
-                    textColor = theme.colors.text_bright -- Blanco para seleccionado (no marcado)
+                local textColor = theme.colors.text_medium -- Por defecto para no seleccionado, no marcado, no jugados
+                if i == selectedIndex then -- Prioridad máxima: si está seleccionado, el texto es blanco
+                    textColor = theme.colors.text_bright
+                elseif item.pendingDelete then -- Si no está seleccionado, pero está pendiente de borrar
+                    textColor = {0.8, 0.2, 0.2} -- Rojo desaturado
+                elseif item.selected then -- Si no está seleccionado, pero está marcado con 'X'
+                    textColor = {0.8, 0.6, 0.3} -- Naranja/Amarillo desaturado
                 end
                 love.graphics.setColor(textColor)
 
