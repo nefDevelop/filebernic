@@ -10,7 +10,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 
 -- Variables de configuración y estado
-DEBUG = 2 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 0 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
     DEFAULT = true

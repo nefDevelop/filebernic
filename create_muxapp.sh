@@ -4,7 +4,7 @@
 
 # Define the directories to be compressed
 DIR1="filebernic"
-# DIR2="glyph"
+DIR2="glyph"
 
 # Check if both directories exist
 if [ ! -d "$DIR1" ]; then
@@ -12,10 +12,10 @@ if [ ! -d "$DIR1" ]; then
   exit 1
 fi
 
-# if [ ! -d "$DIR2" ]; then
-  # echo "Error: Directory '$DIR2' not found."
-  # exit 1
-# fi
+if [ ! -d "$DIR2" ]; then
+  echo "Error: Directory '$DIR2' not found. Please create it and place your app icon (e.g., filebernic.png) inside."
+  exit 1
+fi
 
 ZIP_FILENAME="${DIR1}.zip" # Output zip will be named after the main app
 MUXAPP_FILENAME="${DIR1}.muxapp"
@@ -25,7 +25,7 @@ echo "Compressing directories '$DIR1' to '$ZIP_FILENAME'..."
 # -q: quiet operation
 # -x "*.DS_Store" -x "__MACOSX" -x ".git*" : Exclude common unwanted files/directories
 # Zip both directories at the root of the archive
-zip -rq "$ZIP_FILENAME" "$DIR1" -x "*.DS_Store" -x "__MACOSX" -x ".git*" -x "$DIR1/data/*"
+zip -rq "$ZIP_FILENAME" "$DIR1" "$DIR2" -x "*.DS_Store" -x "__MACOSX" -x ".git*" -x "$DIR1/data/*"
 
 if [ $? -eq 0 ]; then
   echo "Compression successful. Renaming '$ZIP_FILENAME' to '$MUXAPP_FILENAME'..."
