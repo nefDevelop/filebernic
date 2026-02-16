@@ -10,7 +10,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 
 -- Variables de configuración y estado
-DEBUG = 0 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 1 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
     DEFAULT = true
@@ -46,6 +46,8 @@ markPlayed = true
 hideFavorites = false
 favoriteRoms = {}
 pageSize = 7
+animatedSelectionIndex = 1 -- Para animación suave del cursor
+selectionAnimationSpeed = 10 -- Velocidad de la animación (ajustar según preferencia)
 viewMode = "LIST" -- "LIST" or "GRID"
 gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"

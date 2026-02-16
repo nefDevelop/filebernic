@@ -109,10 +109,7 @@ local function drawBottomBar()
         drawHint(buttonIcons.a, L.get("accept"))
         drawHint(buttonIcons.b, L.get("back"))
         drawHint(buttonIcons.y, L.get("options"))
-        if launchMode ~= "Juego Unico" then
-            drawHint(buttonIcons.x, L.get("mark"))
-        end
-        drawHint(buttonIcons.start, L.get("config"))
+        -- drawHint(buttonIcons.start, L.get("config")) -- Eliminado según la solicitud
         -- Select button with offset
         local icon = buttonIcons.select
         local scale = desiredIconHeight / icon:getHeight()
@@ -1572,14 +1569,66 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             end
         end
 
+        -- Calcular propiedades para el elemento *realmente* seleccionado (files[selectedIndex])
+        -- Definir favScale aquí para que esté disponible globalmente en drawMainList
+        local favScale = (iconFavorite and iconFavorite:getHeight() ~= 0) and ((40 * 0.55) / iconFavorite:getHeight()) or 1
+
+        -- Calcular startLine aquí para que esté disponible para el selector animado
+        local startLine = math.max(1, selectedIndex - 5)
+
+        local actualSelectedItem = files[selectedIndex]
+        local actualSelName = actualSelectedItem.name
+        if not actualSelectedItem.isDir then
+            actualSelName = actualSelName:gsub("%.[^%.]+$", "")
+        end
+        
+        -- Simular truncado para el elemento seleccionado para obtener el ancho real
+        local trimmedActualSelName = actualSelName
+        local tempAvailableWidth = layout.selWidth - (layout.selX + 70) - 10 -- Ancho máximo disponible para el texto
+        if fontList:getWidth(trimmedActualSelName) > tempAvailableWidth then
+            while fontList:getWidth(trimmedActualSelName .. "...") > tempAvailableWidth and #trimmedActualSelName > 0 do
+                trimmedActualSelName = trimmedActualSelName:sub(1, -2)
+            end
+            trimmedActualSelName = trimmedActualSelName .. "..."
+        end
+
+        local actualFavOffset = 0
+        if (favoriteRoms[actualSelectedItem.fullPath]) and romPath ~= "@Favorites/" then
+            local favH = 16
+            actualFavOffset = (iconFavorite:getWidth() * favScale) + 5
+        end
+
+        local actualCurrentSelWidth = layout.selWidth
+        if launchMode == "Folder" or launchMode == "Juego Unico" then -- Ajustar ancho también en Juego Unico
+            local textW = fontList:getWidth(trimmedActualSelName) -- Usar el ancho del nombre truncado
+            actualCurrentSelWidth = 70 + actualFavOffset + textW + 20
+            if actualCurrentSelWidth > layout.selWidth then actualCurrentSelWidth = layout.selWidth end
+        end
+        actualCurrentSelWidth = actualCurrentSelWidth + 2 -- 2 píxeles más a la derecha
+
+        -- Calcular la posición Y visual para el rectángulo de selección animado
+        -- 'y' en el bucle es para 'i', necesitamos 'y' para 'animatedSelectionIndex'
+        local visualRow = animatedSelectionIndex - startLine -- 0-indexed row on screen
+        local visualSelY = layout.listY + visualRow * layout.rowHeight + (layout.rowHeight - layout.selHeight) / 2
+
+        -- Dibujar el rectángulo de selección animado
+        love.graphics.setColor(1, 1, 1, 0.15) -- Blanco más translúcido (ligeramente más brillante)
+        love.graphics.rectangle("fill", layout.selX, visualSelY, actualCurrentSelWidth, layout.selHeight, 22)
+
         -- Lista de Archivos
         love.graphics.setFont(fontList)
-        local startLine = math.max(1, selectedIndex - 5)
         for i = startLine, math.min(#files, startLine + pageSize) do
             local y = layout.listY + (i - startLine) * layout.rowHeight
             local item = files[i]
             
             -- Verificar si es el último juego jugado
+            local playedSystem = nil
+            if launchMode == "Juego Unico" and item.versions then
+                for _, v in ipairs(item.versions) do if playedRoms[v.fullPath] then playedSystem = v.system break end end
+            elseif isLastPlayed and markPlayed then -- Para modo Folder o ROMs individuales en Juego Unico
+                playedSystem = utils.getSystemNameForItem(item)
+            end
+
             local checkPath = item.fullPath or (romPath .. item.name)
             local isLastPlayed = (not item.isDir) and playedRoms[checkPath]
             
@@ -1587,11 +1636,31 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 love.graphics.setColor(theme.colors.text_disabled)
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
                 love.graphics.printf(item.name, 100, textY, layout.selWidth - 80, "left")
+                -- No dibujar nada más para elementos vacíos
             else
-                
-
+                -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
+                if isLastPlayed and markPlayed then
+                    -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado, sino el de "no seleccionado".
+                    local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
+                    love.graphics.setColor(ditherColor)
+                    local inset = 4
+                    local rx = layout.selX + inset
+                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
+                    local rw = layout.selWidth - (inset * 2) -- Usar el ancho completo del layout.selWidth para el fondo
+                    local rh = layout.selHeight - (inset * 2)
+                    
+                    love.graphics.stencil(function()
+                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
+                    end, "replace", 1)
+                    love.graphics.setStencilTest("greater", 0)
+                    ditherShader:send("objPos", {rx, ry})
+                    love.graphics.setShader(ditherShader)
+                    love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
+                    love.graphics.setShader()
+                    love.graphics.setStencilTest()
+                end
+                -- Determinar icono a dibujar
              local iconToDraw = item.icon
-
              if not iconToDraw and item.isDir then
                     iconToDraw = utils.getSystemIcon(item.name)
                 end
@@ -1603,13 +1672,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 iconToDraw = iconToDraw or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
                 local drawScale = layout.iconScale
-                
-                if iconToDraw == iconFavorite then
-                    drawScale = (40 * 0.55) / iconToDraw:getHeight() -- Icono de favoritos más pequeño
-                elseif iconToDraw ~= iconFolder and iconToDraw ~= iconRom then
+                if iconToDraw == iconFavorite then drawScale = favScale -- Usar favScale precalculado
+                elseif iconToDraw ~= iconFolder and iconToDraw ~= iconRom then -- Reducido de 0.8 para hacer el icono ~4px más pequeño
                     drawScale = (40 * 0.80) / iconToDraw:getHeight() -- Reducido de 0.8 para hacer el icono ~4px más pequeño
                 end
-                
                 local drawY = y + (layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
                 
                 local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
@@ -1618,18 +1684,16 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 if showSystemIcons then
                     local systems = {}
                     local seen = {}
-                    if item.versions then
-                        for _, v in ipairs(item.versions) do
-                            if v.system and not seen[v.system] then
-                                seen[v.system] = true
-                                table.insert(systems, v.system)
-                            end
+                    for _, v in ipairs(item.versions) do
+                        if v.system and not seen[v.system] then
+                            seen[v.system] = true
+                            table.insert(systems, v.system)
                         end
                     end
+
                     local iconSize = 20
                     local spacing = 2
                     local totalW = #systems * (iconSize + spacing) - spacing
-                    if totalW < 0 then totalW = 0 end
                     
                     local cursorRight = layout.selX + layout.selWidth
                     local startX = cursorRight - totalW - 20
@@ -1646,17 +1710,18 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     availableWidth = sdColX - (layout.selX + 70) - 10
                 end
 
+                -- Dibujar icono principal (carpeta/rom/sistema)
+                love.graphics.setColor(1, 1, 1, 1) -- Siempre blanco opaco para el icono
+                local iconX = layout.selX + (70 - iconToDraw:getWidth() * drawScale) / 2
+                love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
+
                 local textX = layout.selX + 70
                 local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
                 local favOffset = 0
 
                 if isFav then
                     -- Draw favorite icon
-                    love.graphics.setColor(1, 1, 1)
-                    local favH = 16
-                    local favScale = favH / iconFavorite:getHeight()
-                    local favY = y + (layout.rowHeight - favH) / 2
-                    love.graphics.draw(iconFavorite, textX, favY, 0, favScale, favScale)
+                    love.graphics.draw(iconFavorite, textX, y + (layout.rowHeight - iconFavorite:getHeight() * favScale) / 2, 0, favScale, favScale)
                     favOffset = (iconFavorite:getWidth() * favScale) + 5
                     textX = textX + favOffset
                     availableWidth = availableWidth - favOffset
@@ -1667,72 +1732,16 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     nameToDraw = nameToDraw:gsub("%.[^%.]+$", "")
                 end
 
-                local currentSelWidth = layout.selWidth
-                if launchMode == "Folder" then
-                    local textW = fontList:getWidth(nameToDraw)
-                    -- Text starts at 100. Selector starts at 30. Width = (100 - 30) + textW + padding(20)
-                    currentSelWidth = 70 + favOffset + textW + 20
-                    if currentSelWidth > layout.selWidth then currentSelWidth = layout.selWidth end
+                -- Determinar color de texto
+                local textColor = theme.colors.text_medium -- Por defecto para no seleccionado, no marcado
+                if item.pendingDelete then
+                    textColor = (i == selectedIndex) and {1, 0, 0} or {0.8, 0.2, 0.2} -- Rojo para marcado (brillante si seleccionado, desaturado si no)
+                elseif item.selected then -- Nuevo: Color para archivos marcados con 'X'
+                    textColor = (i == selectedIndex) and {1, 0.8, 0.4} or {0.8, 0.6, 0.3} -- Naranja/Amarillo (brillante si seleccionado, desaturado si no)
+                elseif i == selectedIndex then
+                    textColor = theme.colors.text_bright -- Blanco para seleccionado (no marcado)
                 end
-
-                -- Fondo selección (Dibujado DESPUÉS del icono pero ANTES del texto)
-                if i == selectedIndex then
-                    love.graphics.setColor(1, 1, 1, 0.1) -- Blanco más translúcido
-                    love.graphics.rectangle("fill", layout.selX, y + (layout.rowHeight - layout.selHeight) / 2, currentSelWidth, layout.selHeight, 22)
-                    
-                    if isLastPlayed and markPlayed then
-                        love.graphics.setColor(theme.colors.list_played_selected)
-                        local inset = 4
-                        local rx = layout.selX + inset
-                        local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
-                        local rw = currentSelWidth - (inset * 2)
-                        local rh = layout.selHeight - (inset * 2)
-                        
-                        love.graphics.stencil(function()
-                            love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
-                        end, "replace", 1)
-                        love.graphics.setStencilTest("greater", 0)
-                        ditherShader:send("objPos", {rx, ry})
-                        love.graphics.setShader(ditherShader)
-                        love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
-                        love.graphics.setShader()
-                        love.graphics.setStencilTest()
-                    end
-                    
-                    -- Configurar color de texto para seleccionado
-                    if item.pendingDelete then
-                        love.graphics.setColor(1, 0, 0)
-                    else
-                        love.graphics.setColor(theme.colors.text_bright)
-                    end
-                else
-                    if isLastPlayed and markPlayed then
-                        love.graphics.setColor(theme.colors.list_played_unselected)
-                        local inset = 4
-                        local rx = layout.selX + inset
-                        local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset
-                        local rw = currentSelWidth - (inset * 2)
-                        local rh = layout.selHeight - (inset * 2)
-                        love.graphics.stencil(function()
-                            love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset)
-                        end, "replace", 1)
-                        love.graphics.setStencilTest("greater", 0)
-                        ditherShader:send("objPos", {rx, ry})
-                        love.graphics.setShader(ditherShader)
-                        love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
-                        love.graphics.setShader()
-                        love.graphics.setStencilTest()
-                    end
-                    love.graphics.setColor(theme.colors.text_medium)
-                end
-
-                -- Dibujar icono después del fondo/resaltado para que quede encima
-                local tr, tg, tb, ta = love.graphics.getColor()
-                love.graphics.setColor(1, 1, 1, 1)
-                local iconW = iconToDraw:getWidth() * drawScale
-                local iconX = layout.selX + (70 - iconW) / 2
-                love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
-                love.graphics.setColor(tr, tg, tb, ta)
+                love.graphics.setColor(textColor)
 
                 if fontList:getWidth(nameToDraw) > availableWidth then
                     while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
@@ -1742,13 +1751,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 
                 -- Centrar el texto verticalmente en la fila
-
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
 
-
-
-                
-                if i == selectedIndex then
+                -- Dibujar texto (siempre, independientemente de la selección, el color ya está establecido)
+                if i == selectedIndex then -- Esto es para el efecto de negrita del texto seleccionado
                     love.graphics.print(nameToDraw, textX, textY)
                     love.graphics.print(nameToDraw, textX + 1, textY)
                 else
@@ -1758,26 +1764,26 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 if showSystemIcons then
                     -- Dibujar iconos de sistemas apilados a la derecha
                     local systems = {}
-                    local seen = {}
-                    if item.versions then
-                        for _, v in ipairs(item.versions) do
-                            if v.system and not seen[v.system] then
-                                seen[v.system] = true
-                                table.insert(systems, v.system)
-                            end
+                    local seen = {} -- Para evitar duplicados
+                    for _, v in ipairs(item.versions) do
+                        if v.system and not seen[v.system] then
+                            seen[v.system] = true
+                            table.insert(systems, v.system)
                         end
                     end
+
                     
                     local iconSize = 20
                     local spacing = 2
                     local totalW = #systems * (iconSize + spacing) - spacing
-                    local cursorRight = layout.selX + layout.selWidth
-                    local startX = cursorRight - totalW - 20
+                    local startX = layout.selX + layout.selWidth - totalW - 20
                     
                     for idx, sys in ipairs(systems) do
                         local icon = utils.getSystemIcon(sys)
-                        if icon then
-                            local scale = iconSize / icon:getHeight()
+                        if icon then -- Asegurar que el icono existe
+                            local iconColor = (isLastPlayed and markPlayed and sys == playedSystem) and {0.2, 0.8, 0.3, 1} or {1, 1, 1, 1}
+                            love.graphics.setColor(iconColor)
+                            local scale = iconSize / icon:getHeight() -- Escala para los iconos de sistema apilados
                             love.graphics.draw(icon, startX + (idx-1)*(iconSize+spacing), y + (layout.rowHeight - iconSize)/2, 0, scale, scale)
                         end
                     end
@@ -1789,17 +1795,18 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     end
                     if label and label ~= "Fav" then
                     -- Colores distintivos para SD
-                    if label == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
-                    elseif label == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
-                    elseif label == "SD½" then love.graphics.setColor(0.8, 0.5, 1)
-                    else love.graphics.setColor(theme.colors.text_dim) end
+                    local baseColor
+                    if label == "SD1" then baseColor = {0.4, 0.8, 1}
+                    elseif label == "SD2" then baseColor = {1, 0.8, 0.4}
+                    elseif label == "SD½" then baseColor = {0.8, 0.5, 1}
+                    else baseColor = theme.colors.text_dim end
 
-                    if i == selectedIndex then
-                        -- Oscurecer un poco para contraste sobre fondo claro
-                        local r, g, b = love.graphics.getColor()
-                        love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5)
-                    end
+                    if i == selectedIndex then love.graphics.setColor(baseColor)
+                    else love.graphics.setColor(baseColor[1] * 0.5, baseColor[2] * 0.5, baseColor[3] * 0.5) end
+
+                    love.graphics.setFont(fontSmall) -- Usar fuente más pequeña para las etiquetas SD
                     love.graphics.printf(label, sdColX, textY, sdColW, "center")
+                    love.graphics.setFont(fontList) -- Restaurar fuente original de la lista
                     end
                 end
             end
@@ -1846,7 +1853,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
         if isFav then
             local favH = 16
             local favScale = favH / iconFavorite:getHeight()
-            local favOffset = (iconFavorite:getWidth() * favScale) + 5
+            local favOffset = (iconFavorite:getWidth() * favScale) + 5 -- Usar favScale precalculado
             availableWidth = availableWidth - favOffset
         end
         

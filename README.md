@@ -83,8 +83,7 @@ Este proyecto está bajo la Licencia MIT. Consulta el archivo `LICENSE.md` para 
   - LÖVE2D por el framework de desarrollo.
   - Fuentes:
     - **JetBrains Mono**: Licencia Apache 2.0.
-    - **SNPro**: [Verificar licencia específica y añadir aquí]
-- **Librerías**:
+    - **SNPro**: Designed by [Tobias Whetton](https://github.com/supernotes/sn-pro):
   - `dkjson` (para manejo de JSON)
   - `love-loader` (para carga de assets)
 

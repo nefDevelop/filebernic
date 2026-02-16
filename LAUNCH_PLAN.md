@@ -1,22 +1,7 @@
-# Plan de Lanzamiento: FileBernic
-
-Este documento detalla los pasos necesarios para preparar **FileBernic** para su lanzamiento público (v1.0).
-
-## 1. Estado Actual de la App
-
-La aplicación es funcional e implementa las características principales documentadas:
-- Navegación de sistemas y archivos.
-- Scraper de meta-datos (imágenes, descripciones).
-- Gestión de archivos (copiar/mover entre SDs, borrar).
-- Favoritos e Historial.
-- Soporte para LÖVE 11.4 (muOS).
-
-Sin embargo, existen configuraciones de desarrollo activas y faltan elementos de identidad visual para un producto final.
-
 ## 2. Lo que Falta en la App (Critical Missing Items)
 
 ### A. Configuración de Producción
-- **DEBUG Mode**: En `main.lua` (línea 13), `DEBUG = 2` debe cambiarse a `0` o `1` (solo errores) para mejorar el rendimiento y evitar escrituras innecesarias en disco.
+
 - **API Keys**: En `main.lua`, `config.thegamesdb_apikey` está vacío.
     - *Solución*: Implementar un teclado virtual para que el usuario introduzca su propia API Key, o incluir una "default" con límites claros.
     - *Alternativa*: Usar ScreenScraper como default si no requiere key personal obligatoria (o usar una demo key).
@@ -34,16 +19,11 @@ Sin embargo, existen configuraciones de desarrollo activas y faltan elementos de
 
 Para un "buen lanzamiento", se necesitan materiales de marketing y soporte:
 
-- **Repositorio Público (GitHub/GitLab)**:
-    - `README.md`: Crear una portada atractiva con screenshots, lista de features e instrucciones de instalación.
     - `Releases`: Subir el `.muxapp` compilado.
 - **Assets Gráficos para Tiendas/Discord**:
     - **Banner**: 1280x720px o similar para posts en redes/Discord.
     - **Screenshots**: Capturas limpias de la interfaz (Lista, Grid, Detalles).
     - **Logo**: Versión vectorial o alta resolución del logo de FileBernic.
-- **Comunidad**:
-    - Hilo oficial en el Discord de muOS.
-    - Hilo en Reddit (r/SBCGaming, etc.).
 
 ## 4. Mejoras Técnicas Sugeridas (Quick Wins)
 
@@ -59,15 +39,8 @@ Para un "buen lanzamiento", se necesitan materiales de marketing y soporte:
 - [ ] Verificar que `thegamesdb_apikey` se maneje con gracia si está vacía (mostrar mensaje al usuario).
 - [ ] Crear archivo `LICENSE`.
 
-### Fase 2: Paquetizado
-- [x] Crear carpeta `glyph` con el icono de la app (png 256x256 recomendando).
-- [x] Actualizar `create_muxapp.sh` para incluir `glyph`.
-- [x] Generar la Build v1.0 (`FileBernic_v1.0.muxapp`).
 
-### Fase 3: Documentación y Marketing
-- [ ] Crear `README.md` en raíz con secciones: "Instalación", "Uso", "Créditos".
 - [ ] Tomar 3-4 screenshots finales.
-- [ ] Redactar post de anuncio para Discord/Comunidad.
 
 ### Fase 4: Lanzamiento
 - [ ] Publicar release en GitHub.

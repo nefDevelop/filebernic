@@ -10,7 +10,13 @@ local preview = require "preview"
 local State = require "state"
 local json = require "libs.dkjson"
 
+-- Fallback lerp function if love.math.lerp is not available (e.g., older LÖVE versions)
+local lerp = love.math.lerp or function(a, b, t)
+    return a + (b - a) * t
+end
+
 local function update(dt)
+
     loader:update()
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     
@@ -346,6 +352,10 @@ local function update(dt)
             jumpLetter = ""
         end
     end
+
+    -- Animación suave del cursor
+    animatedSelectionIndex = lerp(animatedSelectionIndex, selectedIndex, dt * selectionAnimationSpeed)
+    animatedSelectionIndex = math.max(1, math.min(#files, animatedSelectionIndex))
 
     if moved then
         if state == "LIST" then
