@@ -39,22 +39,18 @@ function State.loadConfig(defaultConfig)
     
     local configPath = love.filesystem.getSource() .. "/data/config.json"
     local f = io.open(configPath, "r")
-    local loaded = nil
     if f then
         local content = f:read("*all")
         f:close()
-        if content and content ~= "" then -- Solo intentar decodificar si el contenido no está vacío
-            loaded = json.decode(content)
+        local loaded = json.decode(content)
+        if loaded then
+            for k, v in pairs(loaded) do config[k] = v end
         end
-    end
-
-    if loaded then
-        for k, v in pairs(loaded) do config[k] = v end
-    else -- Si el archivo no existía, o estaba vacío/inválido, lo creamos/rescribimos con la configuración por defecto
-        local f_write = io.open(configPath, "w")
-        if f_write then
-            f_write:write(json.encode(config))
-            f_write:close()
+    else
+        f = io.open(configPath, "w")
+        if f then
+            f:write(json.encode(config))
+            f:close()
         end
     end
     return config

@@ -18,7 +18,6 @@ end
 local function update(dt)
 
     loader:update()
-    
     if inputCooldown > 0 then inputCooldown = inputCooldown - dt end
     
     -- Lógica para actualizar las variables de previsualización de forma asíncrona

@@ -554,11 +554,9 @@ function stateHandlers.SCRAPER_RESULTS(key)
         inputCooldown = 0.2
     elseif key == "left" then
         scraperSelection = math.max(1, scraperSelection - 1)
-        descriptionScrollOffset = 0 -- Reset description scroll on selection change
         inputCooldown = 0.15
     elseif key == "right" then
         scraperSelection = math.min(#scraperResults, scraperSelection + 1)
-        descriptionScrollOffset = 0 -- Reset description scroll on selection change
         inputCooldown = 0.15
     elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
         local sel = scraperResults[scraperSelection]

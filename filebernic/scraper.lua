@@ -39,7 +39,6 @@ function M.getScrapeResults(item, config, log, systemName)
     -- 2. TheGamesDB
     if config.scraperApi == "all" or config.scraperApi == "thegamesdb" then
         local apikey = config.thegamesdb_apikey or ""
-        log("TheGamesDB API Key being used: " .. (apikey == "" and "[EMPTY]" or apikey:sub(1, 5) .. "..." .. apikey:sub(-5)))
         
         local skipTGDB = false
         if apikey == "" then
