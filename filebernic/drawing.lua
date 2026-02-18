@@ -95,6 +95,13 @@ end
 local function calculateItemDisplayWidth(item, layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
     if not item then return layout.selWidth + 2 end -- Default width if item is nil
     
+    -- OPTIMIZACIÓN: Caché para evitar recálculos costosos cada frame
+    local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+    local cacheKey = tostring(launchMode) .. "_" .. tostring(isFav) .. "_" .. tostring(sdColX)
+    if item._widthCacheVal and item._widthCacheKey == cacheKey then
+        return item._widthCacheVal
+    end
+    
     local nameToMeasure = item.name
     if not item.isDir then
         nameToMeasure = nameToMeasure:gsub("%.[^%.]+$", "")
@@ -113,6 +120,11 @@ local function calculateItemDisplayWidth(item, layout, fontList, launchMode, rom
 
         local trimmedName = nameToMeasure
         if fontList:getWidth(trimmedName) > tempAvailableWidth then
+            -- Pre-recorte estimativo para evitar bucles largos
+            local avgCharW = 10 -- Estimación conservadora
+            local maxChars = math.ceil(tempAvailableWidth / avgCharW) + 10
+            if #trimmedName > maxChars then trimmedName = trimmedName:sub(1, maxChars) end
+            
             while fontList:getWidth(trimmedName .. "...") > tempAvailableWidth and #trimmedName > 0 do
                 trimmedName = trimmedName:sub(1, -2)
             end
@@ -122,7 +134,11 @@ local function calculateItemDisplayWidth(item, layout, fontList, launchMode, rom
         calculatedWidth = 70 + itemFavOffset + textW + 20
         if calculatedWidth > layout.selWidth then calculatedWidth = layout.selWidth end
     end
-    return calculatedWidth + 2 -- +2 pixels for right padding
+    
+    -- Guardar en caché
+    item._widthCacheVal = calculatedWidth + 2
+    item._widthCacheKey = cacheKey
+    return item._widthCacheVal
 end
 
 local function drawBottomBar()
@@ -1795,11 +1811,24 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 end
                 love.graphics.setColor(textColor)
 
-                if fontList:getWidth(nameToDraw) > availableWidth then
-                    while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
-                        nameToDraw = nameToDraw:sub(1, -2)
+                -- OPTIMIZACIÓN: Caché para el texto recortado
+                local cacheKeyText = tostring(availableWidth) .. "_" .. nameToDraw
+                if item._textCacheVal and item._textCacheKey == cacheKeyText then
+                    nameToDraw = item._textCacheVal
+                else
+                    if fontList:getWidth(nameToDraw) > availableWidth then
+                        -- Pre-recorte estimativo
+                        local avgCharW = 10
+                        local maxChars = math.ceil(availableWidth / avgCharW) + 10
+                        if #nameToDraw > maxChars then nameToDraw = nameToDraw:sub(1, maxChars) end
+
+                        while fontList:getWidth(nameToDraw .. "...") > availableWidth and #nameToDraw > 0 do
+                            nameToDraw = nameToDraw:sub(1, -2)
+                        end
+                        nameToDraw = nameToDraw .. "..."
                     end
-                    nameToDraw = nameToDraw .. "..."
+                    item._textCacheVal = nameToDraw
+                    item._textCacheKey = cacheKeyText
                 end
                 
                 -- Centrar el texto verticalmente en la fila
