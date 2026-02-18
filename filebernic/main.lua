@@ -753,6 +753,7 @@ function love.load(arg)
 
     -- Load modules
     love.draw = require "drawing"
+    log("DEBUG: drawing.lua loaded. Type of love.draw: " .. type(love.draw))
     love.update = require "update"
     local input = require "input"
     love.keypressed = input.keypressed

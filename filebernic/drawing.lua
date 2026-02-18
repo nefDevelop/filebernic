@@ -1,6 +1,16 @@
 ---@diagnostic disable: undefined-global
 ---@diagnostic disable: undefined-field
 
+-- Define a local round function for compatibility with older Lua versions
+local round = math.round or love.math.round or function(x)
+    return math.floor(x + 0.5)
+end
+
+-- Fallback lerp function if love.math.lerp is not available
+local lerp = love.math.lerp or function(a, b, t)
+    return a + (b - a) * t
+end
+
 local utils = require "utils"
 local unpack = table.unpack or unpack
 
@@ -78,6 +88,41 @@ local function drawTrimmed(text, x, y, limit, font)
         dText = dText .. "..."
     end
     love.graphics.print(dText, x, y)
+end
+
+-- Helper function to calculate the display width of a list item
+-- This logic was previously duplicated or implicitly calculated.
+local function calculateItemDisplayWidth(item, layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
+    if not item then return layout.selWidth + 2 end -- Default width if item is nil
+    
+    local nameToMeasure = item.name
+    if not item.isDir then
+        nameToMeasure = nameToMeasure:gsub("%.[^%.]+$", "")
+    end
+
+    local itemFavOffset = 0
+    if (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/" then
+        itemFavOffset = (iconFavorite:getWidth() * favScale) + 5
+    end
+
+    local calculatedWidth = layout.selWidth
+    if (launchMode == "Folder" or launchMode == "Juego Unico") then
+        -- Use sdColX if available, otherwise calculate a reasonable default
+        local textRightBoundary = sdColX or (layout.selX + layout.selWidth)
+        local tempAvailableWidth = textRightBoundary - (layout.selX + 70) - 10
+
+        local trimmedName = nameToMeasure
+        if fontList:getWidth(trimmedName) > tempAvailableWidth then
+            while fontList:getWidth(trimmedName .. "...") > tempAvailableWidth and #trimmedName > 0 do
+                trimmedName = trimmedName:sub(1, -2)
+            end
+            trimmedName = trimmedName .. "..."
+        end
+        local textW = fontList:getWidth(trimmedName)
+        calculatedWidth = 70 + itemFavOffset + textW + 20
+        if calculatedWidth > layout.selWidth then calculatedWidth = layout.selWidth end
+    end
+    return calculatedWidth + 2 -- +2 pixels for right padding
 end
 
 local function drawBottomBar()
@@ -879,10 +924,11 @@ end
 local function drawScrollbar()
     local scrollW = 2
     love.graphics.setColor(theme.colors.scrollbar_background)
-    love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, scrollW, layout.scrollbarH)
+    love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, scrollW, layout.scrollbarH) -- Fondo de la barra
     if #files > 1 then
-        local h = layout.scrollbarH / (#files / 14)
-        local y = layout.listY + ((selectedIndex - 1) / (#files - 1)) * (layout.scrollbarH - h)
+        local visibleRows = pageSize + 1 -- Calculate visibleRows here for drawScrollbar's scope
+        local h = layout.scrollbarH / (#files / visibleRows) -- Altura del "handle" de la barra
+        local y = layout.listY + ((animatedSelectionIndex - 1) / (#files - 1)) * (layout.scrollbarH - h) -- Posición animada
         love.graphics.setColor(theme.colors.scrollbar_handle)
         love.graphics.rectangle("fill", layout.scrollbarX, y, scrollW, math.max(10, h))
     end
@@ -1574,51 +1620,47 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
         local favScale = (iconFavorite and iconFavorite:getHeight() ~= 0) and ((40 * 0.55) / iconFavorite:getHeight()) or 1
 
         -- Calcular startLine aquí para que esté disponible para el selector animado
-        local startLine = math.max(1, selectedIndex - 5)
-
-        local actualSelectedItem = files[selectedIndex]
-        local actualSelName = actualSelectedItem.name
-        if not actualSelectedItem.isDir then
-            actualSelName = actualSelName:gsub("%.[^%.]+$", "")
-        end
+        local visibleRows = pageSize + 1
+        local targetVisualRow = math.floor(visibleRows / 2) -- Try to keep selected item in the middle
         
-        -- Simular truncado para el elemento seleccionado para obtener el ancho real
-        local trimmedActualSelName = actualSelName
-        local tempAvailableWidth = layout.selWidth - (layout.selX + 70) - 10 -- Ancho máximo disponible para el texto
-        if fontList:getWidth(trimmedActualSelName) > tempAvailableWidth then
-            while fontList:getWidth(trimmedActualSelName .. "...") > tempAvailableWidth and #trimmedActualSelName > 0 do
-                trimmedActualSelName = trimmedActualSelName:sub(1, -2)
-            end
-            trimmedActualSelName = trimmedActualSelName .. "..."
+        -- Calculate the overall scroll offset for the list content
+        -- This offset determines how much the entire list shifts up/down
+        local listScrollOffset = (animatedSelectionIndex - targetVisualRow) * layout.rowHeight
+
+        -- Clamp the listScrollOffset so that the list doesn't scroll past its bounds
+        local minListOffset = math.min(0, (1 - targetVisualRow) * layout.rowHeight)
+        local maxListOffset = math.max(0, (#files - visibleRows) * layout.rowHeight)
+
+        if #files <= visibleRows then
+            listScrollOffset = 0 -- No scrolling needed if list is smaller than visible area
+        else
+            listScrollOffset = math.max(minListOffset, math.min(maxListOffset, listScrollOffset))
         end
 
-        local actualFavOffset = 0
-        if (favoriteRoms[actualSelectedItem.fullPath]) and romPath ~= "@Favorites/" then
-            local favH = 16
-            actualFavOffset = (iconFavorite:getWidth() * favScale) + 5
-        end
+        -- The visual position of the animated selection rectangle (fixed in the middle)
+        local visualSelY = layout.listY + (targetVisualRow - 1) * layout.rowHeight + (layout.rowHeight - layout.selHeight) / 2
 
-        local actualCurrentSelWidth = layout.selWidth
-        if launchMode == "Folder" or launchMode == "Juego Unico" then -- Ajustar ancho también en Juego Unico
-            local textW = fontList:getWidth(trimmedActualSelName) -- Usar el ancho del nombre truncado
-            actualCurrentSelWidth = 70 + actualFavOffset + textW + 20
-            if actualCurrentSelWidth > layout.selWidth then actualCurrentSelWidth = layout.selWidth end
-        end
-        actualCurrentSelWidth = actualCurrentSelWidth + 2 -- 2 píxeles más a la derecha
+        -- Calculate target widths for interpolation
+        local currentItemIndex = math.floor(animatedSelectionIndex)
+        local nextItemIndex = math.ceil(animatedSelectionIndex)
+        local interpolationFactor = animatedSelectionIndex - currentItemIndex
 
-        -- Calcular la posición Y visual para el rectángulo de selección animado
-        -- 'y' en el bucle es para 'i', necesitamos 'y' para 'animatedSelectionIndex'
-        local visualRow = animatedSelectionIndex - startLine -- 0-indexed row on screen
-        local visualSelY = layout.listY + visualRow * layout.rowHeight + (layout.rowHeight - layout.selHeight) / 2
-
+        local width1 = calculateItemDisplayWidth(files[currentItemIndex], layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
+        local width2 = calculateItemDisplayWidth(files[nextItemIndex], layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
+        
+        local animatedSelectionWidth = lerp(width1, width2, interpolationFactor)
+        
         -- Dibujar el rectángulo de selección animado
         love.graphics.setColor(1, 1, 1, 0.15) -- Blanco más translúcido (ligeramente más brillante)
-        love.graphics.rectangle("fill", layout.selX, visualSelY, actualCurrentSelWidth, layout.selHeight, 22)
+        love.graphics.rectangle("fill", layout.selX, visualSelY, animatedSelectionWidth, layout.selHeight, 22)
 
         -- Lista de Archivos
         love.graphics.setFont(fontList)
-        for i = startLine, math.min(#files, startLine + pageSize) do
-            local y = layout.listY + (i - startLine) * layout.rowHeight
+        -- Determine the range of items to draw based on the clamped listScrollOffset
+        local firstVisibleItemIndex = math.max(1, math.floor(1 + listScrollOffset / layout.rowHeight))
+        local lastVisibleItemIndex = math.min(#files, firstVisibleItemIndex + visibleRows + 1) -- +1 for smooth transition
+        for i = firstVisibleItemIndex, lastVisibleItemIndex do
+            local y = layout.listY + (i - 1) * layout.rowHeight - (listScrollOffset or 0) -- Ensure listScrollOffset is not nil
             local item = files[i]
             
             -- Verificar si es el último juego jugado
@@ -1650,28 +1692,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     favOffset = (iconFavorite:getWidth() * favScale) + 5
                 end
 
-                local currentItemSelWidth = layout.selWidth
-                if launchMode == "Folder" or launchMode == "Juego Unico" then
-                    -- Calcular el ancho disponible para el texto, considerando el offset del icono y el padding
-                    local tempAvailableWidth = sdColX - (layout.selX + 70) - 10
-                    local trimmedNameForWidth = nameToDrawForWidth
-                    if fontList:getWidth(trimmedNameForWidth) > tempAvailableWidth then
-                        while fontList:getWidth(trimmedNameForWidth .. "...") > tempAvailableWidth and #trimmedNameForWidth > 0 do
-                            trimmedNameForWidth = trimmedNameForWidth:sub(1, -2)
-                        end
-                        trimmedNameForWidth = trimmedNameForWidth .. "..."
-                    end
-                    local textW = fontList:getWidth(trimmedNameForWidth)
-                    currentItemSelWidth = 70 + favOffset + textW + 20
-                    if currentItemSelWidth > layout.selWidth then currentItemSelWidth = layout.selWidth end
-                end
+                local currentItemStaticWidth = calculateItemDisplayWidth(item, layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
 
                 -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
                 -- Determinar icono a dibujar
-             local iconToDraw = item.icon
-             if not iconToDraw and item.isDir then
-                    iconToDraw = utils.getSystemIcon(item.name)
-                end
                 if item.fullPath == "@Favorites/" then
                     iconToDraw = iconFavorite
                 end
@@ -1720,7 +1744,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
 
                -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
                 if isLastPlayed and markPlayed then
-                    -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado, sino el de "no seleccionado".
+                    -- Usar el color de "seleccionado" si el elemento está actualmente seleccionado (animado), sino el de "no seleccionado".
                     local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
                     love.graphics.setColor(ditherColor)
                     local inset = 8 -- 2px por cada lado (arriba, abajo, izquierda, derecha)
@@ -1729,10 +1753,10 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     
                     -- Determine the width for the dithered background
                     local ditherWidth
-                    if i == selectedIndex then
-                        ditherWidth = actualCurrentSelWidth -- Usar el ancho precalculado para el elemento seleccionado
+                    if i == round(animatedSelectionIndex) then
+                        ditherWidth = animatedSelectionWidth -- Usar el ancho precalculado para el elemento seleccionado
                     else
-                        ditherWidth = currentItemSelWidth + 2 -- Usar el ancho calculado para este elemento específico, con el ajuste de +2px
+                        ditherWidth = currentItemStaticWidth -- Usar el ancho calculado para este elemento específico
                     end
                     
                     local rw = ditherWidth - inset -- El ancho del dithering es el mismo que el del selector, menos 4px
@@ -1782,7 +1806,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 local textY = y + (layout.rowHeight - fontList:getHeight()) / 2
 
                 -- Dibujar texto (siempre, independientemente de la selección, el color ya está establecido)
-                if i == selectedIndex then -- Esto es para el efecto de negrita del texto seleccionado
+                if i == round(animatedSelectionIndex) then -- Bolding should follow the rounded animated cursor
                     love.graphics.print(nameToDraw, textX, textY)
                     love.graphics.print(nameToDraw, textX + 1, textY)
                 else
@@ -1840,12 +1864,12 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
             end
         end
     end
-
+    
     -- Scrollbar
     drawScrollbar()
 
     -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado (Overlay)
-    if files[selectedIndex] then
+    if files[round(animatedSelectionIndex)] then -- Overlay should follow the rounded animated cursor
         local item = files[selectedIndex]
         local rawName = item.name
         local nameNoExt = rawName:gsub("%.[^%.]+$", "")

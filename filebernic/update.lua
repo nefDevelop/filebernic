@@ -363,10 +363,14 @@ local function update(dt)
                 if fastScrollTimer > 2 then
                     input.jumpToNextLetter()
                 elseif viewMode == "GRID" then
-                    if selectedIndex + gridCols <= #files then
+                    if selectedIndex + gridCols <= #files then -- Normal jump
                         selectedIndex = selectedIndex + gridCols
+                    elseif selectedIndex < #files then -- If not enough items for a full jump, go to the last item
+                        selectedIndex = #files
                     end
                 else
+                    -- If at the end of the list, don't increment selectedIndex
+                    if selectedIndex == #files then return end
                     selectedIndex = math.min(#files, selectedIndex + 1)
                 end
             elseif moveDir == 'up' then
@@ -374,9 +378,13 @@ local function update(dt)
                     input.jumpToPrevLetter()
                 elseif viewMode == "GRID" then
                     if selectedIndex > gridCols then
-                        selectedIndex = selectedIndex - gridCols
+                        selectedIndex = selectedIndex - gridCols -- Normal jump
+                    elseif selectedIndex > 1 then -- If not enough items for a full jump, go to the first item
+                        selectedIndex = 1
                     end
                 else
+                    -- If at the beginning of the list, don't decrement selectedIndex
+                    if selectedIndex == 1 then return end
                     selectedIndex = math.max(1, selectedIndex - 1)
                 end
             elseif moveDir == 'left' then
