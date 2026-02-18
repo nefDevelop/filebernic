@@ -9,3 +9,5 @@ app_state.json
 filebernic/data/log/filebernic.log
 filebernic/data/view_cache.json
 filebernic/data/app_state.json
+filebernic/data/config.json
+filebernic/data/log/
