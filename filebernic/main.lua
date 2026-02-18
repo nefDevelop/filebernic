@@ -10,7 +10,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 
 -- Variables de configuración y estado
-DEBUG = 1 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 2 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
     DEFAULT = true
@@ -76,6 +76,8 @@ scraperResults = {}
 scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
 scraperSelection = 1
 searchQuery = ""
+descriptionScrollOffset = 0 -- Para el scroll automático de la descripción del scraper
+scraperScrollOffset = 0     -- Para el scroll horizontal de los resultados del scraper
 menuStack = {}
 focusedItem = nil
 allFiles = {}

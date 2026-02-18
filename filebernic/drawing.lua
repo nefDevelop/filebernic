@@ -65,6 +65,66 @@ local function getFadeGradientMesh()
     return fadeGradientMesh
 end
 
+-- Función para crear una malla de degradado vertical
+-- opaquePercentage: El porcentaje de la altura total que debe ser completamente opaco (0-100)
+-- fadePercentage: El porcentaje de la altura total sobre el cual el alfa se desvanece de 1 a 0 (0-100)
+-- La altura restante (100 - opaquePercentage - fadePercentage) será completamente transparente.
+local function createVerticalGradientMesh(opaquePercentage, fadePercentage)
+    local vertices = {}
+    
+    -- Normalizar porcentajes a un rango de 0-1
+    local opaqueRatio = opaquePercentage / 100
+    local fadeRatio = fadePercentage / 100
+    
+    local yStartFade = opaqueRatio
+    local yEndFade = opaqueRatio + fadeRatio
+    
+    -- Asegurar que las coordenadas Y estén dentro de [0, 1]
+    yStartFade = math.max(0, math.min(1, yStartFade))
+    yEndFade = math.max(0, math.min(1, yEndFade))
+
+    -- Sección superior: Completamente opaca (alfa 1)
+    table.insert(vertices, {0, 0, 0, 0, 0, 0, 0, 1}) -- Arriba-Izquierda
+    table.insert(vertices, {1, 0, 1, 0, 0, 0, 0, 1}) -- Arriba-Derecha
+
+    -- Si hay una sección opaca antes de desvanecerse, añadir vértices al final de esta
+    if yStartFade > 0 then
+        table.insert(vertices, {0, yStartFade, 0, yStartFade, 0, 0, 0, 1}) -- Fin de sección opaca (Izquierda)
+        table.insert(vertices, {1, yStartFade, 1, yStartFade, 0, 0, 0, 1}) -- Fin de sección opaca (Derecha)
+    end
+
+    -- Si hay una sección de desvanecimiento, añadir vértices al final de esta (alfa 0)
+    if fadeRatio > 0 then
+        table.insert(vertices, {0, yEndFade, 0, yEndFade, 0, 0, 0, 0}) -- Fin de sección de desvanecimiento (Izquierda)
+        table.insert(vertices, {1, yEndFade, 1, yEndFade, 0, 0, 0, 0}) -- Fin de sección de desvanecimiento (Derecha)
+    end
+    
+    return love.graphics.newMesh(vertices, "strip", "static")
+end
+
+local bottomFadeGradientMesh
+local function getBottomFadeGradientMesh()
+    if not bottomFadeGradientMesh then
+        local vertices = {
+            {0, 0, 0, 0, 0, 0, 0, 0}, -- Top-Left: Transparent Black
+            {1, 0, 1, 0, 0, 0, 0, 0}, -- Top-Right: Transparent Black
+            {0, 1, 0, 1, 0, 0, 0, 1}, -- Bottom-Left: Opaque Black
+            {1, 1, 1, 1, 0, 0, 0, 1}  -- Bottom-Right: Opaque Black
+        }
+        bottomFadeGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
+    end
+    return bottomFadeGradientMesh
+end
+
+local topFadeGradientMesh
+local function getTopFadeGradientMesh()
+    if not topFadeGradientMesh then
+        -- Crear un degradado que es 40% opaco y luego se desvanece a transparente en el 60% restante
+        topFadeGradientMesh = createVerticalGradientMesh(60, 40)
+    end
+    return topFadeGradientMesh
+end
+
 local function drawStar(x, y, size)
     local vertices = {}
     local outerRadius = size
@@ -664,7 +724,7 @@ local function drawInfoPanel(item, x, w, h, alpha)
     love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
     love.graphics.printf(mainName, x, 20, w, "center")
 
-    drawMediaDetailContent(item, x, 0, w, h, alpha)
+    drawMediaDetailContent(item, x, 0, w, h, alpha, 0) -- No scroll for INFO_VIEW
 end
 
 local function drawOverlayMenus()
@@ -820,14 +880,14 @@ local function drawScraperView()
 
     if state == "SCRAPER_VIEW" then
         -- Usar la nueva función de dibujado de contenido
-        drawMediaDetailContent(currentItem, 0, 0, w, h, 1)
+        drawMediaDetailContent(currentItem, 0, 0, w, h, 1, 0) -- No scroll for SCRAPER_VIEW
 
         -- Botón de Scrapear
         love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.selection_accent)
-        love.graphics.rectangle("fill", w/2 - 100, h - 80, 200, 40, 5)
+        love.graphics.rectangle("fill", w/2 - 100, h - 120, 200, 40, 5) -- Moved up
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(L.get("search_data"), 0, h - 70, w, "center")
+        love.graphics.printf(L.get("search_data"), 0, h - 110, w, "center") -- Moved up
 
     elseif state == "SCRAPING_IN_PROGRESS" then
         love.graphics.printf(L.get("scraping_db"), 0, h/2, w, "center")
@@ -862,7 +922,7 @@ local function drawScraperView()
             local listY = 90
             local thumbSize = 80
             local spacing = 10
-            local startX = 20
+            local startX = 20 - scraperScrollOffset -- Apply horizontal scroll offset
             
             for i, result in ipairs(scraperResults) do
                 local x = startX + (i-1) * (thumbSize + spacing)
@@ -927,7 +987,7 @@ local function drawScraperView()
                 if sel.source then
                     infoText = "[" .. sel.source .. "] " .. infoText
                 end
-                love.graphics.printf(infoText, textX, textY, textW, "left")
+                love.graphics.printf(infoText, textX, textY - descriptionScrollOffset, textW, "left") -- Apply vertical scroll offset
                 end
             end
         end
@@ -2068,6 +2128,19 @@ local function draw()
     end
 
     drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
+
+    -- Dibujar el degradado superior sobre la lista de ROMs
+    -- Posicionalmente: encima de la lista de roms, debajo de los titulos reloj etc.
+    local gradientHeight = 100 -- Altura del degradado en píxeles (según la solicitud original "100px 70% negro")
+    love.graphics.setColor(0, 0, 0, 1) -- Usar color negro para la malla, el alfa está en los vértices (el alfa del degradado está en los vértices de la malla)
+    love.graphics.draw(getTopFadeGradientMesh(), 0, 0, 0, w, gradientHeight)
+
+    -- NEW: Dibujar el degradado inferior encima de la barra de estado
+    local bottomGradientHeight = 20 -- Altura de 20 píxeles
+    local bottomBarHeight = 30 -- Altura de la barra inferior (definida en drawBottomBar)
+    local gradientY = h - bottomBarHeight - bottomGradientHeight
+    love.graphics.setColor(0, 0, 0, 1) -- Usar color negro para la malla, el alfa está en los vértices
+    love.graphics.draw(getBottomFadeGradientMesh(), 0, gradientY, 0, w, bottomGradientHeight)
 
     -- Título (Dibujado después de la lista para quedar encima del fondo/dithering)
     drawTopBar(w, h)
