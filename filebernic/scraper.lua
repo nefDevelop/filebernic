@@ -49,7 +49,12 @@ function M.getScrapeResults(item, config, log, systemName)
         end
 
         if not skipTGDB then
-            local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. "&fields=overview,release_date&include=boxart,screenshot"
+            local platformParam = ""
+            if systemName and systemName ~= "" then
+                local displaySystemName = utils.getSystemDisplayName(systemName)
+                platformParam = "&platform=" .. utils.urlencode(displaySystemName)
+            end
+            local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. platformParam .. "&fields=overview,release_date&include=boxart,screenshot"
             log("TGDB Request: " .. url)
 
             local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
