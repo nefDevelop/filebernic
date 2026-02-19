@@ -54,8 +54,8 @@ local function scanRoot(rootPath, validExtensions, newIndex, fileMap, romDirs)
                             name = groupKey,
                             isDir = false,
                             fullPath = fLine,
-                            sourceLabel = sysName,
-                            icon = nil,
+                            sourceLabel = sysName, -- This is already set
+                            system = sysName, -- Add this line to set the system on the top-level item
                             versions = {{
                                 name = filename,
                                 fullPath = fLine,

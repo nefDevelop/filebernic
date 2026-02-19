@@ -1454,8 +1454,8 @@ local function drawGrid(global_state, w, h)
         if isLastPlayed and markPlayed and global_state.launchMode ~= "Juego Unico" then
              local pIcon = global_state.iconRom
              local sys = playedSystem -- This is already determined from playedRoms
-             if not sys then sys = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot) end
-             if sys then pIcon = utils.getSystemIcon(sys) or iconRom end
+             if not sys then sys = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot) end -- Ensure sys is determined
+             if sys then pIcon = utils.getSystemIcon(sys, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage) or iconRom end
              
              local iconSize = 24
              local iconX = x + cellW - iconSize - 8
@@ -1654,8 +1654,8 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
             listScrollOffset = math.max(minListOffset, math.min(maxListOffset, listScrollOffset))
         end
 
-        -- The visual position of the animated selection rectangle (fixed in the middle)
-        local visualSelY = layout.listY + (targetVisualRow - 1) * layout.rowHeight + (layout.rowHeight - layout.selHeight) / 2
+        -- The visual position of the animated selection rectangle
+        local visualSelY = layout.listY + (global_state.animatedSelectionIndex - 1) * layout.rowHeight - listScrollOffset + (layout.rowHeight - layout.selHeight) / 2
 
         -- Calculate target widths for interpolation
         local currentItemIndex = math.floor(global_state.animatedSelectionIndex)
@@ -1713,17 +1713,25 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
 
                 -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
                 -- Determinar icono a dibujar
+                local iconToDraw = nil
                 if item.fullPath == "@Favorites/" then
                     iconToDraw = global_state.iconFavorite
+                elseif item.icon then
+                    iconToDraw = item.icon
+                elseif item.system then
+                    iconToDraw = utils.getSystemContentIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
+                    if not iconToDraw then
+                        iconToDraw = utils.getSystemIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
+                    end
                 end
-                if not iconToDraw and item.system then
-                    iconToDraw = utils.getSystemContentIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage) or utils.getSystemIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
+                if not iconToDraw then
+                    iconToDraw = (item.isDir and global_state.iconFolder) or (global_state.currentSystemContentIcon or global_state.iconRom)
                 end
-                iconToDraw = iconToDraw or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom) -- Fallback to global icons
-                local drawScale = layout.iconScale
-                if iconToDraw == iconFavorite then drawScale = favScale -- Usar favScale precalculado
-                elseif iconToDraw ~= global_state.iconFolder and iconToDraw ~= global_state.iconRom then -- Reducido de 0.8 para hacer el icono ~4px más pequeño
-                    drawScale = (40 * 0.80) / iconToDraw:getHeight() -- Reducido de 0.8 para hacer el icono ~4px más pequeño
+
+                local targetH = 32
+                local drawScale = targetH / iconToDraw:getHeight()
+                if iconToDraw == global_state.iconFavorite then 
+                    drawScale = favScale
                 end
                 local drawY = y + (global_state.layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2
                 
@@ -1759,43 +1767,26 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     availableWidth = sdColX - (layout.selX + 70) - 10
                 end
 
-               -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
-                if isLastPlayed and markPlayed then
-                    -- Use "selected" color if item is currently selected (animated), otherwise "unselected".
-                    local ditherColor = (i == selectedIndex) and theme.colors.list_played_selected or theme.colors.list_played_unselected
-                    love.graphics.setColor(ditherColor)
-                    local inset = 8 -- 2px por cada lado (arriba, abajo, izquierda, derecha)
-                    local rx = layout.selX + inset/2 -- Inicia en la misma X que el selector, más 2px
-                    local ry = y + (layout.rowHeight - layout.selHeight) / 2 + inset/2 -- Inicia en la misma Y que el selector, más 2px
-                    
-                    -- Determine the width for the dithered background
-                    local ditherWidth
-                    if i == round(animatedSelectionIndex) then
-                        ditherWidth = animatedSelectionWidth -- Usar el ancho precalculado para el elemento seleccionado
-                    else
-                        ditherWidth = currentItemStaticWidth -- Usar el ancho calculado para este elemento específico
-                    end
-                    
-                    local rw = ditherWidth - inset -- El ancho del dithering es el mismo que el del selector, menos 4px
-                    local rh = layout.selHeight - inset -- La altura del dithering es la misma que la del selector, menos 4px
-                    
-                    love.graphics.stencil(function()
-                        love.graphics.rectangle("fill", rx, ry, rw, rh, 22 - inset/2) -- Usar el mismo radio de esquina que el selector, ajustado
-                    end, "replace", 1)
-                    love.graphics.setStencilTest("greater", 0)
-                    ditherShader:send("objPos", {rx, ry})
-                    love.graphics.setShader(ditherShader)
-                    love.graphics.draw(getFadeGradientMesh(), rx, ry, 0, rw, rh)
-                    love.graphics.setShader()
-                    love.graphics.setStencilTest()
+                if isFav then
+                    availableWidth = availableWidth - favOffset
                 end
 
-                -- Dibujar icono principal (carpeta/rom/sistema)
+               -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
+                -- (The dithered background drawing logic remains here, as it should be behind the icon and text)
+
                 love.graphics.setColor(1, 1, 1, 1) -- Always opaque white for icon
                 local iconX = layout.selX + (70 - iconToDraw:getWidth() * drawScale) / 2
                 love.graphics.draw(iconToDraw, iconX, drawY, 0, drawScale, drawScale)
 
                 local textX = layout.selX + 70
+
+                if isFav then
+                    love.graphics.setColor(1, 1, 1, 1)
+                    local favIconY = y + (layout.rowHeight - (global_state.iconFavorite:getHeight() * favScale)) / 2
+                    love.graphics.draw(global_state.iconFavorite, textX, favIconY, 0, favScale, favScale)
+                    textX = textX + favOffset
+                end
+
                 local nameToDraw = item.name
                 if not item.isDir then
                     nameToDraw = nameToDraw:gsub("%.[^%.]+$", "")
