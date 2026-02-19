@@ -19,7 +19,7 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     loader_obj:update()
     -- Favorite animation
     if global_state.favAnim ~= global_state.favAnimTarget then
-        local speed = 7 -- Animation speed for the star
+        local speed = 12 -- Animation speed for the star (increased from 7)
         if global_state.favAnim < global_state.favAnimTarget then
             global_state.favAnim = math.min(global_state.favAnimTarget, global_state.favAnim + dt * speed)
         else
@@ -384,9 +384,13 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
 
     -- Smooth cursor animation
     local lerp = global_state.love.math.lerp or lerp_fallback
+    local currentAnimSpeed = global_state.selectionAnimationSpeed
+    if global_state.viewMode == "GRID" then
+        currentAnimSpeed = global_state.gridSelectionAnimationSpeed or 20 -- Use faster speed for grid, with fallback
+    end
     global_state.animatedSelectionIndex = lerp(global_state.animatedSelectionIndex,
                                                                       global_state.selectedIndex,
-                                                                      dt * global_state.selectionAnimationSpeed)
+                                                                      dt * currentAnimSpeed)
     global_state.animatedSelectionIndex = math.max(1, math.min(#global_state.files,
                                                                global_state.animatedSelectionIndex)) -- Line too long
 

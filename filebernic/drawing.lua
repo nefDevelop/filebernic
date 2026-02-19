@@ -1427,7 +1427,7 @@ local function drawGrid(global_state, w, h)
         end
 
         -- Fondo selección (Dibujado DESPUÉS de la imagen para que esta quede al fondo)
-        if i == global_state.selectedIndex then
+        if i == round(global_state.animatedSelectionIndex) then
             love.graphics.setColor(1, 1, 1, 0.2) -- Blanco translúcido
             love.graphics.rectangle("fill", x + 2, y + 2, cellW - 4, cellH - 2, 15)
         end
@@ -1460,7 +1460,7 @@ local function drawGrid(global_state, w, h)
         local textBlockHeight = textFont:getHeight() * numLines
         local textY = y + cellH - 50 + (50 - textBlockHeight) / 2
         love.graphics.setColor(theme.colors.text_white)
-        if i == global_state.selectedIndex then
+        if i == round(global_state.animatedSelectionIndex) then
             love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
             love.graphics.printf(textToPrint, x + 11, textY, contentWidth, "center")
         else

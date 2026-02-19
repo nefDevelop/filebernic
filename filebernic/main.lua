@@ -47,6 +47,7 @@ favoriteRoms = {}
 pageSize = 7
 animatedSelectionIndex = 1 -- Para animación suave del cursor
 selectionAnimationSpeed = 10 -- Velocidad de la animación (ajustar según preferencia)
+gridSelectionAnimationSpeed = 20 -- Velocidad de animación para el modo Grid
 viewMode = "LIST" -- "LIST" or "GRID"
 gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"
