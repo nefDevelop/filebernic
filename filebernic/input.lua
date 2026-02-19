@@ -255,12 +255,15 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                  local fullPath = global_state.focusedItem.fullPath
                  if global_state.favoriteRoms[fullPath] then
                      global_state.favoriteRoms[fullPath] = nil
+                     global_state.favAnimTarget = 0
                      if type(opt) == "table" then opt.text = L.get("add_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("add_favorite") end
                  else
                      global_state.favoriteRoms[fullPath] = true -- Mark as favorite
+                     global_state.favAnimTarget = 1
                      if type(opt) == "table" then opt.text = L.get("remove_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("remove_favorite") end
                  end
-                 filesystem.saveFavorites(favoriteRoms, json.encode)
+                 global_state.favAnimIndex = global_state.selectedIndex
+                 filesystem.saveFavorites(global_state.favoriteRoms, global_state.json.encode)
                  if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
                      global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                         filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
@@ -424,11 +427,14 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             local path = item.fullPath
             if global_state.favoriteRoms[path] then
                 global_state.favoriteRoms[path] = nil
+                global_state.favAnimTarget = 0
                 if type(opt) == "table" then opt.text = L.get("add_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("add_favorite") end
             else
                 global_state.favoriteRoms[path] = true
+                global_state.favAnimTarget = 1
                 if type(opt) == "table" then opt.text = L.get("remove_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("remove_favorite") end
             end
+            global_state.favAnimIndex = global_state.selectedIndex
             filesystem.saveFavorites(global_state.favoriteRoms, global_state.json.encode)
             if isVirtualRoot then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 

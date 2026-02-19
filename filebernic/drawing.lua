@@ -93,14 +93,18 @@ end
 
 -- Helper function to calculate the display width of a list item
 -- This logic was previously duplicated or implicitly calculated.
-local function calculateItemDisplayWidth(item, layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX)
+local function calculateItemDisplayWidth(item, layout, fontList, launchMode, romPath, iconFavorite, favScale, favoriteRoms, sdColX, itemIndex, favAnimState)
     if not item then return layout.selWidth + 2 end -- Default width if item is nil
     
+    local isActuallyFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+    local isAnimating = favAnimState and itemIndex and itemIndex == favAnimState.index
+
     -- OPTIMIZACIÓN: Caché para evitar recálculos costosos cada frame
-    local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
-    local cacheKey = tostring(launchMode) .. "_" .. tostring(isFav) .. "_" .. tostring(sdColX)
-    if item._widthCacheVal and item._widthCacheKey == cacheKey then
-        return item._widthCacheVal
+    if not isAnimating then
+        local cacheKey = tostring(launchMode) .. "_" .. tostring(isActuallyFav) .. "_" .. tostring(sdColX)
+        if item._widthCacheVal and item._widthCacheKey == cacheKey then
+            return item._widthCacheVal
+        end
     end
     
     local nameToMeasure = item.name
@@ -108,9 +112,15 @@ local function calculateItemDisplayWidth(item, layout, fontList, launchMode, rom
         nameToMeasure = nameToMeasure:gsub("%.[^%.]+$", "")
     end
 
+    local animFactor = 0
+    if isActuallyFav then animFactor = 1 end
+    if isAnimating then
+        animFactor = favAnimState.anim
+    end
+
     local itemFavOffset = 0
-    if (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/" then
-        itemFavOffset = (iconFavorite:getWidth() * favScale) + 5
+    if animFactor > 0 then
+        itemFavOffset = ((iconFavorite:getWidth() * favScale) + 10) * animFactor
     end
 
     local calculatedWidth = layout.selWidth
@@ -137,9 +147,11 @@ local function calculateItemDisplayWidth(item, layout, fontList, launchMode, rom
     end
     
     -- Guardar en caché
-    item._widthCacheVal = calculatedWidth + 2
-    item._widthCacheKey = cacheKey
-    return item._widthCacheVal
+    if not isAnimating then
+        item._widthCacheVal = calculatedWidth + 2
+        item._widthCacheKey = tostring(launchMode) .. "_" .. tostring(isActuallyFav) .. "_" .. tostring(sdColX)
+    end
+    return calculatedWidth + 2
 end
 
 local function drawBottomBar(global_state)
@@ -618,14 +630,18 @@ local function drawMediaDetailContent(global_state, currentItem, x, y, w, h, alp
     love.graphics.setFont(fontMedium)
     if coverImg then
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
-        love.graphics.printf(global_state.L.get("front"), startX, contentY, coverW, "center")
+        local frontText = global_state.L.get("front")
+        local textW = fontMedium:getWidth(frontText)
+        love.graphics.print(frontText, startX + (coverW - textW) / 2, contentY)
         love.graphics.setColor(1, 1, 1, alpha * (global_state.currentImage and global_state.currentImageAlpha or 1))
         love.graphics.draw(coverImg, startX, drawY, 0, coverScale, coverScale)
     end
     if currentScreenshot then
         local drawX = startX + (coverImg and (coverW + spacing) or 0) -- X position to draw screenshot
         love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
-        love.graphics.printf(global_state.L.get("screen"), drawX, contentY, screenW, "center")
+        local screenText = global_state.L.get("screen")
+        local textW = fontMedium:getWidth(screenText)
+        love.graphics.print(screenText, drawX + (screenW - textW) / 2, contentY)
         love.graphics.setColor(1, 1, 1, alpha * global_state.currentScreenshotAlpha)
         love.graphics.draw(global_state.currentScreenshot, drawX, drawY, 0, screenScale, screenScale)
     end
@@ -1634,7 +1650,8 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
 
         -- Calcular propiedades para el elemento *realmente* seleccionado (files[selectedIndex])
         -- Definir favScale aquí para que esté disponible globalmente en drawMainList
-        local favScale = (global_state.iconFavorite and global_state.iconFavorite:getHeight() ~= 0) and ((40 * 0.55) / global_state.iconFavorite:getHeight()) or 1
+        local favScale = (global_state.iconFavorite and global_state.iconFavorite:getHeight() ~= 0) and ((40 * 0.35) / global_state.iconFavorite:getHeight()) or 1
+        local favAnimState = { index = global_state.favAnimIndex, anim = global_state.favAnim }
 
         -- Calcular startLine aquí para que esté disponible para el selector animado
         local visibleRows = global_state.pageSize + 1
@@ -1645,14 +1662,10 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
         local listScrollOffset = (global_state.animatedSelectionIndex - targetVisualRow) * global_state.layout.rowHeight
 
         -- Clamp the listScrollOffset so that the list doesn't scroll past its bounds
-        local minListOffset = math.min(0, (1 - targetVisualRow) * global_state.layout.rowHeight)
+        local minListOffset = (1 - targetVisualRow) * global_state.layout.rowHeight
         local maxListOffset = math.max(0, (#global_state.files - visibleRows) * global_state.layout.rowHeight)
 
-        if #global_state.files <= visibleRows then
-            listScrollOffset = 0 -- No scrolling needed if list is smaller than visible area
-        else
-            listScrollOffset = math.max(minListOffset, math.min(maxListOffset, listScrollOffset))
-        end
+        listScrollOffset = math.max(minListOffset, math.min(maxListOffset, listScrollOffset))
 
         -- The visual position of the animated selection rectangle
         local visualSelY = layout.listY + (global_state.animatedSelectionIndex - 1) * layout.rowHeight - listScrollOffset + (layout.rowHeight - layout.selHeight) / 2
@@ -1662,8 +1675,8 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
         local nextItemIndex = math.ceil(global_state.animatedSelectionIndex)
         local interpolationFactor = global_state.animatedSelectionIndex - currentItemIndex
 
-        local width1 = calculateItemDisplayWidth(global_state.files[currentItemIndex], global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX)
-        local width2 = calculateItemDisplayWidth(global_state.files[nextItemIndex], global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX)
+        local width1 = calculateItemDisplayWidth(global_state.files[currentItemIndex], global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX, currentItemIndex, favAnimState)
+        local width2 = calculateItemDisplayWidth(global_state.files[nextItemIndex], global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX, nextItemIndex, favAnimState)
         
         local animatedSelectionWidth = lerp(width1, width2, interpolationFactor)
         
@@ -1703,13 +1716,21 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     nameToDrawForWidth = nameToDrawForWidth:gsub("%.[^%.]+$", "")
                 end
 
-                local isFav = (global_state.favoriteRoms[item.fullPath]) and global_state.romPath ~= "@Favorites/"
-                local favOffset = 0
-                if isFav then
-                    favOffset = (global_state.iconFavorite:getWidth() * favScale) + 5
+                local isActuallyFav = (global_state.favoriteRoms[item.fullPath]) and global_state.romPath ~= "@Favorites/"
+                local animFactor = 0
+                if isActuallyFav then animFactor = 1 end
+                if i == global_state.favAnimIndex then
+                    animFactor = global_state.favAnim
                 end
 
-                local currentItemStaticWidth = calculateItemDisplayWidth(item, global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX)
+                local favOffset = 0
+                if animFactor > 0 then
+                    -- This is the full offset including padding
+                    favOffset = ((global_state.iconFavorite:getWidth() * favScale) + 10) * animFactor
+                end
+
+
+                local currentItemStaticWidth = calculateItemDisplayWidth(item, global_state.layout, global_state.fontList, global_state.launchMode, global_state.romPath, global_state.iconFavorite, favScale, global_state.favoriteRoms, sdColX, i, favAnimState)
 
                 -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
                 -- Determinar icono a dibujar
@@ -1767,7 +1788,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     availableWidth = sdColX - (layout.selX + 70) - 10
                 end
 
-                if isFav then
+                if animFactor > 0 then
                     availableWidth = availableWidth - favOffset
                 end
 
@@ -1780,11 +1801,15 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
 
                 local textX = layout.selX + 70
 
-                if isFav then
-                    love.graphics.setColor(1, 1, 1, 1)
-                    local favIconY = y + (layout.rowHeight - (global_state.iconFavorite:getHeight() * favScale)) / 2
-                    love.graphics.draw(global_state.iconFavorite, textX, favIconY, 0, favScale, favScale)
-                    textX = textX + favOffset
+                if animFactor > 0 then
+                    love.graphics.setColor(theme.colors.selection_accent)
+                    local currentScale = favScale * animFactor
+                    local iconH = global_state.iconFavorite:getHeight() * currentScale
+                    local favIconY = y + (layout.rowHeight - iconH) / 2
+                    
+                    love.graphics.draw(global_state.iconFavorite, textX, favIconY, 0, currentScale, currentScale)
+                    -- The offset for the text is the animated width of the star plus padding
+                    textX = textX + (global_state.iconFavorite:getWidth() * currentScale) + 10
                 end
 
                 local nameToDraw = item.name
@@ -1874,11 +1899,15 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     elseif label == "SD½" then baseColor = {0.8, 0.5, 1}
                     else baseColor = theme.colors.text_dim end
 
-                    if i == global_state.selectedIndex then love.graphics.setColor(baseColor)
-                    else love.graphics.setColor(baseColor[1] * 0.5, baseColor[2] * 0.5, baseColor[3] * 0.5) end
+                    if i == global_state.selectedIndex then 
+                        love.graphics.setColor(baseColor[1], baseColor[2], baseColor[3], 0.6)
+                    else 
+                        love.graphics.setColor(baseColor[1], baseColor[2], baseColor[3], 0.3) 
+                    end
 
                     love.graphics.setFont(fontSmall) -- Usar fuente más pequeña para las etiquetas SD
-                    love.graphics.printf(label, sdColX, textY, sdColW, "center")
+                    local labelY = y + (layout.rowHeight - fontSmall:getHeight()) / 2
+                    love.graphics.printf(label, sdColX, labelY, sdColW, "center")
                     love.graphics.setFont(fontList) -- Restaurar fuente original de la lista
                     end
                 end
@@ -2080,7 +2109,7 @@ local function draw(global_state)
     if not topGradientMesh then
         local r, g, b = 0, 0, 0 -- Use black for the gradient to make it visible
         local topBarHeight = layout.listY -- The height of the top bar area (where title/subtitle ends)
-        local fadeLength = 60 -- The length over which the gradient will fade (from original 100px total, 40% opaque -> 60% fade)
+        local fadeLength = 54 -- Reduced by 10% (was 60)
         local gradientLength = topBarHeight + fadeLength -- Total length of the gradient
         local opaquePercentage = (topBarHeight / gradientLength) * 100 -- Percentage of the total length that is fully opaque
         local w_screen, _ = love.graphics.getDimensions()

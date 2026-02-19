@@ -17,6 +17,16 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     local previewItem = global_state.previewItem
 
     loader_obj:update()
+    -- Favorite animation
+    if global_state.favAnim ~= global_state.favAnimTarget then
+        local speed = 7 -- Animation speed for the star
+        if global_state.favAnim < global_state.favAnimTarget then
+            global_state.favAnim = math.min(global_state.favAnimTarget, global_state.favAnim + dt * speed)
+        else
+            global_state.favAnim = math.max(global_state.favAnimTarget, global_state.favAnim - dt * speed)
+        end
+    end
+
     if inputCooldown > 0 then global_state.inputCooldown = inputCooldown - dt end
     
     -- Lógica para actualizar las variables de previsualización de forma asíncrona
