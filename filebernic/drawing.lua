@@ -478,9 +478,14 @@ local function calculateMenuWidth(global_state, title, message, options, item, i
         local text = type(opt) == "table" and opt.text or opt
         local width = 0
         
-        -- Stabilize width for switches (prevents panel from changing size between ON/OFF)
         local label, val = text:match("^(.-):%s*(.+)$")
-        if label and (val == global_state.L.get("on") or val == global_state.L.get("off") or val == global_state.L.get("yes") or val == global_state.L.get("no")) then
+        if text == L.get("add_favorite") or text == L.get("remove_favorite") then
+            -- Stabilize width for favorite toggle to prevent panel resizing
+            local addWidth = fontMedium:getWidth(L.get("add_favorite"))
+            local removeWidth = fontMedium:getWidth(L.get("remove_favorite"))
+            width = math.max(addWidth, removeWidth)
+        elseif label and (val == global_state.L.get("on") or val == global_state.L.get("off") or val == global_state.L.get("yes") or val == global_state.L.get("no")) then
+            -- Stabilize width for switches (prevents panel from changing size between ON/OFF)
              width = fontMedium:getWidth(label .. ":") + 50 -- Ancho etiqueta + espacio fijo para icono
         elseif label == global_state.L.get("view") then
              width = fontMedium:getWidth(label .. ":") + 80 -- Espacio para dos iconos
@@ -1294,21 +1299,30 @@ local function drawGrid(global_state, w, h)
         love.graphics.setShader()
     end
 
-    -- Calcular fila inicial para scroll
-    local currentRow = math.ceil(global_state.selectedIndex / cols)
-    local startRow = math.max(1, currentRow - rows + 1)
-    if currentRow <= rows then startRow = 1 end
-    
-    local startIndex = (startRow - 1) * cols + 1 -- Start index for grid items
-    local endIndex = math.min(#global_state.files, startIndex + (cols * rows) - 1)
+    -- Animated scroll offset for the grid
+    local target_row_float = global_state.animGridRow or (global_state.animatedSelectionIndex / cols)
+    local target_visual_row_float = rows / 2 -- Center point
+    local gridScrollOffset = (target_row_float - target_visual_row_float) * cellH
+
+    -- Clamp scroll offset
+    local minGridScrollOffset = (1 / cols - target_visual_row_float) * cellH
+    local maxGridScrollOffset = math.max(0, (math.ceil(#global_state.files / cols) - rows) * cellH)
+    if #global_state.files <= rows * cols then
+        gridScrollOffset = minGridScrollOffset
+    end
+    gridScrollOffset = math.max(minGridScrollOffset, math.min(maxGridScrollOffset, gridScrollOffset))
+
+    -- Determine visible items
+    local firstVisibleRow = math.floor(gridScrollOffset / cellH)
+    local startIndex = math.max(1, firstVisibleRow * cols + 1)
+    local numVisibleRows = rows + 2 -- Draw a couple extra for smooth scrolling
+    local endIndex = math.min(#global_state.files, startIndex + (cols * numVisibleRows) - 1)
     
     for i = startIndex, endIndex do
-        local relIndex = i - startIndex
-        local r = math.floor(relIndex / cols)
-        local c = relIndex % cols
-        
-        local x = marginX + c * cellW
-        local y = startY + r * cellH -- Y position for grid item
+        local r_abs = math.ceil(i / cols) - 1
+        local c_abs = (i - 1) % cols
+        local x = marginX + c_abs * cellW
+        local y = startY + r_abs * cellH - gridScrollOffset
         local item = global_state.files[i]
         
         local checkPath = item.fullPath or (romPath .. item.name)
@@ -1396,42 +1410,6 @@ local function drawGrid(global_state, w, h)
             love.graphics.draw(icon, ix, iy, 0, scale, scale)
         end
 
-        if global_state.launchMode == "Juego Unico" and item.versions then
-            local systems = {}
-            local seen = {}
-            for _, v in ipairs(item.versions) do -- Iterate through versions
-                if v.system and not seen[v.system] then
-                    seen[v.system] = true
-                    table.insert(systems, v.system)
-                end
-            end
-            
-            local iconSize = 16
-            local iconY = y + cellH - 45 - iconSize
-            local iconX = x + cellW - 10
-            
-            for idx = #systems, 1, -1 do
-                local sys = systems[idx]
-                local sIcon = utils.getSystemIcon(sys, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
-                if sIcon then
-                    if isLastPlayed and markPlayed and sys == playedSystem then
-                        love.graphics.setColor(0.2, 0.8, 0.3) -- Verde más brillante para que se vea el icono
-                    else
-                        love.graphics.setColor(1, 1, 1, 0.9)
-                    end
-                    local scale = iconSize / sIcon:getHeight()
-                    love.graphics.draw(sIcon, iconX - iconSize, iconY, 0, scale, scale)
-                    iconX = iconX - iconSize - 2
-                end
-            end
-        end
-
-        -- Fondo selección (Dibujado DESPUÉS de la imagen para que esta quede al fondo)
-        if i == round(global_state.animatedSelectionIndex) then
-            love.graphics.setColor(1, 1, 1, 0.2) -- Blanco translúcido
-            love.graphics.rectangle("fill", x + 2, y + 2, cellW - 4, cellH - 2, 15)
-        end
-
         -- Texto
         local textFont = fontMedium
         love.graphics.setFont(textFont)
@@ -1482,6 +1460,19 @@ local function drawGrid(global_state, w, h)
              love.graphics.draw(pIcon, iconX, iconY, 0, scale, scale)
         end
     end
+
+    -- Animated selection box (drawn after all items)
+    local animRow = global_state.animGridRow or 1
+    local animCol = global_state.animGridCol or 1
+    
+    local r_abs = animRow - 1
+    local c_abs = animCol - 1
+    
+    local animX = marginX + c_abs * cellW
+    local animY = startY + r_abs * cellH - gridScrollOffset
+
+    love.graphics.setColor(1, 1, 1, 0.2) -- Translucent white
+    love.graphics.rectangle("fill", animX + 2, animY + 2, cellW - 4, cellH - 2, 15)
 end
 
 local function drawJumpLetter(global_state)
@@ -1751,7 +1742,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
 
                 local targetH = 32
                 local drawScale = targetH / iconToDraw:getHeight()
-                if iconToDraw == global_state.iconFavorite then 
+                if iconToDraw == global_state.iconFavorite and item.fullPath ~= "@Favorites/" then 
                     drawScale = favScale
                 end
                 local drawY = y + (global_state.layout.rowHeight - iconToDraw:getHeight() * drawScale) / 2

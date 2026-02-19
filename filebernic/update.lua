@@ -394,6 +394,24 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     global_state.animatedSelectionIndex = math.max(1, math.min(#global_state.files,
                                                                global_state.animatedSelectionIndex)) -- Line too long
 
+    -- Logic for Grid Animation (Row/Col interpolation)
+    if global_state.viewMode == "GRID" then
+        local cols = global_state.gridCols
+        local targetRow = math.ceil(global_state.selectedIndex / cols)
+        local targetCol = (global_state.selectedIndex - 1) % cols + 1
+        
+        -- Initialize if not set (e.g. just switched mode)
+        if not global_state.animGridRow then global_state.animGridRow = targetRow end
+        if not global_state.animGridCol then global_state.animGridCol = targetCol end
+        
+        local gridSpeed = global_state.gridSelectionAnimationSpeed or 20
+        global_state.animGridRow = lerp(global_state.animGridRow, targetRow, dt * gridSpeed)
+        global_state.animGridCol = lerp(global_state.animGridCol, targetCol, dt * gridSpeed)
+    else
+        global_state.animGridRow = nil
+        global_state.animGridCol = nil
+    end
+
     if moved then
         if global_state.state == "LIST" then
             if moveDir == 'down' then

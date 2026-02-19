@@ -436,7 +436,10 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             end
             global_state.favAnimIndex = global_state.selectedIndex
             filesystem.saveFavorites(global_state.favoriteRoms, global_state.json.encode)
-            if isVirtualRoot then
+            
+            local inFavoritesView = (global_state.romPath == "@Favorites/")
+            
+            if global_state.isVirtualRoot then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
@@ -444,6 +447,11 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                    global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites, global_state.log, global_state.loader)
             else
                 refreshFiles(global_state)
+            end
+            
+            if inFavoritesView then
+                global_state.state = "LIST"
+                global_state.closingMenu = true
             end
         elseif optText == L.get("reindex") then
             -- Force reindexing
