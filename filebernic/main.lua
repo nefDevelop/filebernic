@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global
-local json = require "libs.dkjson"
+json = require "libs.dkjson"
 utils = require "utils"
 
 Loader = require "loader"
@@ -8,7 +8,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 
 -- Variables de configuración y estado
-DEBUG = 1 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 0 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
     DEFAULT = true
@@ -201,7 +201,7 @@ function jumpToNextLetter()
     jumpLetter = files[selectedIndex].name:sub(1,1):upper()
 end
 
-function forceReindex()
+function forceReindex(global_state)
     log("Forcing re-index...")
     romIndex = nil
     -- Delete index files
@@ -210,7 +210,7 @@ function forceReindex()
     
     -- Restart indexing
     isIndexing = true
-    indexStateMessage = "Iniciando indexado..."
+    global_state.indexStateMessage = "Iniciando indexado..."
     indexerChannelIn:push({command="start", validExtensions=validExtensions, sourceDir=love.filesystem.getSource(), priorityPath=romPath})
 end
 
@@ -243,16 +243,15 @@ function jumpToPrevLetter()
     jumpLetter = files[selectedIndex].name:sub(1,1):upper()
 end
 
-function updateSystemPaths()
-    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.filesystem.getInfo, love.graphics.newImage)
+-- Expose input.refreshFiles and input.updateSystemPaths to global scope
+-- These will be called by main.lua's global refreshFiles and updateSystemPaths
+-- after input.lua is required.
+function refreshFiles()
+    input.refreshFiles(_G)
 end
 
-function refreshFiles()
-    if romPath and romPath ~= "" and romPath:sub(-1) ~= "/" then romPath = romPath .. "/" end
-    romPath = filesystem.fixPathCase(romPath) -- Corregir mayúsculas/minúsculas de la ruta
-    log("Refreshing files... Path: " .. romPath) -- Log before refreshFiles
-    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, log, favoriteRoms, hideFavorites)
-    preview.load(_G, log, loader)
+function updateSystemPaths()
+    input.updateSystemPaths(_G)
 end
 
 function updateFileList(newIndex)
@@ -328,7 +327,7 @@ function updateFileList(newIndex)
     allFiles = {}
     for _, item in ipairs(files) do table.insert(allFiles, item) end
     
-    preview.load(_G, log, loader)
+    preview.load(_G, log, loader) -- Pass global state to preview.load
 end
 
 function log(message)
@@ -465,7 +464,7 @@ function love.load(arg)
     scraperApi = config.scraperApi -- Initialize scraperApi after config is loaded
 
     loader = Loader:new(log, {
-        thread = love.thread,
+        thread = love.thread, -- Pass love.thread module
         filesystem = love.filesystem,
         image = love.image,
         graphics = love.graphics
@@ -575,7 +574,7 @@ function love.load(arg)
 
     -- Define Help Data
     helpData = {
-        LIST = {
+        LIST = { -- Help data for LIST state
             {icon=buttonIcons.a, text="accept"},
             {icon=buttonIcons.b, text="back"},
             {icon=buttonIcons.y, text="options"},
@@ -585,7 +584,7 @@ function love.load(arg)
             {icon=buttonIcons.l1, text="search"},
             {icon=buttonIcons.r1, text="help"}
         },
-        CLEANUP_MENU = {
+        CLEANUP_MENU = { -- Help data for CLEANUP_MENU state
             {icon=buttonIcons.l1, text="change_col"},
             {icon=buttonIcons.a, text="delete"},
             {icon=buttonIcons.b, text="back"},
@@ -593,18 +592,18 @@ function love.load(arg)
         },
         INFO_VIEW = {
             {icon=buttonIcons.b, text="back"},
-            {icon=buttonIcons.r1, text="help"}
+            {icon=buttonIcons.r1, text="help"} -- Help data for INFO_VIEW state
         },
         SCRAPER_VIEW = {
             {icon=buttonIcons.a, text="search"},
             {icon=buttonIcons.y, text="options"},
             {icon=buttonIcons.b, text="back"},
-            {icon=buttonIcons.r1, text="help"}
+            {icon=buttonIcons.r1, text="help"} -- Help data for SCRAPER_VIEW state
         },
         OPTIONS_MENU = {
             {icon=buttonIcons.a, text="accept"},
             {icon=buttonIcons.b, text="back"},
-            {icon=buttonIcons.r1, text="help"}
+            {icon=buttonIcons.r1, text="help"} -- Help data for OPTIONS_MENU state
         },
         DEFAULT = {
             {icon=buttonIcons.a, text="confirm"},
@@ -614,7 +613,7 @@ function love.load(arg)
     }
 
     -- Cargar configuración global (API keys, etc)
-    config = State.loadConfig(config, love.filesystem)
+    config = State.loadConfig(config, love.filesystem) -- Load config with love.filesystem
     scraperApi = config.scraperApi
 
     -- Detectar idioma si no está forzado en config
@@ -629,7 +628,7 @@ function love.load(arg)
     end
     L.current = config.language or "es" -- Establecer idioma actual (fallback a español)
     
-    -- Cargar configuración guardada
+    -- Load saved application state
     local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")
     if f then
         local content = f:read("*all")
@@ -653,7 +652,7 @@ function love.load(arg)
     end
 
     -- Cargar historial de juegos jugados (this populates playedRoms, keep it)
-    local f = io.open(love.filesystem.getSource() .. "/data/played_roms.txt", "r")
+    local f = io.open(love.filesystem.getSource() .. "/data/played_roms.txt", "r") -- Load played ROMs history
     if f then
         for line in f:lines() do
             playedRoms[line] = true
@@ -662,7 +661,7 @@ function love.load(arg)
     end
 
     -- Load Favorites
-    favoriteRoms = filesystem.loadFavorites(json.decode)
+    favoriteRoms = filesystem.loadFavorites(json.decode) -- Load favorite ROMs
 
     -- Load last played ROM (separate from app_state)
     local f = io.open(love.filesystem.getSource() .. "/data/last_played.txt", "r")
@@ -693,12 +692,12 @@ function love.load(arg)
                 end
             end
         end -- End if lastPlayedRom
-        preview.load(_G, log, loader)
+        preview.load(_G, log, loader) -- Pass global state to preview.load
     else
         log("Creating merged virtual root...")
         files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles =
-            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites)
-        preview.load(_G, log, loader)
+            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites, log, loader)
+        preview.load(_G, log, loader) -- Pass global state to preview.load
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -718,15 +717,15 @@ function love.load(arg)
                  if found then break end
              end
              if found then
-                preview.load(_G, log, loader)
+                preview.load(_G, log, loader) -- Pass global state to preview.load
              end
         end -- End if lastPlayedRom
     end
 
     -- Load modules
-    love.draw = require "drawing"
-    log("DEBUG: drawing.lua loaded. Type of love.draw: " .. type(love.draw))
-    local update_function = require "update"
+    local drawing = require "drawing"
+    love.draw = function() drawing(_G) end
+    local update_function = require "update" -- Store update module locally
     local input = require "input"
     love.keypressed = function(key) input.keypressed(key, _G) end
     -- Pass global state to update function
@@ -734,7 +733,7 @@ function love.load(arg)
         update_function(dt, _G, log, loader, updateFileList)
     end
     love.gamepadpressed = function(j, b) input.gamepadpressed(j, b, _G) end
-    love.joystickpressed = function(j, b) input.joystickpressed(j, b, _G) end
+    love.joystickpressed = function(j, b) input.joystickpressed(j, b, _G) end -- Pass global state to joystickpressed
     love.textinput = function(t) input.textinput(t, _G) end
 
     -- Intentar cargar el índice ANTES de crear la vista inicial.
@@ -782,12 +781,12 @@ function love.load(arg)
                 end
             end
         end -- End if lastPlayedRom
-        preview.load(_G, log, loader)
+        preview.load(_G, log, loader) -- Pass global state to preview.load
     elseif #files == 0 then
         log("Creating merged virtual root...")
         files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles =
-            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites)
-        preview.load(_G, log, loader)
+            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites, log, loader)
+        preview.load(_G, log, loader) -- Pass global state to preview.load
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -807,7 +806,7 @@ function love.load(arg)
                  if found then break end
              end
              if found then
-                preview.load(_G, log, loader)
+                preview.load(_G, log, loader) -- Pass global state to preview.load
              end
         end -- End if lastPlayedRom
     end

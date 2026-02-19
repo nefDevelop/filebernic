@@ -124,16 +124,16 @@ function M.getSystemDisplayName(sysName)
     return variantToDisplay[sysName:lower()] or sysName
 end
 
-local systemIconCache = {}
+local systemIconCache = {} -- Cache for system icons
 
-function M.getSystemIcon(sysName, fs_getInfo, gfx_newImage)
+function M.getSystemIcon(sysName, fs_getInfo, gfx_newImage) -- Now accepts fs_getInfo and gfx_newImage
     if not sysName then return nil end
     if systemIconCache[sysName] then return systemIconCache[sysName] end
 
     local variants = M.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
-        local path = "assets/systems/" .. v .. ".png" -- Construct path
+        local path = "assets/systems/" .. v .. ".png"
         if fs_getInfo(path) then -- Check if file exists
             local img = gfx_newImage(path) -- Load image
             systemIconCache[sysName] = img
@@ -142,16 +142,16 @@ function M.getSystemIcon(sysName, fs_getInfo, gfx_newImage)
     end
     return nil
 end
-local systemContentIconCache = {}
+local systemContentIconCache = {} -- Cache for system content icons
 
-function M.getSystemContentIcon(sysName, fs_getInfo, gfx_newImage)
+function M.getSystemContentIcon(sysName, fs_getInfo, gfx_newImage) -- Now accepts fs_getInfo and gfx_newImage
     if not sysName then return nil end
     if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
     local variants = M.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
         local path = "assets/systems/" .. v .. "-content.png"
-        if fs_getInfo(path) then
+        if fs_getInfo(path) then -- Check if file exists
             local img = gfx_newImage(path)
             systemContentIconCache[sysName] = img
             return img
@@ -160,7 +160,7 @@ function M.getSystemContentIcon(sysName, fs_getInfo, gfx_newImage)
     return nil
 end
 
-function M.getSystemNameForItem(item, globalSystemName, globalIsVirtualRoot)
+function M.getSystemNameForItem(item, globalSystemName, globalIsVirtualRoot) -- Now accepts globalSystemName and globalIsVirtualRoot
     if not item then return nil end
 
     -- 1. Check pre-assigned system property (most reliable, for virtual root)

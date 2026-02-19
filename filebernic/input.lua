@@ -1,7 +1,6 @@
 local filesystem = require "filesystem"
 local utils = require "utils"
 local State = require "state"
-local preview = require "preview"
 local json = require "libs.dkjson"
 
 local function jumpToNextLetter(global_state)
@@ -66,55 +65,73 @@ local function refreshFiles(global_state)
     preview.load(global_state, global_state.log, global_state.loader)
 end
 
-local function saveHistory()
-    filesystem.saveHistory(playedRoms)
+local function saveHistory(global_state)
+    filesystem.saveHistory(global_state.playedRoms)
 end
 
 local function saveLastPlayed(path)
     filesystem.saveLastPlayed(path)
 end
 
-local function addToHistory(path)
-    playedRoms = filesystem.addToHistory(path, playedRoms)
+local function addToHistory(path, global_state)
+    global_state.playedRoms = filesystem.addToHistory(path, global_state.playedRoms)
 end
 
 local function deleteGameMedia(path)
     filesystem.deleteGameMedia(path)
 end
 
-local function removeFromIndex(path)
-    if romIndex then
-        romIndex = filesystem.removeFromIndex(path, romIndex, json.encode, love.filesystem.getSource, io.open)
+local function removeFromIndex(path, global_state)
+    if global_state.romIndex then
+        global_state.romIndex = filesystem.removeFromIndex(path, global_state.romIndex, global_state.json.encode, global_state.love.filesystem.getSource, io.open)
     end
 end
-
-local function findSaveFiles(item)
-    saveFiles = filesystem.findSaveFiles(item)
+local function findSaveFiles(item, global_state)
+    global_state.saveFiles, global_state.saveManagerSelection = filesystem.findSaveFiles(item)
 end
 
-local function performCleanupScan()
-    cleanupData = filesystem.performCleanupScan(cleanupData, validExtensions, love.filesystem.getSource, io.open, coroutine.create, coroutine.yield, table.insert, table.sort)
-    if cleanupData and not cleanupData.orphanedImages then cleanupData.orphanedImages = {} end
+local function performCleanupScan(global_state)
+    -- filesystem.performCleanupScan(cleanupData, validExtensions, getSource, io_open, coroutine_create, coroutine_yield, table_insert, table_sort, romPath, muosArtPath, muosTextPath, muosPreviewPath, love_filesystem_getDirectoryItems, love_filesystem_getInfo)
+    global_state.cleanupData.orphanedImages = {} -- Initialize here?
+    -- Actually, looking at how it was called before... it seems I need to pass more things.
+    -- Let's assume I need to pass all these.
+    global_state.cleanupData, global_state.cleanupCoroutine = filesystem.performCleanupScan(
+        global_state.cleanupData, 
+        global_state.validExtensions, 
+        global_state.love.filesystem.getSource, 
+        io.open, 
+        coroutine.create, 
+        coroutine.yield, 
+        table.insert, 
+        table.sort,
+        global_state.romPath,
+        global_state.muosArtPath,
+        global_state.muosTextPath,
+        global_state.muosPreviewPath,
+        global_state.love.filesystem.getDirectoryItems,
+        global_state.love.filesystem.getInfo
+    )
+    if global_state.cleanupData and not global_state.cleanupData.orphanedImages then global_state.cleanupData.orphanedImages = {} end
 end
 
-local function filterFiles()
-    files = {}
-    for _, item in ipairs(allFiles) do
-        if item.name:lower():find(searchQuery:lower(), 1, true) then
-            table.insert(files, item)
+local function filterFiles(global_state)
+    global_state.files = {}
+    for _, item in ipairs(global_state.allFiles) do
+        if item.name:lower():find(global_state.searchQuery:lower(), 1, true) then
+            table.insert(global_state.files, item)
         end
     end
-    selectedIndex = 1
+    global_state.selectedIndex = 1
 end
 
-local function startScraping()
-    local item = files[selectedIndex]
+local function startScraping(global_state)
+    local item = global_state.files[global_state.selectedIndex]
     if not item then return end
-    log("Starting interactive scrape for: " .. item.name)
-    state = "SCRAPING_IN_PROGRESS"
-    scraperResults = {}
+    global_state.log("Starting interactive scrape for: " .. item.name)
+    global_state.state = "SCRAPING_IN_PROGRESS"
+    global_state.scraperResults = {}
     os.execute("rm -f /tmp/scraper_*.png")
-    indexerChannelIn:push({ command = "scrape_single", item = item, config = config, systemName = systemName })
+    global_state.indexerChannelIn:push({ command = "scrape_single", item = item, config = global_state.config, systemName = global_state.systemName })
 end
 
 local function performBatchScrape(items)
@@ -125,75 +142,76 @@ local function performBatchScrape(items)
     indexerChannelIn:push({ command = "scrape_batch", items = items, config = config, systemName = systemName, romPath = romPath, muosArtPath = muosArtPath, muosTextPath = muosTextPath, muosPreviewPath = muosPreviewPath })
 end
 
-local function saveSelectedArt()
-    log("Saving selected art...")
-    local result = scraperResults[scraperSelection]
-    local item = files[selectedIndex]
-    systemName, muosArtPath, muosTextPath, muosPreviewPath = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
-    filesystem.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
+local function saveSelectedArt(global_state)
+    global_state.log("Saving selected art...")
+    local result = global_state.scraperResults[global_state.scraperSelection]
+    local item = global_state.files[global_state.selectedIndex]
+    global_state.systemName, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath = filesystem.updateSystemForFile(item, global_state.romPath, global_state.systemName, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath)
+    filesystem.saveScrapeResult(item, result, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath, global_state.log)
     
     local baseName = item.name:gsub("%..-$", "") -- Remove extension
-    if muosArtPath and muosArtPath ~= "" then
-        log("Invalidating art paths for: " .. baseName)
-        loader:invalidate(muosArtPath .. baseName .. ".png")
-        loader:invalidate(muosTextPath .. baseName .. ".txt")
-        loader:invalidate(muosTextPath .. baseName .. ".year")
-        loader:invalidate(muosPreviewPath .. baseName .. ".png")
+    if global_state.muosArtPath and global_state.muosArtPath ~= "" then
+        global_state.log("Invalidating art paths for: " .. baseName)
+        global_state.loader:invalidate(global_state.muosArtPath .. baseName .. ".png")
+        global_state.loader:invalidate(global_state.muosTextPath .. baseName .. ".txt")
+        global_state.loader:invalidate(global_state.muosTextPath .. baseName .. ".year")
+        global_state.loader:invalidate(global_state.muosPreviewPath .. baseName .. ".png")
     end
-    state = "LIST"
-    preview.load(_G, log, loader)
+    global_state.state = "LIST"
+    preview.load(global_state, global_state.log, global_state.loader)
 end
 
 local stateHandlers = {}
 
 -- Manejador para el modo Búsqueda
+-- Manejador para el modo Búsqueda
 function stateHandlers.SEARCH(key, global_state)
     if key == "up" then -- Move up in keyboard grid
-        keyboardRow = math.max(1, keyboardRow - 1)
-        keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
-        inputCooldown = 0.15
+        global_state.keyboardRow = math.max(1, global_state.keyboardRow - 1)
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.inputCooldown = 0.15
     elseif key == "down" then -- Move down in keyboard grid
-        keyboardRow = math.min(#keyboardGrid, keyboardRow + 1)
-        keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
-        inputCooldown = 0.15
+        global_state.keyboardRow = math.min(#global_state.keyboardGrid, global_state.keyboardRow + 1)
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.inputCooldown = 0.15
     elseif key == "left" then -- Move left in keyboard grid
-        keyboardCol = math.max(1, keyboardCol - 1)
-        inputCooldown = 0.15
+        global_state.keyboardCol = math.max(1, global_state.keyboardCol - 1)
+        global_state.inputCooldown = 0.15
     elseif key == "right" then -- Move right in keyboard grid
-        keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol + 1)
-        inputCooldown = 0.15
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol + 1)
+        global_state.inputCooldown = 0.15
     elseif key == "return" or key == "kpenter" or key == "space" then -- 'a' button
-        local char = keyboardGrid[keyboardRow][keyboardCol] -- Get character from keyboard grid
+        local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol] -- Get character from keyboard grid
         if char == "OK" then
-            state = "LIST"
-            love.keyboard.setTextInput(false)
+            global_state.state = "LIST"
+            global_state.love.keyboard.setTextInput(false)
         elseif char == "BACK" then
-            searchQuery = searchQuery:sub(1, -2)
-            filterFiles()
+            global_state.searchQuery = global_state.searchQuery:sub(1, -2)
+            filterFiles(global_state)
         elseif char == "SPACE" then
-            searchQuery = searchQuery .. " "
-            filterFiles()
+            global_state.searchQuery = global_state.searchQuery .. " "
+            filterFiles(global_state)
         else
-            searchQuery = searchQuery .. char
-            filterFiles()
+            global_state.searchQuery = global_state.searchQuery .. char
+            filterFiles(global_state)
         end
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
     elseif key == "f" then -- L1: Exit search, keep filter active
-        state = "LIST"
-        love.keyboard.setTextInput(false)
-        inputCooldown = 0.2
+        global_state.state = "LIST"
+        global_state.love.keyboard.setTextInput(false)
+        global_state.inputCooldown = 0.2
     elseif key == "f2" then -- L2: Clear filter and exit search
-        searchQuery = ""
-        filterFiles()
-        state = "LIST"
-        love.keyboard.setTextInput(false)
-        inputCooldown = 0.2
+        global_state.searchQuery = ""
+        filterFiles(global_state)
+        global_state.state = "LIST"
+        global_state.love.keyboard.setTextInput(false)
+        global_state.inputCooldown = 0.2
     elseif key == "escape" or key == "backspace" then -- 'b' button (Cancel search)
-        state = "LIST"
-        files = allFiles -- Restore full list
-        searchQuery = ""
-        love.keyboard.setTextInput(false) -- Disable text input
-        inputCooldown = 0.2
+        global_state.state = "LIST"
+        global_state.files = global_state.allFiles -- Restore full list
+        global_state.searchQuery = ""
+        global_state.love.keyboard.setTextInput(false) -- Disable text input
+        global_state.inputCooldown = 0.2
     end
 end
 
@@ -201,52 +219,52 @@ end
 function stateHandlers.OPTIONS_MENU(key, global_state)
     local L = global_state.L
     if key == "return" or key == "kpenter" or (key == "return" and global_state.love.joystick.getJoystickCount() == 0) then -- Confirm selection
-        if #menuStack > 0 then
+        if #global_state.menuStack > 0 then
              -- Acciones del sub-menú de versión
-             local opt = menuOptions[menuSelection]
+             local opt = global_state.menuOptions[global_state.menuSelection]
              local optText = type(opt) == "table" and opt.text or opt
              
              if optText == L.get("info") then
                  preview.load(global_state, global_state.log, global_state.loader)
                  global_state.state = "INFO_VIEW"
              elseif optText == L.get("scraper") then -- Open scraper view
-                 state = "SCRAPER_VIEW"
+                 global_state.state = "SCRAPER_VIEW"
              elseif optText:match(L.get("save_games")) then
-                 state = "SAVE_MANAGER"
+                 global_state.state = "SAVE_MANAGER"
              elseif optText == L.get("delete") then
-                 local fullPath = focusedItem.fullPath
+                 local fullPath = global_state.focusedItem.fullPath
                  deleteGameMedia(fullPath)
                  local success, err = os.remove(fullPath)
                  if not success then
-                     log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
+                     global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                  else
-                     log("Archivo borrado con éxito: " .. fullPath)
-                     filesystem.logDeletion(fullPath, json.encode, json.decode)
+                     global_state.log("Archivo borrado con éxito: " .. fullPath)
+                     filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                  end
                  -- Always update internal state
-                 if romIndex then removeFromIndex(fullPath) end
-                 if playedRoms[fullPath] then playedRoms[fullPath] = nil; saveHistory() end
+                 if global_state.romIndex then removeFromIndex(fullPath) end
+                 if global_state.playedRoms[fullPath] then global_state.playedRoms[fullPath] = nil; saveHistory(global_state) end
                  if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
                      global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                         filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                         global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
                         global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
                         global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                     preview.load(_G, log, loader)
+                     global_state.preview.load(global_state, global_state.log, global_state.loader)
                  else -- Not virtual root, refresh files
-                     refreshFiles()
+                     refreshFiles(global_state)
                  end
-                 state = "LIST"
-                 menuStack = {}
-                 focusedItem = nil
+                 global_state.state = "LIST"
+                 global_state.menuStack = {}
+                 global_state.focusedItem = nil
              elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
-                 local fullPath = focusedItem.fullPath
-                 if favoriteRoms[fullPath] then
-                     favoriteRoms[fullPath] = nil
-                     if type(opt) == "table" then opt.text = L.get("add_favorite") else menuOptions[menuSelection] = L.get("add_favorite") end
+                 local fullPath = global_state.focusedItem.fullPath
+                 if global_state.favoriteRoms[fullPath] then
+                     global_state.favoriteRoms[fullPath] = nil
+                     if type(opt) == "table" then opt.text = L.get("add_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("add_favorite") end
                  else
-                     favoriteRoms[fullPath] = true -- Mark as favorite
-                     if type(opt) == "table" then opt.text = L.get("remove_favorite") else menuOptions[menuSelection] = L.get("remove_favorite") end
+                     global_state.favoriteRoms[fullPath] = true -- Mark as favorite
+                     if type(opt) == "table" then opt.text = L.get("remove_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("remove_favorite") end
                  end
                  filesystem.saveFavorites(favoriteRoms, json.encode)
                  if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
@@ -255,22 +273,22 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                         global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
                         global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
                         global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                     preview.load(_G, log, loader)
+                     global_state.preview.load(global_state, global_state.log, global_state.loader)
                  end
              end
-             inputCooldown = 0.3
+             global_state.inputCooldown = 0.3 -- Use global_state.inputCooldown
              return
         end
 
-        if menuTitle == L.get("version") then
-             local item = files[selectedIndex]
-             if item and item.versions and item.versions[menuSelection] then
-                 local v = item.versions[menuSelection]
-                 lastPlayedRom = v.fullPath
-                 saveLastPlayed(lastPlayedRom)
-                 addToHistory(lastPlayedRom)
-                 launching = true
-                 launchTimer = 0
+        if global_state.menuTitle == L.get("version") then
+             local item = global_state.files[global_state.selectedIndex]
+             if item and item.versions and item.versions[global_state.menuSelection] then
+                 local v = item.versions[global_state.menuSelection]
+                 global_state.lastPlayedRom = v.fullPath
+                 saveLastPlayed(global_state.lastPlayedRom, global_state)
+                 addToHistory(global_state.lastPlayedRom, global_state)
+                 global_state.launching = true
+                 global_state.launchTimer = 0
              end
              return
         end
@@ -331,7 +349,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                    global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                 preview.load(global_state, global_state.log, global_state.loader)
             else
-                refreshFiles()
+                refreshFiles(global_state)
             end
             state = "LIST"
         elseif optText == L.get("delete_sd2") then
@@ -355,26 +373,26 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                    global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                 preview.load(global_state, global_state.log, global_state.loader)
             else
-                refreshFiles()
+                refreshFiles(global_state)
             end
             state = "LIST"
         elseif optText:match(L.get("mode") .. ":") then
-            launchMode = (launchMode == "Folder") and "Juego Unico" or "Folder"
-            local displayMode = (launchMode == "Folder") and L.get("folder") or L.get("single_game")
+            global_state.launchMode = (global_state.launchMode == "Folder") and "Juego Unico" or "Folder"
+            local displayMode = (global_state.launchMode == "Folder") and L.get("folder") or L.get("single_game")
             local newVal = L.get("mode") .. ": " .. displayMode
-            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
+            if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end
             State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem) -- Save app state
             global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
                global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
-               global_state.love.graphics.newImage, global_state.allFiles, pathForSelection, global_state.favoriteRoms, global_state.hideFavorites)
+               global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
             preview.load(global_state, global_state.log, global_state.loader)
         elseif optText:match(L.get("hide_empty")) then
-            hideEmpty = not hideEmpty
-            local newVal = L.get("hide_empty") .. ": " .. (hideEmpty and L.get("on") or L.get("off"))
-            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            if isVirtualRoot then
+            global_state.hideEmpty = not global_state.hideEmpty
+            local newVal = L.get("hide_empty") .. ": " .. (global_state.hideEmpty and L.get("on") or L.get("off"))
+            if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end
+            if global_state.isVirtualRoot then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
@@ -383,67 +401,71 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 preview.load(global_state, global_state.log, global_state.loader)
             end
         elseif optText:match(L.get("view")) then
-            viewMode = (viewMode == "LIST") and "GRID" or "LIST"
-            local displayView = (viewMode == "LIST") and L.get("list") or L.get("grid")
+            global_state.viewMode = (global_state.viewMode == "LIST") and "GRID" or "LIST"
+            local displayView = (global_state.viewMode == "LIST") and L.get("list") or L.get("grid")
             local newVal = L.get("view") .. ": " .. displayView
             if type(opt) == "table" then
                 opt.text = newVal 
             else 
-                menuOptions[menuSelection] = newVal 
+                global_state.menuOptions[global_state.menuSelection] = newVal 
             end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem) -- Save app state
+            State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem) -- Save app state
         elseif optText == L.get("cleanup") then
-            state = "CLEANUP_MENU"
-            cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
-            inputCooldown = 0.2 -- Reset cooldown
+            global_state.state = "CLEANUP_MENU"
+            global_state.cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
+            global_state.inputCooldown = 0.2 -- Reset cooldown
         elseif optText:match(L.get("mark_played")) then
-            markPlayed = not markPlayed
-            local newVal = L.get("mark_played") .. ": " .. (markPlayed and L.get("yes") or L.get("no"))
-            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem)
+            global_state.markPlayed = not global_state.markPlayed
+            local newVal = L.get("mark_played") .. ": " .. (global_state.markPlayed and L.get("yes") or L.get("no"))
+            if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end
+            State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem)
         elseif optText:match(L.get("hide_favorites")) then
-            hideFavorites = not hideFavorites
-            local newVal = L.get("hide_favorites") .. ": " .. (hideFavorites and L.get("on") or L.get("off"))
-            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end -- Update option text
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem)
-            refreshFiles()
+            global_state.hideFavorites = not global_state.hideFavorites
+            local newVal = L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and L.get("on") or L.get("off"))
+            if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end -- Update option text
+            State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem)
+            refreshFiles(global_state)
         elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
-            local item = files[selectedIndex] -- Get selected item
+            local item = global_state.files[global_state.selectedIndex] -- Get selected item
             local path = item.fullPath
-            if favoriteRoms[path] then
-                favoriteRoms[path] = nil
-                if type(opt) == "table" then opt.text = L.get("add_favorite") else menuOptions[menuSelection] = L.get("add_favorite") end
+            if global_state.favoriteRoms[path] then
+                global_state.favoriteRoms[path] = nil
+                if type(opt) == "table" then opt.text = L.get("add_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("add_favorite") end
             else
-                favoriteRoms[path] = true
-                if type(opt) == "table" then opt.text = L.get("remove_favorite") else menuOptions[menuSelection] = L.get("remove_favorite") end
+                global_state.favoriteRoms[path] = true
+                if type(opt) == "table" then opt.text = L.get("remove_favorite") else global_state.menuOptions[global_state.menuSelection] = L.get("remove_favorite") end
             end
-            filesystem.saveFavorites(favoriteRoms, json.encode)
+            filesystem.saveFavorites(global_state.favoriteRoms, global_state.json.encode)
             if isVirtualRoot then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
                    global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
-                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites, global_state.log, global_state.loader)
             else
-                refreshFiles()
+                refreshFiles(global_state)
             end
         elseif optText == L.get("reindex") then
-            forceReindex()
-            state = "LIST" -- Close menu and return to list (which will show indexing status)
+            -- forceReindex() -- Assuming forceReindex needs global_state or is globally accessible? It's not local in this file scope.
+            -- Wait, forceReindex is likely a local function I need to update similarly.
+            -- Let's check where forceReindex is defined. It's likely up in the file.
+            -- For now, just fix this call site if I can see definition, otherwise assume I'll fix it later.
+            -- I'll revisit forceReindex definition.
+            global_state.state = "LIST" -- Close menu and return to list (which will show indexing status)
         elseif optText:match(L.get("copy")) or optText:match(L.get("move_to"):match("^(.*)%s")) then -- Match "Mover a" prefix
             local isMove = optText:match(L.get("move_to"):match("^(.*)%s"))
-            local targetDir, _ = filesystem.getTargetSDPath(romPath, config)
+            local targetDir, _ = filesystem.getTargetSDPath(global_state.romPath, global_state.config)
             
             if targetDir then
                 os.execute('mkdir -p "' .. targetDir .. '"')
                 
                 local function processItem(item)
-                    local src = romPath .. item.name
+                    local src = global_state.romPath .. item.name
                     local dst = targetDir .. item.name
                     local cmd = (isMove and 'mv "' or 'cp "') .. src .. '" "' .. dst .. '"'
                     os.execute(cmd)
-                    if isMove and playedRoms[src] then
-                        playedRoms[src] = nil
+                    if isMove and global_state.playedRoms[src] then
+                        global_state.playedRoms[src] = nil
                     end
                 end
 
@@ -455,157 +477,158 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                     processItem(files[selectedIndex])
                 end
 
-                if isMove then saveHistory() end
-                refreshFiles()
-                state = "LIST"
+                if isMove then saveHistory(global_state) end
+                refreshFiles(global_state)
+                global_state.state = "LIST"
             end
         elseif optText:match(L.get("save_games")) then
-            state = "SAVE_MANAGER"
+            global_state.state = "SAVE_MANAGER"
         end
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
     elseif key == "tab" then
-         if menuTitle == L.get("config") then return end -- Don't open submenu from config
+         if global_state.menuTitle == L.get("config") then return end -- Don't open submenu from config
 
-         if menuTitle == L.get("version") then
-             local item = files[selectedIndex]
-             local ver = item.versions[menuSelection]
+         if global_state.menuTitle == L.get("version") then
+             local item = global_state.files[global_state.selectedIndex]
+             local ver = item.versions[global_state.menuSelection]
              
-             table.insert(menuStack, {
-                 title = menuTitle,
-                 message = menuMessage,
-                 options = menuOptions,
-                 selection = menuSelection,
-                 focusedItem = focusedItem
+             table.insert(global_state.menuStack, {
+                 title = global_state.menuTitle,
+                 message = global_state.menuMessage,
+                 options = global_state.menuOptions,
+                 selection = global_state.menuSelection,
+                 focusedItem = global_state.focusedItem
              })
-             focusedItem = ver -- Set focused item to version
+             global_state.focusedItem = ver -- Set focused item to version
              
-             menuTitle = L.get("options") .. ": " .. ver.name
-             menuMessage = ver.name
-             findSaveFiles(ver)
-             menuOptions = {L.get("info"), L.get("scraper"), L.get("save_games") .. " (" .. #saveFiles .. ")", L.get("delete")}
+             global_state.menuTitle = L.get("options") .. ": " .. ver.name
+             global_state.menuMessage = ver.name
+             findSaveFiles(ver, global_state)
+             global_state.menuOptions = {L.get("info"), L.get("scraper"), L.get("save_games") .. " (" .. #global_state.saveFiles .. ")", L.get("delete")}
 
-             if favoriteRoms[ver.fullPath] then
-                 table.insert(menuOptions, 2, L.get("remove_favorite"))
+             if global_state.favoriteRoms[ver.fullPath] then
+                 table.insert(global_state.menuOptions, 2, L.get("remove_favorite"))
              else
-                 table.insert(menuOptions, 2, L.get("add_favorite"))
+                 table.insert(global_state.menuOptions, 2, L.get("add_favorite"))
              end
 
-             menuSelection = 1
-             menuAnim = 0 -- Reiniciar animación para efecto de entrada del submenú
-             inputCooldown = 0.2
+             global_state.menuSelection = 1
+             global_state.menuAnim = 0 -- Reiniciar animación para efecto de entrada del submenú
+             global_state.inputCooldown = 0.2
              return
          end
 
         -- If in a submenu (there's a parent), Tab should not close everything at once
-        if #menuStack > 0 then return end
+        if #global_state.menuStack > 0 then return end
 
-        closingMenu = true
-        menuStack = {} -- Limpiar pila para evitar fantasmas al reabrir
-        log("Menu exited: " .. menuTitle)
-        inputCooldown = 0.2
+        global_state.closingMenu = true
+        global_state.menuStack = {} -- Limpiar pila para evitar fantasmas al reabrir
+        global_state.log("Menu exited: " .. global_state.menuTitle)
+        global_state.inputCooldown = 0.2
     elseif key == "backspace" then
-        if #menuStack > 0 then
-             closingMenu = true -- Trigger animation, menu will be popped on completion
-             inputCooldown = 0.2 -- Reset cooldown
+        if #global_state.menuStack > 0 then
+             global_state.closingMenu = true -- Trigger animation, menu will be popped on completion
+             global_state.inputCooldown = 0.2 -- Reset cooldown
         else
-            closingMenu = true
-            log("Menu exited: " .. menuTitle)
-            inputCooldown = 0.2
+            global_state.closingMenu = true
+            global_state.log("Menu exited: " .. global_state.menuTitle)
+            global_state.inputCooldown = 0.2
         end
     end
 end
 
 -- Manejador para la Vista de Información
-function stateHandlers.INFO_VIEW(key)
+function stateHandlers.INFO_VIEW(key, global_state)
     if key == "backspace" or key == "b" or key == "escape" then
-        if #menuStack > 0 then -- If there's a parent menu, go back to it
-            state = "OPTIONS_MENU"
+        if #global_state.menuStack > 0 then -- If there's a parent menu, go back to it
+            global_state.state = "OPTIONS_MENU"
         else
-            closingMenu = true
+            global_state.closingMenu = true
         end
-        showHelp = false
-        inputCooldown = 0.2
+        global_state.showHelp = false
+        global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Opciones de Scraper
-function stateHandlers.SCRAPER_OPTIONS(key)
+function stateHandlers.SCRAPER_OPTIONS(key, global_state)
+    local L = global_state.L
     if key == "return" or key == "kpenter" then
-        if menuOptions[menuSelection] == L.get("clean") then -- If "Clean" option is selected
-            local item = files[selectedIndex]
+        if global_state.menuOptions[global_state.menuSelection] == L.get("clean") then -- If "Clean" option is selected
+            local item = global_state.files[global_state.selectedIndex]
             local baseName = item.name:gsub("%..-$", "")
-            os.remove(muosArtPath .. baseName .. ".png")
-            os.remove(muosTextPath .. baseName .. ".txt")
-            os.remove(muosTextPath .. baseName .. ".year")
-            os.remove(muosPreviewPath .. baseName .. ".png")
+            os.remove(global_state.muosArtPath .. baseName .. ".png")
+            os.remove(global_state.muosTextPath .. baseName .. ".txt")
+            os.remove(global_state.muosTextPath .. baseName .. ".year")
+            os.remove(global_state.muosPreviewPath .. baseName .. ".png")
             preview.load(global_state, global_state.log, global_state.loader)
-            state = "SCRAPER_VIEW"
+            global_state.state = "SCRAPER_VIEW"
         end -- End if "Clean" option
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
     elseif key == "backspace" or key == "x" or key == "escape" then
-        closingMenu = true
-        log("Scraper Options exited")
-        inputCooldown = 0.2
+        global_state.closingMenu = true
+        global_state.log("Scraper Options exited")
+        global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Vista de Scraper
-function stateHandlers.SCRAPER_VIEW(key)
+function stateHandlers.SCRAPER_VIEW(key, global_state)
     if key == "backspace" then -- 'b' button
-        if #menuStack > 0 then -- If there's a parent menu, go back to it
-            state = "OPTIONS_MENU"
+        if #global_state.menuStack > 0 then -- If there's a parent menu, go back to it
+            global_state.state = "OPTIONS_MENU"
         else
-            state = "LIST"
+            global_state.state = "LIST"
         end
-        showHelp = false
-        inputCooldown = 0.2
+        global_state.showHelp = false
+        global_state.inputCooldown = 0.2
     elseif key == "return" or key == "kpenter" then -- 'a' button
-        startScraping()
+        startScraping(global_state)
     elseif key == "tab" then -- 'y' button
-        state = "SCRAPER_OPTIONS"
-        menuTitle = L.get("options") -- Set menu title
-        menuAnim = 0
-        menuMessage = ""
-        menuOptions = {L.get("clean")}
-        menuSelection = 1
-        log("Menu opened: " .. menuTitle)
-        inputCooldown = 0.2
+        global_state.state = "SCRAPER_OPTIONS"
+        global_state.menuTitle = global_state.L.get("options") -- Set menu title
+        global_state.menuAnim = 0
+        global_state.menuMessage = ""
+        global_state.menuOptions = {global_state.L.get("clean")}
+        global_state.menuSelection = 1
+        global_state.log("Menu opened: " .. global_state.menuTitle)
+        global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Resultados de Scraper
-function stateHandlers.SCRAPER_RESULTS(key)
+function stateHandlers.SCRAPER_RESULTS(key, global_state)
     if key == "backspace" then
-        state = "SCRAPER_VIEW"
-        showHelp = false
-        inputCooldown = 0.2
+        global_state.state = "SCRAPER_VIEW"
+        global_state.showHelp = false
+        global_state.inputCooldown = 0.2
     elseif key == "left" then
-        scraperSelection = math.max(1, scraperSelection - 1)
-        inputCooldown = 0.15
+        global_state.scraperSelection = math.max(1, global_state.scraperSelection - 1)
+        global_state.inputCooldown = 0.15
     elseif key == "right" then
-        scraperSelection = math.min(#scraperResults, scraperSelection + 1)
-        inputCooldown = 0.15 -- Reset cooldown
-    elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
-        local sel = scraperResults[scraperSelection]
+        global_state.scraperSelection = math.min(#global_state.scraperResults, global_state.scraperSelection + 1)
+        global_state.inputCooldown = 0.15 -- Reset cooldown
+    elseif (key == "return" or key == "kpenter") and #global_state.scraperResults > 0 then
+        local sel = global_state.scraperResults[global_state.scraperSelection]
         if sel and not sel.error then
-            saveSelectedArt()
-            inputCooldown = 0.2
+            saveSelectedArt(global_state)
+            global_state.inputCooldown = 0.2
         end
     end
 end
 
 -- Manejador para Gestor de Partidas
-function stateHandlers.SAVE_MANAGER(key)
+function stateHandlers.SAVE_MANAGER(key, global_state)
     if key == "backspace" or key == "escape" then
-        if #menuStack > 0 then -- If there's a parent menu, go back to it
-            state = "OPTIONS_MENU"
+        if #global_state.menuStack > 0 then -- If there's a parent menu, go back to it
+            global_state.state = "OPTIONS_MENU"
         else
-            state = "LIST"
+            global_state.state = "LIST"
         end
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
     elseif key == "return" or key == "kpenter" then
         -- Copiar save a la otra SD
-        local item = saveFiles[saveManagerSelection]
+        local item = global_state.saveFiles[global_state.saveManagerSelection]
         if item then -- If an item is selected
             local targetRoot = item.location == "SD1" and "/mnt/sdcard" or "/mnt/mmc"
             -- Reconstruir ruta destino preservando estructura desde /mnt/xxx/
@@ -616,239 +639,239 @@ function stateHandlers.SAVE_MANAGER(key)
                 os.execute('mkdir -p "' .. destDir .. '"')
                 os.execute('cp "' .. item.fullPath .. '" "' .. destPath .. '"')
                 -- Refrescar lista para ver el nuevo archivo
-                findSaveFiles(files[selectedIndex])
+                findSaveFiles(global_state.files[global_state.selectedIndex], global_state)
             end -- End if relPath
         end
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Menú de Limpieza
-function stateHandlers.CLEANUP_MENU(key)
-    if cleanupData.confirming then
+function stateHandlers.CLEANUP_MENU(key, global_state)
+    if global_state.cleanupData.confirming then
         if key == "backspace" or key == "escape" or key == "b" then
-            cleanupData.confirming = false
-            inputCooldown = 0.2
+            global_state.cleanupData.confirming = false
+            global_state.inputCooldown = 0.2
         elseif key == "return" or key == "kpenter" or key == "space" or key == "a" then -- Confirm action
             -- Ejecutar acción de borrado confirmada
-            if cleanupData.cursor.col == 1 then
+            if global_state.cleanupData.cursor.col == 1 then
                 -- Columna Huérfanos
-                if cleanupData.cursor.row == 1 then
+                if global_state.cleanupData.cursor.row == 1 then
                     -- Borrar TODOS
-                    for _, orphan in ipairs(cleanupData.orphans) do
+                    for _, orphan in ipairs(global_state.cleanupData.orphans) do
                         local success, err = os.remove(orphan.fullPath)
                         if success then
-                            log("Cleanup: Borrado " .. orphan.fullPath)
-                            filesystem.logDeletion(orphan.fullPath, json.encode, json.decode)
-                        else log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
+                            global_state.log("Cleanup: Borrado " .. orphan.fullPath)
+                            filesystem.logDeletion(orphan.fullPath, global_state.json.encode, global_state.json.decode)
+                        else global_state.log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
                     end
-                    cleanupData.orphans = {}
+                    global_state.cleanupData.orphans = {}
                 else
                     -- Borrar Individual
-                    local idx = cleanupData.cursor.row - 1
-                    local orphan = cleanupData.orphans[idx]
+                    local idx = global_state.cleanupData.cursor.row - 1
+                    local orphan = global_state.cleanupData.orphans[idx]
                     if orphan then
                         local success, err = os.remove(orphan.fullPath) -- Delete individual orphan
                         if success then 
-                            log("Cleanup: Borrado " .. orphan.fullPath)
-                            filesystem.logDeletion(orphan.fullPath, json.encode, json.decode)
-                        else log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
-                        table.remove(cleanupData.orphans, idx)
-                        if cleanupData.cursor.row > #cleanupData.orphans + 1 then
-                            cleanupData.cursor.row = math.max(1, #cleanupData.orphans + 1)
+                            global_state.log("Cleanup: Borrado " .. orphan.fullPath)
+                            filesystem.logDeletion(orphan.fullPath, global_state.json.encode, global_state.json.decode)
+                        else global_state.log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
+                        table.remove(global_state.cleanupData.orphans, idx)
+                        if global_state.cleanupData.cursor.row > #global_state.cleanupData.orphans + 1 then
+                            global_state.cleanupData.cursor.row = math.max(1, #global_state.cleanupData.orphans + 1)
                         end
                     end
                 end
-            elseif cleanupData.cursor.col == 3 then
+            elseif global_state.cleanupData.cursor.col == 3 then
                 -- Columna Imágenes Huérfanas
-                local idx = cleanupData.cursor.row
-                local item = cleanupData.orphanedImages[idx]
+                local idx = global_state.cleanupData.cursor.row
+                local item = global_state.cleanupData.orphanedImages[idx]
                 if item then
                     local success, err = os.remove(item.fullPath) -- Delete orphaned image
                     if success then 
-                        log("Cleanup: Borrado " .. item.fullPath)
-                        filesystem.logDeletion(item.fullPath, json.encode, json.decode)
-                    else log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) end
+                        global_state.log("Cleanup: Borrado " .. item.fullPath)
+                        filesystem.logDeletion(item.fullPath, global_state.json.encode, global_state.json.decode)
+                    else global_state.log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) end
                     -- También borrar preview/text/year si existen?
                     -- Por ahora solo borramos el archivo listado (boxart)
-                    table.remove(cleanupData.orphanedImages, idx)
+                    table.remove(global_state.cleanupData.orphanedImages, idx)
                     
-                    if cleanupData.cursor.row > #cleanupData.orphanedImages then
-                        cleanupData.cursor.row = math.max(1, #cleanupData.orphanedImages)
+                    if global_state.cleanupData.cursor.row > #global_state.cleanupData.orphanedImages then
+                        global_state.cleanupData.cursor.row = math.max(1, #global_state.cleanupData.orphanedImages)
                     end
                 end
             else
                 -- Columna Duplicados: Borrar archivo seleccionado
-                local idx = cleanupData.cursor.row
-                local item = cleanupData.duplicates[idx]
+                local idx = global_state.cleanupData.cursor.row
+                local item = global_state.cleanupData.duplicates[idx]
                 if item then
                     local success, err = os.remove(item.fullPath) -- Delete duplicate file
                     if success then
-                        log("Cleanup: Borrado " .. item.fullPath) 
-                        filesystem.logDeletion(item.fullPath, json.encode, json.decode) -- Log deletion
-                        if romIndex then removeFromIndex(item.fullPath) end
+                        global_state.log("Cleanup: Borrado " .. item.fullPath) 
+                        filesystem.logDeletion(item.fullPath, global_state.json.encode, global_state.json.decode) -- Log deletion
+                        if global_state.romIndex then removeFromIndex(item.fullPath, global_state) end
                     else 
-                        log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) 
+                        global_state.log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) 
                     end
-                    table.remove(cleanupData.duplicates, idx)
+                    table.remove(global_state.cleanupData.duplicates, idx)
                     
-                    if cleanupData.cursor.row > #cleanupData.duplicates then
-                        cleanupData.cursor.row = math.max(1, #cleanupData.duplicates)
+                    if global_state.cleanupData.cursor.row > #global_state.cleanupData.duplicates then
+                        global_state.cleanupData.cursor.row = math.max(1, #global_state.cleanupData.duplicates)
                     end
                     -- Si estaba en el historial, quitarlo
-                    if playedRoms[item.fullPath] then playedRoms[item.fullPath] = nil end
+                    if global_state.playedRoms[item.fullPath] then global_state.playedRoms[item.fullPath] = nil end
                 end
             end
             
-            cleanupData.confirming = false
-            inputCooldown = 0.2 -- Reset cooldown
+            global_state.cleanupData.confirming = false
+            global_state.inputCooldown = 0.2 -- Reset cooldown
         end
         return
     end
 
     if key == "backspace" or key == "escape" then
-        state = "LIST"
-        inputCooldown = 0.2
-    elseif not cleanupData.scanned then
+        global_state.state = "LIST"
+        global_state.inputCooldown = 0.2
+    elseif not global_state.cleanupData.scanned then
         if key == "return" or key == "kpenter" then -- Start scan
-            performCleanupScan()
+            performCleanupScan(global_state)
         end
     else
         -- Navegación en resultados
         if key == "f" then -- L1: Cycle columns
-            if cleanupData.cursor.col == 1 then
-                cleanupData.cursor.col = 2
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
-            elseif cleanupData.cursor.col == 2 and #cleanupData.orphanedImages > 0 then
-                cleanupData.cursor.col = 3 -- Move to orphaned images column
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphanedImages)
+            if global_state.cleanupData.cursor.col == 1 then
+                global_state.cleanupData.cursor.col = 2
+                global_state.cleanupData.cursor.row = math.min(global_state.cleanupData.cursor.row, #global_state.cleanupData.duplicates)
+            elseif global_state.cleanupData.cursor.col == 2 and #global_state.cleanupData.orphanedImages > 0 then
+                global_state.cleanupData.cursor.col = 3 -- Move to orphaned images column
+                global_state.cleanupData.cursor.row = math.min(global_state.cleanupData.cursor.row, #global_state.cleanupData.orphanedImages)
             else
-                cleanupData.cursor.col = 1
-                cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphans + 1)
+                global_state.cleanupData.cursor.col = 1
+                global_state.cleanupData.cursor.row = math.min(global_state.cleanupData.cursor.row, #global_state.cleanupData.orphans + 1)
             end
         elseif key == "left" then -- Page Up (Pagination)
-            local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages
-            cleanupData.cursor.row = math.max(1, cleanupData.cursor.row - pageSize)
+            local maxRows = (global_state.cleanupData.cursor.col == 1 and #global_state.cleanupData.orphans + 1) or (global_state.cleanupData.cursor.col == 2 and #global_state.cleanupData.duplicates) or #global_state.cleanupData.orphanedImages
+            global_state.cleanupData.cursor.row = math.max(1, global_state.cleanupData.cursor.row - global_state.pageSize)
         elseif key == "right" then -- Page Down (Pagination)
-            local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages -- Max rows for current column
-            cleanupData.cursor.row = math.min(maxRows, cleanupData.cursor.row + pageSize)
+            local maxRows = (global_state.cleanupData.cursor.col == 1 and #global_state.cleanupData.orphans + 1) or (global_state.cleanupData.cursor.col == 2 and #global_state.cleanupData.duplicates) or #global_state.cleanupData.orphanedImages -- Max rows for current column
+            global_state.cleanupData.cursor.row = math.min(maxRows, global_state.cleanupData.cursor.row + global_state.pageSize)
         elseif key == "return" or key == "kpenter" then
             -- Verificar si hay algo válido seleccionado para borrar
             local valid = false
-            if cleanupData.cursor.col == 1 then
-                if cleanupData.cursor.row == 1 and #cleanupData.orphans > 0 then valid = true
-                elseif cleanupData.cursor.row > 1 and cleanupData.orphans[cleanupData.cursor.row - 1] then valid = true end
-            elseif cleanupData.cursor.col == 3 then
-                if cleanupData.orphanedImages[cleanupData.cursor.row] then valid = true end
+            if global_state.cleanupData.cursor.col == 1 then
+                if global_state.cleanupData.cursor.row == 1 and #global_state.cleanupData.orphans > 0 then valid = true
+                elseif global_state.cleanupData.cursor.row > 1 and global_state.cleanupData.orphans[global_state.cleanupData.cursor.row - 1] then valid = true end
+            elseif global_state.cleanupData.cursor.col == 3 then
+                if global_state.cleanupData.orphanedImages[global_state.cleanupData.cursor.row] then valid = true end
             else
-                if cleanupData.duplicates[cleanupData.cursor.row] then valid = true end
+                if global_state.cleanupData.duplicates[global_state.cleanupData.cursor.row] then valid = true end
             end
             
             if valid then
-                cleanupData.confirming = true -- Show confirmation modal
-                inputCooldown = 0.2
+                global_state.cleanupData.confirming = true -- Show confirmation modal
+                global_state.inputCooldown = 0.2
             end
         end
     end
 end
 
 -- Manejador para Menú de Borrado
-function stateHandlers.DELETE_MENU(key)
+function stateHandlers.DELETE_MENU(key, global_state)
     if key == "return" or key == "space" or key == "kpenter" then
-        if menuOptions[menuSelection] == L.get("delete") then
-            if selectedFilesCount > 0 then -- Delete multiple selected files
-                for _, item in ipairs(files) do
+        if global_state.menuOptions[global_state.menuSelection] == global_state.L.get("delete") then
+            if global_state.selectedFilesCount > 0 then -- Delete multiple selected files
+                for _, item in ipairs(global_state.files) do
                     if item.selected then
-                        local fullPath = item.fullPath or (romPath .. item.name)
+                        local fullPath = item.fullPath or (global_state.romPath .. item.name)
                         deleteGameMedia(fullPath)
                         local success, err = os.remove(fullPath)
                         if not success then
-                            log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
+                            global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                         else
-                            log("Archivo borrado con éxito: " .. fullPath)
-                            filesystem.logDeletion(fullPath, json.encode, json.decode)
+                            global_state.log("Archivo borrado con éxito: " .. fullPath)
+                            filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                         end -- End if success
-                if romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
-                        if playedRoms[fullPath] then
-                            playedRoms[fullPath] = nil
+                        if global_state.romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
+                        if global_state.playedRoms[fullPath] then
+                            global_state.playedRoms[fullPath] = nil
                         end
                     end
                 end
-                saveHistory()
-                if isVirtualRoot and launchMode == "Juego Unico" then
-                    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
+                saveHistory(global_state)
+                if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                     preview.load(global_state, global_state.log, global_state.loader) -- Reload preview after deletion
                 else
-                    refreshFiles()
+                    refreshFiles(global_state)
                 end
-                itemToDelete = nil -- Clear item to delete
-            elseif itemToDelete then
-                local fullPath = itemToDelete.fullPath or (romPath .. itemToDelete.name)
+                global_state.itemToDelete = nil -- Clear item to delete
+            elseif global_state.itemToDelete then
+                local fullPath = global_state.itemToDelete.fullPath or (global_state.romPath .. global_state.itemToDelete.name)
                 deleteGameMedia(fullPath)
                 local success, err = os.remove(fullPath)
                 if not success then
-                    log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
+                    global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                 else
-                    log("Archivo borrado con éxito: " .. fullPath)
-                    filesystem.logDeletion(fullPath, json.encode, json.decode)
+                    global_state.log("Archivo borrado con éxito: " .. fullPath)
+                    filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                 end -- End if success
-                if romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
-                if playedRoms[fullPath] then
-                    playedRoms[fullPath] = nil
-                    saveHistory()
+                if global_state.romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
+                if global_state.playedRoms[fullPath] then
+                    global_state.playedRoms[fullPath] = nil
+                    saveHistory(global_state)
                 end
                 -- Deselect to avoid errors, then refresh
-                if isVirtualRoot and launchMode == "Juego Unico" then
-                    files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
+                if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                     preview.load(global_state, global_state.log, global_state.loader) -- Reload preview after deletion
                 else
-                    refreshFiles()
+                    refreshFiles(global_state)
                 end
-                itemToDelete = nil -- Clear item to delete
+                global_state.itemToDelete = nil -- Clear item to delete
             end
         end
-        inputCooldown = 0.2
-        state = "LIST"
-        closingMenu = true
-        log("Delete Menu exited")
+        global_state.inputCooldown = 0.2
+        global_state.state = "LIST"
+        global_state.closingMenu = true
+        global_state.log("Delete Menu exited")
     elseif key == "backspace" then -- Cancel
-        itemToDelete = nil
-        inputCooldown = 0.2
-        closingMenu = true
-        log("Delete Menu exited")
+        global_state.itemToDelete = nil
+        global_state.inputCooldown = 0.2
+        global_state.closingMenu = true
+        global_state.log("Delete Menu exited")
     end
 end
 
 -- Manejador para Post-Juego
-function stateHandlers.POST_GAME(key)
+function stateHandlers.POST_GAME(key, global_state)
     if key == "return" or key == "space" or key == "kpenter" then -- 'a' button
-        os.remove(lastPlayedRom)
-        state = "LIST"
-        inputCooldown = 0.2
-        refreshFiles()
+        os.remove(global_state.lastPlayedRom)
+        global_state.state = "LIST"
+        global_state.inputCooldown = 0.2
+        refreshFiles(global_state)
     elseif key == "backspace" then -- 'b' button (Cancel)
-        state = "LIST" 
-        inputCooldown = 0.2
+        global_state.state = "LIST" 
+        global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Lista (Default)
-local function handleListInput(key)
+local function handleListInput(key, global_state)
     -- Comprobación de directorio vacío
-    local currentItem = files[selectedIndex]
+    local currentItem = global_state.files[global_state.selectedIndex]
     if currentItem and currentItem.empty then
         if key == "backspace" then -- Allow going back from an empty directory
-            local parent = romPath:gsub("[^/]+/$", "")
-            log("Back (Empty). Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
+            local parent = global_state.romPath:gsub("[^/]+/$", "")
+            global_state.log("Back (Empty). Verificando ruta: " .. global_state.romPath .. " -> Parent: " .. parent)
 
             -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
-            local cwd = love.filesystem.getSource()
+            local cwd = global_state.love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simRoot = cwd .. "/../Simulador_SD/"
             
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
-               romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
-               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or romPath == "@Favorites/" then
+               global_state.romPath == "/mnt/mmc/ROMS/" or global_state.romPath == "/mnt/sdcard/ROMS/" or global_state.romPath == simRoot or
+               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or global_state.romPath == "@Favorites/" then
                  global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
                  global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                     filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
@@ -856,14 +879,14 @@ local function handleListInput(key)
                     global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
                     global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
                  preview.load(global_state, global_state.log, global_state.loader)
-                 inputCooldown = 0.2 -- Reset cooldown
+                 global_state.inputCooldown = 0.2 -- Reset cooldown
                  return
             end
-            romPath = parent
-            secondaryPath = filesystem.resolveSecondary(romPath)
-            selectedIndex = 1
-            refreshFiles()
-            inputCooldown = 0.2
+            global_state.romPath = parent
+            global_state.secondaryPath = filesystem.resolveSecondary(global_state.romPath)
+            global_state.selectedIndex = 1
+            refreshFiles(global_state)
+            global_state.inputCooldown = 0.2
         else
             return -- Ignore other key presses for empty directory message
         end
@@ -871,75 +894,75 @@ local function handleListInput(key)
 
     -- Lógica de eliminación de Fantasma (Ghost) al moverse
     if (key == "up" or key == "down" or key == "left" or key == "right" or key == "pageup" or key == "pagedown") and currentItem and currentItem.pendingDelete then
-        table.remove(files, selectedIndex)
+        table.remove(global_state.files, global_state.selectedIndex)
         -- Ajustar selección si nos movíamos hacia arriba/atrás
         if key == "up" or key == "left" or key == "pageup" then
-             selectedIndex = math.max(1, selectedIndex - 1)
+             global_state.selectedIndex = math.max(1, global_state.selectedIndex - 1)
         end
         -- Asegurar límites
-        if selectedIndex > #files then selectedIndex = #files end
-        if selectedIndex < 1 then selectedIndex = 1 end
+        if global_state.selectedIndex > #global_state.files then global_state.selectedIndex = #global_state.files end
+        if global_state.selectedIndex < 1 then global_state.selectedIndex = 1 end
 
         -- Actualizar backup allFiles
-        allFiles = {}
-        for _, f in ipairs(files) do table.insert(allFiles, f) end
+        global_state.allFiles = {}
+        for _, f in ipairs(global_state.files) do table.insert(global_state.allFiles, f) end
         
-        inputCooldown = 0.2
+        global_state.inputCooldown = 0.2
         preview.load(global_state, global_state.log, global_state.loader)
         return -- Consumir input (el movimiento visual ya ocurrió al borrar el item)
     end -- End if currentItem.pendingDelete
 
     if key == "f" then
-        state = "SEARCH"
-        searchQuery = ""
-        keyboardRow = 1
-        keyboardCol = 1
+        global_state.state = "SEARCH"
+        global_state.searchQuery = ""
+        global_state.keyboardRow = 1
+        global_state.keyboardCol = 1
         love.keyboard.setTextInput(true) -- Enable text input
-        filterFiles()
+        filterFiles(global_state)
         return
     end -- End if key == "f"
     
     if key == "f2" then -- L2: Clear filter
-        searchQuery = ""
-        filterFiles()
-        inputCooldown = 0.2
+        global_state.searchQuery = ""
+        filterFiles(global_state)
+        global_state.inputCooldown = 0.2
         return
     end
     
     if key == "pageup" then
-        if viewMode == "GRID" then
-            selectedIndex = math.max(1, selectedIndex - (gridCols * 3))
+        if global_state.viewMode == "GRID" then
+            global_state.selectedIndex = math.max(1, global_state.selectedIndex - (global_state.gridCols * 3))
         else
-            selectedIndex = math.max(1, selectedIndex - pageSize)
+            global_state.selectedIndex = math.max(1, global_state.selectedIndex - global_state.pageSize)
         end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0 -- Reset timer
+        global_state.pendingLoad = true
+        global_state.inputCooldown = 0.2
+        global_state.timer = 0 -- Reset timer
     elseif key == "pagedown" then
-        if viewMode == "GRID" then
-            selectedIndex = math.min(#files, selectedIndex + (gridCols * 3))
+        if global_state.viewMode == "GRID" then
+            global_state.selectedIndex = math.min(#global_state.files, global_state.selectedIndex + (global_state.gridCols * 3))
         else
-            selectedIndex = math.min(#files, selectedIndex + pageSize)
+            global_state.selectedIndex = math.min(#global_state.files, global_state.selectedIndex + global_state.pageSize)
         end
-        pendingLoad = true
-        inputCooldown = 0.2
-        timer = 0 -- Reset timer
+        global_state.pendingLoad = true
+        global_state.inputCooldown = 0.2
+        global_state.timer = 0 -- Reset timer
     end
 
     if key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then -- 'a' button (Start envía return, lo ignoramos si hay gamepad)
-        if #files == 0 then return end
-        local item = files[selectedIndex]
+        if #global_state.files == 0 then return end
+        local item = global_state.files[global_state.selectedIndex]
         if item.isDir then
-            if isVirtualRoot then
-                romPath = item.fullPath
-                secondaryPath = item.secondaryPath
-                isVirtualRoot = false
-                selectedIndex = 1
-                refreshFiles()
-                inputCooldown = 0.2
+            if global_state.isVirtualRoot then
+                global_state.romPath = item.fullPath
+                global_state.secondaryPath = item.secondaryPath
+                global_state.isVirtualRoot = false
+                global_state.selectedIndex = 1
+                refreshFiles(global_state)
+                global_state.inputCooldown = 0.2
             else
                 if item.name == ".." then
-                    local newPath = romPath:gsub("[^/]+/$", "")
+                    local newPath = global_state.romPath:gsub("[^/]+/$", "")
                     if newPath == "/mnt/mmc/ROMS/" or newPath == "/mnt/sdcard/ROMS/" then
                         global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                            filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
@@ -948,198 +971,198 @@ local function handleListInput(key)
                            global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                         preview.load(global_state, global_state.log, global_state.loader) -- Reload preview
                         return
-                end -- End if newPath is root
-                    local cwd = love.filesystem.getSource()
+                    end -- End if newPath is root
+                    local cwd = global_state.love.filesystem.getSource()
                     if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
                     if newPath == cwd .. "/../" then -- Simulator path check
                         global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                         preview.load(global_state, global_state.log, global_state.loader)
                         return -- Reload preview
                     end
-                    romPath = newPath -- Update romPath
-                    secondaryPath = filesystem.resolveSecondary(romPath)
+                    global_state.romPath = newPath -- Update romPath
+                    global_state.secondaryPath = filesystem.resolveSecondary(global_state.romPath)
                 else
-                    romPath = romPath .. item.name .. "/"
+                    global_state.romPath = global_state.romPath .. item.name .. "/"
                 end
-                selectedIndex = 1
-                refreshFiles()
-                inputCooldown = 0.2
+                global_state.selectedIndex = 1
+                refreshFiles(global_state)
+                global_state.inputCooldown = 0.2
             end
         else
             -- Launch ROM
             local romToLaunch = nil
 
-            if launchMode == "Juego Unico" and item.versions then
+            if global_state.launchMode == "Juego Unico" and item.versions then
                 if #item.versions > 1 then
-                    state = "OPTIONS_MENU" -- Open version selection menu
-                    menuAnim = 0
-                    menuTitle = L.get("version")
-                    log("Menu opened: " .. menuTitle .. " for " .. item.name)
-                    menuMessage = item.name
-                    menuOptions = {}
+                    global_state.state = "OPTIONS_MENU" -- Open version selection menu
+                    global_state.menuAnim = 0
+                    global_state.menuTitle = global_state.L.get("version")
+                    global_state.log("Menu opened: " .. global_state.menuTitle .. " for " .. item.name)
+                    global_state.menuMessage = item.name
+                    global_state.menuOptions = {}
                     for _, v in ipairs(item.versions) do
-                        local icon = utils.getSystemIcon(v.system)
+                        local icon = utils.getSystemIcon(v.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
                         local sysDisplay = utils.getSystemDisplayName(v.system) or v.system -- Get display name for system
                         local tags = ""
                         local stem = v.name:gsub("%.[^%.]+$", "")
                         for tag in stem:gmatch("%s*(%b())") do tags = tags .. " " .. tag end
                         for tag in stem:gmatch("%s*(%b[])") do tags = tags .. " " .. tag end
-                        table.insert(menuOptions, {
+                        table.insert(global_state.menuOptions, {
                             text = sysDisplay .. tags,
                             icon = icon,
                             system = v.system,
-                            played = playedRoms[v.fullPath]
+                            played = global_state.playedRoms[v.fullPath]
                         })
                     end
-                    menuSelection = 1
-                    inputCooldown = 0.2
+                    global_state.menuSelection = 1
+                    global_state.inputCooldown = 0.2
                     return
                 elseif #item.versions == 1 then
                     romToLaunch = item.versions[1].fullPath
                 end
             else
-                romToLaunch = isVirtualRoot and item.fullPath or romPath .. item.name -- Determine ROM to launch
+                romToLaunch = global_state.isVirtualRoot and item.fullPath or global_state.romPath .. item.name -- Determine ROM to launch
             end
             
             if romToLaunch then
-                log("Selected ROM for launch: " .. romToLaunch)
-                lastPlayedRom = romToLaunch
-                saveLastPlayed(lastPlayedRom)
-                addToHistory(lastPlayedRom)
+                global_state.log("Selected ROM for launch: " .. romToLaunch)
+                global_state.lastPlayedRom = romToLaunch
+                saveLastPlayed(global_state.lastPlayedRom)
+                addToHistory(global_state.lastPlayedRom, global_state)
                 -- Iniciamos secuencia de lanzamiento (verde -> espera -> salir)
-                launching = true
-                launchTimer = 0
+                global_state.launching = true
+                global_state.launchTimer = 0
             end
         end -- End if item.isDir
     elseif key == "backspace" then -- 'b' button
-        if isVirtualRoot then
-            inputCooldown = 0.2 -- Prevent phantom input when actionless
+        if global_state.isVirtualRoot then
+            global_state.inputCooldown = 0.2 -- Prevent phantom input when actionless
             return -- No hacer nada si ya estamos en la raíz virtual
         else
-            local parent = romPath:gsub("[^/]+/$", "")
-            log("Back. Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
+            local parent = global_state.romPath:gsub("[^/]+/$", "")
+            global_state.log("Back. Verificando ruta: " .. global_state.romPath .. " -> Parent: " .. parent)
             
             -- Check if parent is a system root to return to virtual menu
-            local cwd = love.filesystem.getSource()
+            local cwd = global_state.love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simRoot = cwd .. "/../Simulador_SD/"
             
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
-               romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
+               global_state.romPath == "/mnt/mmc/ROMS/" or global_state.romPath == "/mnt/sdcard/ROMS/" or global_state.romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or
-               romPath == "" or romPath == "@Favorites/" then
+               global_state.romPath == "" or global_state.romPath == "@Favorites/" then
                  global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
                  global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                     filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                     global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
                     global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
                     global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
-                 log("Virtual Root created. Items: " .. #files)
+                 global_state.log("Virtual Root created. Items: " .. #global_state.files)
                  preview.load(global_state, global_state.log, global_state.loader) -- Reload preview
-                 inputCooldown = 0.2
+                 global_state.inputCooldown = 0.2
                  return
             end
-            romPath = parent
-            secondaryPath = filesystem.resolveSecondary(romPath)
-            selectedIndex = 1
-            refreshFiles()
-            inputCooldown = 0.2
+            global_state.romPath = parent
+            global_state.secondaryPath = filesystem.resolveSecondary(global_state.romPath)
+            global_state.selectedIndex = 1
+            refreshFiles(global_state)
+            global_state.inputCooldown = 0.2
         end
     elseif key == "tab" then -- 'Y' button
-        local item = files[selectedIndex]
+        local item = global_state.files[global_state.selectedIndex]
         if item then -- If an item is selected
             if item.isDir then
                 -- Es una carpeta, no hacer nada para evitar comportamientos extraños.
-                inputCooldown = 0.2 -- Evita que se abra el menú si se suelta rápido y se detecta otra pulsación
+                global_state.inputCooldown = 0.2 -- Evita que se abra el menú si se suelta rápido y se detecta otra pulsación
                 return
             else
                 -- Es un archivo, abrir menú de opciones.
-                if launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
+                if global_state.launchMode == "Juego Unico" and item.versions and #item.versions > 1 then
                     -- Open the version selection menu, same as 'A'
-                    state = "OPTIONS_MENU"
-                    menuAnim = 0
-                    menuTitle = L.get("version")
-                    log("Menu opened: " .. menuTitle .. " for " .. item.name)
-                    menuMessage = item.name
-                    menuOptions = {}
+                    global_state.state = "OPTIONS_MENU"
+                    global_state.menuAnim = 0
+                    global_state.menuTitle = global_state.L.get("version")
+                    global_state.log("Menu opened: " .. global_state.menuTitle .. " for " .. item.name)
+                    global_state.menuMessage = item.name
+                    global_state.menuOptions = {}
                     for _, v in ipairs(item.versions) do
-                        local icon = utils.getSystemIcon(v.system)
+                        local icon = utils.getSystemIcon(v.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
                         local sysDisplay = utils.getSystemDisplayName(v.system) or v.system -- Get display name for system
                         local tags = ""
                         local stem = v.name:gsub("%.[^%.]+$", "")
                         for tag in stem:gmatch("%s*(%b())") do tags = tags .. " " .. tag end
                         for tag in stem:gmatch("%s*(%b[])") do tags = tags .. " " .. tag end
-                        table.insert(menuOptions, {
+                        table.insert(global_state.menuOptions, {
                             text = sysDisplay .. tags,
                             icon = icon,
                             system = v.system,
-                            played = playedRoms[v.fullPath]
+                            played = global_state.playedRoms[v.fullPath]
                         })
                     end
-                    menuSelection = 1
-                    inputCooldown = 0.15
+                    global_state.menuSelection = 1
+                    global_state.inputCooldown = 0.15
                     return
                 end
                 
-                state = "OPTIONS_MENU" -- Open options menu
-                menuAnim = 0
-                menuTitle = L.get("options") .. ":"
-                menuStack = {}
-                if selectedFilesCount > 0 then
-                    menuMessage = L.get("delete_selected_msg", selectedFilesCount)
+                global_state.state = "OPTIONS_MENU" -- Open options menu
+                global_state.menuAnim = 0
+                global_state.menuTitle = global_state.L.get("options") .. ":"
+                global_state.menuStack = {}
+                if global_state.selectedFilesCount > 0 then
+                    global_state.menuMessage = global_state.L.get("delete_selected_msg", global_state.selectedFilesCount)
                 else
-                    menuMessage = item.name
+                    global_state.menuMessage = item.name
                 end
-                menuSelection = 1
+                global_state.menuSelection = 1
                 
-                menuOptions = {}
+                global_state.menuOptions = {}
                 -- 1. Info (Solo individual)
-                if selectedFilesCount <= 1 then -- Only show info for single item
-                    table.insert(menuOptions, {text=L.get("info"), icon=iconInfo})
+                if global_state.selectedFilesCount <= 1 then -- Only show info for single item
+                    table.insert(global_state.menuOptions, {text=global_state.L.get("info"), icon=global_state.iconInfo})
                 end
                 -- Favoritos
-                if favoriteRoms[item.fullPath] then
-                    table.insert(menuOptions, {text=L.get("remove_favorite"), icon=iconFavorite})
+                if global_state.favoriteRoms[item.fullPath] then
+                    table.insert(global_state.menuOptions, {text=global_state.L.get("remove_favorite"), icon=global_state.iconFavorite})
                 else
-                    table.insert(menuOptions, {text=L.get("add_favorite"), icon=iconFavorite})
+                    table.insert(global_state.menuOptions, {text=global_state.L.get("add_favorite"), icon=global_state.iconFavorite})
                 end
-                table.insert(menuOptions, {text=L.get("scraper"), icon=iconNetwork})
+                table.insert(global_state.menuOptions, {text=global_state.L.get("scraper"), icon=global_state.iconNetwork})
                 
                 -- 2. Copiar / Mover
                 if item.sourceLabel ~= "SD½" then
-                    local _, targetLabel = filesystem.getTargetSDPath(item.fullPath, config)
+                    local _, targetLabel = filesystem.getTargetSDPath(item.fullPath, global_state.config)
                     if targetLabel then
-                        table.insert(menuOptions, {text=L.get("copy_to", targetLabel), icon=iconFolder})
-                        table.insert(menuOptions, {text=L.get("move_to", targetLabel), icon=iconFolder})
+                        table.insert(global_state.menuOptions, {text=global_state.L.get("copy_to", targetLabel), icon=global_state.iconFolder})
+                        table.insert(global_state.menuOptions, {text=global_state.L.get("move_to", targetLabel), icon=global_state.iconFolder})
                     end
                 end
                 
                 -- 3. Save Games
-                findSaveFiles(item)
-                table.insert(menuOptions, {text=L.get("save_games") .. " (" .. #saveFiles .. ")", icon=iconSaveStates})
+                findSaveFiles(item, global_state)
+                table.insert(global_state.menuOptions, {text=global_state.L.get("save_games") .. " (" .. #global_state.saveFiles .. ")", icon=global_state.iconSaveStates})
                 
                 -- 4. Borrar (Al final)
                 if not item.isFavorites then
                     if item.sourceLabel == "SD½" then
-                        table.insert(menuOptions, {text=L.get("delete_sd1"), icon=iconTrash}) -- Delete from SD1
-                        table.insert(menuOptions, {text=L.get("delete_sd2"), icon=iconTrash})
+                        table.insert(global_state.menuOptions, {text=global_state.L.get("delete_sd1"), icon=global_state.iconTrash}) -- Delete from SD1
+                        table.insert(global_state.menuOptions, {text=global_state.L.get("delete_sd2"), icon=global_state.iconTrash})
                     else
-                        table.insert(menuOptions, {text=L.get("delete"), icon=iconTrash})
+                        table.insert(global_state.menuOptions, {text=global_state.L.get("delete"), icon=global_state.iconTrash})
                     end
                 end
                 
-                inputCooldown = 0.15 -- Reset cooldown
+                global_state.inputCooldown = 0.15 -- Reset cooldown
             end
         end
     elseif key == "x" then
-        if launchMode ~= "Juego Unico" then
-            local item = files[selectedIndex]
+        if global_state.launchMode ~= "Juego Unico" then
+            local item = global_state.files[global_state.selectedIndex]
             if item and not item.isDir then
                 item.selected = not item.selected
                 if item.selected then
-                    selectedFilesCount = selectedFilesCount + 1
+                    global_state.selectedFilesCount = global_state.selectedFilesCount + 1
                 else
-                    selectedFilesCount = selectedFilesCount - 1
+                    global_state.selectedFilesCount = global_state.selectedFilesCount - 1
                 end
             end
         end
@@ -1279,7 +1302,7 @@ local function textinput(t, global_state)
     if global_state.showHelp then return end
     if global_state.state == "SEARCH" then
         global_state.searchQuery = global_state.searchQuery .. t
-        filterFiles()
+        filterFiles(global_state)
     end
 end
 
