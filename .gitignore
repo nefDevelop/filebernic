@@ -4,10 +4,10 @@ Simulador_SD
 view_cache.json
 app_state.json
 
-*.png
-*.svg
 filebernic/data/log/filebernic.log
 filebernic/data/view_cache.json
 filebernic/data/app_state.json
 filebernic/data/config.json
 filebernic/data/log/
+filebernic/data/app_state.json
+filebernic/data/app_state.json
