@@ -8,11 +8,8 @@ local Loader = {}
 -- The thread code that runs in the background.
 -- It waits for file paths from the main thread, reads them,
 -- and sends the data back.
-local threadCode = [[
+local threadCode = [[ -- This is a string, not a function
   local channelIn, channelOut = ...
-  local lovefs = require('love.filesystem')
-  require('love.image') -- Asegurar que el módulo de imagen está cargado
-  require('love.data')  -- Asegurar que el módulo de datos está cargado
 
   while true do
     local path = channelIn:demand()
@@ -27,12 +24,12 @@ local threadCode = [[
         local data = f:read("*a")
         f:close()
         -- Send back the path and the raw FileData object.
-        channelOut:push({ path = path, data = lovefs.newFileData(data, path) })
+        channelOut:push({ path = path, data = data }) -- Send raw data (string)
     else
         channelOut:push({ path = path, error = "File not found or unreadable" })
     end
   end
-]]
+]] -- End of string
 
 function Loader:new(logger, love_modules)
   local obj = {
@@ -47,7 +44,7 @@ function Loader:new(logger, love_modules)
     logger = logger,
     love_modules = love_modules
   }
-  obj.thread:start(obj.channelIn, obj.channelOut)
+  obj.thread:start(obj.channelIn, obj.channelOut) -- No third argument needed
   setmetatable(obj, self)
   self.__index = self
   return obj
@@ -64,10 +61,10 @@ function Loader:update()
     if not msg then break end
 
     if msg.data then
-      self:log("Loaded successfully: " .. msg.path)
-      -- File was loaded successfully. Store the raw FileData.
-      -- Decoding happens in the specific getter (getImage, getText).
-      self.cache[msg.path] = msg.data
+      self:log("File content received: " .. msg.path)
+      -- File content received. Create FileData object in the main thread.
+      -- The love.filesystem.newFileData call must happen on the main thread.
+      self.cache[msg.path] = self.love_modules.filesystem.newFileData(msg.data, msg.path)
     elseif msg.error then
       self:log("Error loading " .. msg.path .. ": " .. tostring(msg.error))
       -- An error occurred while loading.

@@ -6,6 +6,7 @@ Loader = require "loader"
 State = require "state"
 preview = require "preview"
 require "locale" -- Cargar sistema de traducción
+input = require "input"
 
 -- Variables de configuración y estado
 DEBUG = 0 -- 0: No logs, 1: Errors only, 2: All logs
@@ -726,7 +727,6 @@ function love.load(arg)
     local drawing = require "drawing"
     love.draw = function() drawing(_G) end
     local update_function = require "update" -- Store update module locally
-    local input = require "input"
     love.keypressed = function(key) input.keypressed(key, _G) end
     -- Pass global state to update function
     love.update = function(dt)

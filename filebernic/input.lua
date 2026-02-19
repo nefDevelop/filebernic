@@ -103,13 +103,7 @@ local function performCleanupScan(global_state)
         coroutine.create, 
         coroutine.yield, 
         table.insert, 
-        table.sort,
-        global_state.romPath,
-        global_state.muosArtPath,
-        global_state.muosTextPath,
-        global_state.muosPreviewPath,
-        global_state.love.filesystem.getDirectoryItems,
-        global_state.love.filesystem.getInfo
+        table.sort
     )
     if global_state.cleanupData and not global_state.cleanupData.orphanedImages then global_state.cleanupData.orphanedImages = {} end
 end
@@ -446,11 +440,12 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 refreshFiles(global_state)
             end
         elseif optText == L.get("reindex") then
-            -- forceReindex() -- Assuming forceReindex needs global_state or is globally accessible? It's not local in this file scope.
-            -- Wait, forceReindex is likely a local function I need to update similarly.
-            -- Let's check where forceReindex is defined. It's likely up in the file.
-            -- For now, just fix this call site if I can see definition, otherwise assume I'll fix it later.
-            -- I'll revisit forceReindex definition.
+            -- Force reindexing
+            if global_state.forceReindex then
+                global_state.forceReindex(global_state)
+            else
+                 global_state.log("Error: forceReindex function not found in global_state")
+            end
             global_state.state = "LIST" -- Close menu and return to list (which will show indexing status)
         elseif optText:match(L.get("copy")) or optText:match(L.get("move_to"):match("^(.*)%s")) then -- Match "Mover a" prefix
             local isMove = optText:match(L.get("move_to"):match("^(.*)%s"))
@@ -1311,6 +1306,8 @@ return {
     gamepadpressed = gamepadpressed,
     joystickpressed = joystickpressed,
     textinput = textinput,
-    jumpToNextLetter = jumpToNextLetter,
-    jumpToPrevLetter = jumpToPrevLetter
+    jumpToNextLetter = jumpToNextLetter, -- Used by update.lua
+    jumpToPrevLetter = jumpToPrevLetter,   -- Used by update.lua
+    refreshFiles = refreshFiles,           -- Exposed for main.lua
+    updateSystemPaths = updateSystemPaths  -- Exposed for main.lua
 }

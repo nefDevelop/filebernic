@@ -118,7 +118,7 @@ describe("Scraper", function()
     local config = { scraperApi = "thegamesdb", thegamesdb_apikey = "testkey" }
 
     it("should fetch and parse data from TheGamesDB", function()
-      local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&fields=overview,release_date&include=boxart,screenshot"
+      local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&platform=Nintendo%20-%20Nintendo%20Entertainment%20System&fields=overview,release_date&include=boxart,screenshot"
       mock_io.popen_results[ "curl -s -L --max-time 10 '" .. url .. "'" ] = '{ "data": { "games": [ { "id": 1, "overview": "TGDB Desc", "release_date": "1991-01-01" } ] }, "include": { "boxart": { "data": { "1": [ { "side": "front", "filename": "box.jpg" } ] } } } }'
       
       json.decode = original_json_decode -- Use real json decoder
