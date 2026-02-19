@@ -1,5 +1,3 @@
----@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
 local M = {}
 local utils = require "utils"
 
@@ -812,7 +810,7 @@ function M.removeFromIndex(path, romIndex, json_encode, love_filesystem_getSourc
     return romIndex
 end
 
-function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, pathToSelect, favoriteRoms, hideFavorites)
+function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon_func, fs_getInfo, gfx_newImage, allFiles, pathToSelect, favoriteRoms, hideFavorites)
     files = {}
     isVirtualRoot = true
     romPath = "" -- Not a real path in this view
@@ -867,7 +865,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                                     files[dirMap[dirName]].sourceLabel = "SD½"
                                     files[dirMap[dirName]].secondaryPath = scanPath .. line
                                 else
-                                    local icon = getSystemIcon and getSystemIcon(dirName) or nil
+                                    local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
                                     table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
                                     dirMap[dirName] = #files
                                     foundCount = foundCount + 1
@@ -894,7 +892,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                                         files[dirMap[dirName]].sourceLabel = "SD½"
                                         files[dirMap[dirName]].secondaryPath = scanPath .. line
                                     else
-                                        local icon = getSystemIcon and getSystemIcon(dirName) or nil
+                                        local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
                                         table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
                                         dirMap[dirName] = #files
                                         foundCount = foundCount + 1
@@ -921,7 +919,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                                         files[dirMap[dirName]].sourceLabel = "SD½"
                                         files[dirMap[dirName]].secondaryPath = fullPath
                                     else
-                                        local icon = getSystemIcon and getSystemIcon(dirName) or nil
+                                        local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
                                         table.insert(files, {name = dirName, isDir = true, fullPath = fullPath, sourceLabel = label, icon = icon})
                                         dirMap[dirName] = #files
                                         foundCount = foundCount + 1
@@ -1022,7 +1020,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     return files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles
 end
 
-function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
+function M.updateSystemPaths(systemName, romPath, log, fs_getInfo, gfx_newImage)
     local detectedSystem = romPath:match("ROMS/([^/]+)/") or romPath:match("Simulador_SD/([^/]+)/")
     
     local muosArtPath = ""
@@ -1057,9 +1055,9 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
 
         -- Cargar icono del sistema (probar todas las variantes)
         for _, v in ipairs(variants) do
-            local path = "assets/systems/" .. v .. ".png"
-            if love.filesystem.getInfo(path) then
-                currentSystemIcon = love_graphics_newImage(path)
+            local path = "assets/systems/" .. v .. ".png" -- Construct path
+            if fs_getInfo(path) then -- Check if file exists
+                currentSystemIcon = gfx_newImage(path) -- Load image
                 log("System icon found: " .. path)
                 break
             end
@@ -1070,9 +1068,9 @@ function M.updateSystemPaths(systemName, romPath, log, love_graphics_newImage)
 
         -- Cargar icono de contenido (ROM) (probar todas las variantes)
         for _, v in ipairs(variants) do
-            local path = "assets/systems/" .. v .. "-content.png"
-            if love.filesystem.getInfo(path) then
-                currentSystemContentIcon = love_graphics_newImage(path)
+            local path = "assets/systems/" .. v .. "-content.png" -- Construct path
+            if fs_getInfo(path) then -- Check if file exists
+                currentSystemContentIcon = gfx_newImage(path) -- Load image
                 log("Content icon found: " .. path)
                 break
             end
@@ -1248,7 +1246,7 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
     return files, selectedFilesCount, selectedIndex, allFiles
 end
 
-function M.logDeletion(path, json_encode, json_decode)
+function M.logDeletion(path, json_encode, json_decode) -- Log deleted files for debugging/recovery
     local dataDir = love.filesystem.getSource() .. "/data"
     local logPath = dataDir .. "/deleted_roms.json"
     
@@ -1274,7 +1272,7 @@ function M.logDeletion(path, json_encode, json_decode)
     end
 end
 
-function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_encode, love_filesystem_getSource, io_open)
+function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_encode, love_filesystem_getSource, io_open) -- Save current view state to cache
     -- Crear una copia limpia de los archivos sin Userdata (imágenes) para el JSON
     
     -- Optimización: En modo Virtual Root (Juego Unico), guardar solo una ventana alrededor del cursor
@@ -1315,7 +1313,7 @@ function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_enco
     end
 end
 
-function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSystemIcon, getSystemContentIcon)
+function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSystemIcon_func, getSystemContentIcon_func, fs_getInfo, gfx_newImage) -- Load cached view state
     local path = love_filesystem_getSource() .. "/data/view_cache.json"
     local f = io_open(path, "r")
     if not f then return nil, nil, nil end
@@ -1328,7 +1326,7 @@ function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSys
     
     -- Restaurar iconos básicos
     for _, item in ipairs(cache.files) do
-        if item.isDir and getSystemIcon then item.icon = getSystemIcon(item.name) end
+        if item.isDir and getSystemIcon_func then item.icon = getSystemIcon_func(item.name, fs_getInfo, gfx_newImage) end
     end
     
     return cache.files, cache.selectedIndex, cache.romPath, cache.isVirtualRoot

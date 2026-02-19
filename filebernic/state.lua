@@ -1,12 +1,10 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 local json = require "libs.dkjson"
 local State = {}
 
-function State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    os.execute("mkdir -p " .. dataDir)
+function State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love_filesystem)
+    local dataDir = love_filesystem.getSource() .. "/data"
+    os.execute("mkdir -p '" .. dataDir .. "'")
     local f = io.open(dataDir .. "/app_state.json", "w")
     if f then
         -- Normalizar ruta para guardar (convertir a virtual ROMS/...)
@@ -33,11 +31,11 @@ function State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewM
     end
 end
 
-function State.loadConfig(defaultConfig)
+function State.loadConfig(defaultConfig, love_filesystem)
     local config = {}
     for k,v in pairs(defaultConfig) do config[k] = v end
-    
-    local configPath = love.filesystem.getSource() .. "/data/config.json"
+
+    local configPath = love_filesystem.getSource() .. "/data/config.json"
     local f = io.open(configPath, "r")
     if f then
         local content = f:read("*all")

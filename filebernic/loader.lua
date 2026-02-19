@@ -1,6 +1,4 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 -- loader.lua
 -- Handles asynchronous loading of assets in a background thread to avoid
 -- blocking the main thread, which is crucial for low-powered devices.
@@ -36,17 +34,18 @@ local threadCode = [[
   end
 ]]
 
-function Loader:new(logger)
+function Loader:new(logger, love_modules)
   local obj = {
     -- In-memory cache for loaded assets.
     -- cache[path] = 'loading' | 'error' | love.FileData | love.Image | string
     cache = {},
     -- Communication channel with the background thread.
-    channelIn = love.thread.newChannel(),
-    channelOut = love.thread.newChannel(),
+    channelIn = love_modules.thread.newChannel(),
+    channelOut = love_modules.thread.newChannel(),
     -- The background thread instance.
-    thread = love.thread.newThread(threadCode),
-    logger = logger
+    thread = love_modules.thread.newThread(threadCode),
+    logger = logger,
+    love_modules = love_modules
   }
   obj.thread:start(obj.channelIn, obj.channelOut)
   setmetatable(obj, self)
@@ -115,9 +114,9 @@ function Loader:getImage(path)
     return data -- Already a decoded, cached image.
   elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
     -- The FileData is ready. Try to decode it as an Image.
-    local success, imageData = pcall(love.image.newImageData, data)
+    local success, imageData = pcall(self.love_modules.image.newImageData, data)
     if success then
-      local imgSuccess, image = pcall(love.graphics.newImage, imageData)
+      local imgSuccess, image = pcall(self.love_modules.graphics.newImage, imageData)
       if imgSuccess then
         self.cache[path] = image -- Cache the final drawable image.
         return image

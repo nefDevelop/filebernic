@@ -1,35 +1,30 @@
----@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
----@diagnostic disable: lowercase-global
-
 local filesystem = require "filesystem"
 local utils = require "utils"
 local State = require "state"
 local preview = require "preview"
 local json = require "libs.dkjson"
-local stateHandlers = {}
 
-local function jumpToNextLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
-    for i = selectedIndex + 1, #files do
-        local c = files[i].name:sub(1,1):upper()
+local function jumpToNextLetter(global_state)
+    if #global_state.files == 0 then return end -- Check if files table is empty
+    local current = global_state.files[global_state.selectedIndex].name:sub(1,1):upper() -- Get first letter of current item
+    for i = global_state.selectedIndex + 1, #global_state.files do -- Iterate from next item
+        local c = global_state.files[i].name:sub(1,1):upper() -- Get first letter of iterated item
         if c ~= current then
-            selectedIndex = i
-            jumpLetter = c
+            global_state.selectedIndex = i
+            global_state.jumpLetter = c
             return
         end
     end
-    selectedIndex = #files
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
+    global_state.selectedIndex = #global_state.files
+    global_state.jumpLetter = global_state.files[global_state.selectedIndex].name:sub(1,1):upper()
 end
 
-local function jumpToPrevLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
+local function jumpToPrevLetter(global_state)
+    if #global_state.files == 0 then return end -- Check if files table is empty
+    local current = global_state.files[global_state.selectedIndex].name:sub(1,1):upper() -- Get first letter of current item
     local prevLetterIdx = nil
-    for i = selectedIndex - 1, 1, -1 do
-        local c = files[i].name:sub(1,1):upper()
+    for i = global_state.selectedIndex - 1, 1, -1 do -- Iterate backwards from previous item
+        local c = global_state.files[i].name:sub(1,1):upper()
         if c ~= current then
             prevLetterIdx = i
             break
@@ -37,37 +32,38 @@ local function jumpToPrevLetter()
     end
     
     if prevLetterIdx then
-        local targetChar = files[prevLetterIdx].name:sub(1,1):upper()
+        local targetChar = global_state.files[prevLetterIdx].name:sub(1,1):upper()
         for i = prevLetterIdx - 1, 1, -1 do
-            local c = files[i].name:sub(1,1):upper()
+            local c = global_state.files[i].name:sub(1,1):upper()
             if c ~= targetChar then
-                selectedIndex = i + 1
-                jumpLetter = targetChar
+                global_state.selectedIndex = i + 1
+                global_state.jumpLetter = targetChar
                 return
             end
         end
-        selectedIndex = 1
+        global_state.selectedIndex = 1
     else
-        selectedIndex = 1
+        global_state.selectedIndex = 1
     end
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
+    global_state.jumpLetter = global_state.files[global_state.selectedIndex].name:sub(1,1):upper()
 end
 
-local function updateSystemPaths()
-    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.graphics.newImage)
+local function updateSystemPaths(global_state)
+    global_state.systemName, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath, global_state.currentSystemIcon, global_state.currentSystemContentIcon = 
+        filesystem.updateSystemPaths(global_state.systemName, global_state.romPath, global_state.log, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
 end
 
-local function refreshFiles()
-    if romPath and romPath ~= "" and romPath:sub(-1) ~= "/" then romPath = romPath .. "/" end
-    romPath = filesystem.fixPathCase(romPath)
-    log("Refreshing files... Path: " .. romPath)
+local function refreshFiles(global_state)
+    if global_state.romPath and global_state.romPath ~= "" and global_state.romPath:sub(-1) ~= "/" then global_state.romPath = global_state.romPath .. "/" end
+    global_state.romPath = filesystem.fixPathCase(global_state.romPath)
+    global_state.log("Refreshing files... Path: " .. global_state.romPath)
     
-    local function updatePathsWrapper()
-         updateSystemPaths()
+    local function updatePathsWrapper() -- This wrapper is called by filesystem.refreshFiles
+         updateSystemPaths(global_state)
     end
     
-    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updatePathsWrapper, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, log, favoriteRoms, hideFavorites)
-    preview.load()
+    global_state.files, global_state.selectedFilesCount, global_state.selectedIndex, global_state.allFiles = filesystem.refreshFiles(updatePathsWrapper, global_state.files, global_state.selectedFilesCount, global_state.launchMode, global_state.hideEmpty, global_state.validExtensions, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles, global_state.log, global_state.favoriteRoms, global_state.hideFavorites)
+    preview.load(global_state, global_state.log, global_state.loader)
 end
 
 local function saveHistory()
@@ -136,7 +132,7 @@ local function saveSelectedArt()
     systemName, muosArtPath, muosTextPath, muosPreviewPath = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
     filesystem.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
     
-    local baseName = item.name:gsub("%..-$", "")
+    local baseName = item.name:gsub("%..-$", "") -- Remove extension
     if muosArtPath and muosArtPath ~= "" then
         log("Invalidating art paths for: " .. baseName)
         loader:invalidate(muosArtPath .. baseName .. ".png")
@@ -145,27 +141,29 @@ local function saveSelectedArt()
         loader:invalidate(muosPreviewPath .. baseName .. ".png")
     end
     state = "LIST"
-    preview.load()
+    preview.load(_G, log, loader)
 end
 
+local stateHandlers = {}
+
 -- Manejador para el modo Búsqueda
-function stateHandlers.SEARCH(key)
-    if key == "up" then
+function stateHandlers.SEARCH(key, global_state)
+    if key == "up" then -- Move up in keyboard grid
         keyboardRow = math.max(1, keyboardRow - 1)
         keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
         inputCooldown = 0.15
-    elseif key == "down" then
+    elseif key == "down" then -- Move down in keyboard grid
         keyboardRow = math.min(#keyboardGrid, keyboardRow + 1)
         keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol)
         inputCooldown = 0.15
-    elseif key == "left" then
+    elseif key == "left" then -- Move left in keyboard grid
         keyboardCol = math.max(1, keyboardCol - 1)
         inputCooldown = 0.15
-    elseif key == "right" then
+    elseif key == "right" then -- Move right in keyboard grid
         keyboardCol = math.min(#keyboardGrid[keyboardRow], keyboardCol + 1)
         inputCooldown = 0.15
     elseif key == "return" or key == "kpenter" or key == "space" then -- 'a' button
-        local char = keyboardGrid[keyboardRow][keyboardCol]
+        local char = keyboardGrid[keyboardRow][keyboardCol] -- Get character from keyboard grid
         if char == "OK" then
             state = "LIST"
             love.keyboard.setTextInput(false)
@@ -180,17 +178,17 @@ function stateHandlers.SEARCH(key)
             filterFiles()
         end
         inputCooldown = 0.2
-    elseif key == "f" then -- L1: Exit search, keep filter
+    elseif key == "f" then -- L1: Exit search, keep filter active
         state = "LIST"
         love.keyboard.setTextInput(false)
         inputCooldown = 0.2
-    elseif key == "f2" then -- L2: Clear filter
+    elseif key == "f2" then -- L2: Clear filter and exit search
         searchQuery = ""
         filterFiles()
         state = "LIST"
         love.keyboard.setTextInput(false)
         inputCooldown = 0.2
-    elseif key == "escape" or key == "backspace" then -- 'b' button (Cancel)
+    elseif key == "escape" or key == "backspace" then -- 'b' button (Cancel search)
         state = "LIST"
         files = allFiles -- Restore full list
         searchQuery = ""
@@ -200,17 +198,18 @@ function stateHandlers.SEARCH(key)
 end
 
 -- Manejador para el Menú de Opciones
-function stateHandlers.OPTIONS_MENU(key)
-    if key == "return" or key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then
+function stateHandlers.OPTIONS_MENU(key, global_state)
+    local L = global_state.L
+    if key == "return" or key == "kpenter" or (key == "return" and global_state.love.joystick.getJoystickCount() == 0) then -- Confirm selection
         if #menuStack > 0 then
              -- Acciones del sub-menú de versión
              local opt = menuOptions[menuSelection]
              local optText = type(opt) == "table" and opt.text or opt
              
              if optText == L.get("info") then
-                 preview.load()
-                 state = "INFO_VIEW"
-             elseif optText == L.get("scraper") then
+                 preview.load(global_state, global_state.log, global_state.loader)
+                 global_state.state = "INFO_VIEW"
+             elseif optText == L.get("scraper") then -- Open scraper view
                  state = "SCRAPER_VIEW"
              elseif optText:match(L.get("save_games")) then
                  state = "SAVE_MANAGER"
@@ -226,11 +225,15 @@ function stateHandlers.OPTIONS_MENU(key)
                  end
                  -- Always update internal state
                  if romIndex then removeFromIndex(fullPath) end
-                 if playedRoms[fullPath] then playedRoms[fullPath] = nil saveHistory() end
-                 if isVirtualRoot and launchMode == "Juego Unico" then
-                     files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                     preview.load()
-                 else
+                 if playedRoms[fullPath] then playedRoms[fullPath] = nil; saveHistory() end
+                 if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+                     global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                        filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                        global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                        global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                        global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                     preview.load(_G, log, loader)
+                 else -- Not virtual root, refresh files
                      refreshFiles()
                  end
                  state = "LIST"
@@ -242,13 +245,17 @@ function stateHandlers.OPTIONS_MENU(key)
                      favoriteRoms[fullPath] = nil
                      if type(opt) == "table" then opt.text = L.get("add_favorite") else menuOptions[menuSelection] = L.get("add_favorite") end
                  else
-                     favoriteRoms[fullPath] = true
+                     favoriteRoms[fullPath] = true -- Mark as favorite
                      if type(opt) == "table" then opt.text = L.get("remove_favorite") else menuOptions[menuSelection] = L.get("remove_favorite") end
                  end
                  filesystem.saveFavorites(favoriteRoms, json.encode)
-                 if isVirtualRoot and launchMode == "Juego Unico" then
-                     files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                     preview.load()
+                 if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+                     global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                        filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                        global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                        global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                        global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                     preview.load(_G, log, loader)
                  end
              end
              inputCooldown = 0.3
@@ -314,11 +321,15 @@ function stateHandlers.OPTIONS_MENU(key)
                 log("Archivo borrado con éxito: " .. pathToDelete)
                 filesystem.logDeletion(pathToDelete, json.encode, json.decode)
             end
-            if romIndex then removeFromIndex(pathToDelete) end
+            if romIndex then removeFromIndex(pathToDelete) end -- Remove from index if it exists
             if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
             if isVirtualRoot and launchMode == "Juego Unico" then
-                files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                preview.load()
+                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                preview.load(global_state, global_state.log, global_state.loader)
             else
                 refreshFiles()
             end
@@ -334,11 +345,15 @@ function stateHandlers.OPTIONS_MENU(key)
                 log("Archivo borrado con éxito: " .. pathToDelete)
                 filesystem.logDeletion(pathToDelete, json.encode, json.decode)
             end
-            if romIndex then removeFromIndex(pathToDelete) end
+            if romIndex then removeFromIndex(pathToDelete) end -- Remove from index if it exists
             if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
             if isVirtualRoot and launchMode == "Juego Unico" then
-                files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                preview.load()
+                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                preview.load(global_state, global_state.log, global_state.loader)
             else
                 refreshFiles()
             end
@@ -348,44 +363,52 @@ function stateHandlers.OPTIONS_MENU(key)
             local displayMode = (launchMode == "Folder") and L.get("folder") or L.get("single_game")
             local newVal = L.get("mode") .. ": " .. displayMode
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
-            files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, pathForSelection, favoriteRoms, hideFavorites)
-            preview.load()
+            State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem) -- Save app state
+            global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+               filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+               global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+               global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+               global_state.love.graphics.newImage, global_state.allFiles, pathForSelection, global_state.favoriteRoms, global_state.hideFavorites)
+            preview.load(global_state, global_state.log, global_state.loader)
         elseif optText:match(L.get("hide_empty")) then
             hideEmpty = not hideEmpty
             local newVal = L.get("hide_empty") .. ": " .. (hideEmpty and L.get("on") or L.get("off"))
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            if isVirtualRoot then 
-                files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                preview.load()
+            if isVirtualRoot then
+                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                preview.load(global_state, global_state.log, global_state.loader)
             end
         elseif optText:match(L.get("view")) then
             viewMode = (viewMode == "LIST") and "GRID" or "LIST"
             local displayView = (viewMode == "LIST") and L.get("list") or L.get("grid")
             local newVal = L.get("view") .. ": " .. displayView
-            if type(opt) == "table" then 
+            if type(opt) == "table" then
                 opt.text = newVal 
             else 
                 menuOptions[menuSelection] = newVal 
             end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
+            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem) -- Save app state
         elseif optText == L.get("cleanup") then
             state = "CLEANUP_MENU"
             cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
-            inputCooldown = 0.2
+            inputCooldown = 0.2 -- Reset cooldown
         elseif optText:match(L.get("mark_played")) then
             markPlayed = not markPlayed
             local newVal = L.get("mark_played") .. ": " .. (markPlayed and L.get("yes") or L.get("no"))
             if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
+            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem)
         elseif optText:match(L.get("hide_favorites")) then
             hideFavorites = not hideFavorites
             local newVal = L.get("hide_favorites") .. ": " .. (hideFavorites and L.get("on") or L.get("off"))
-            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end
-            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
+            if type(opt) == "table" then opt.text = newVal else menuOptions[menuSelection] = newVal end -- Update option text
+            State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem)
             refreshFiles()
         elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
-            local item = files[selectedIndex]
+            local item = files[selectedIndex] -- Get selected item
             local path = item.fullPath
             if favoriteRoms[path] then
                 favoriteRoms[path] = nil
@@ -396,13 +419,17 @@ function stateHandlers.OPTIONS_MENU(key)
             end
             filesystem.saveFavorites(favoriteRoms, json.encode)
             if isVirtualRoot then
-                files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
+                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
             else
                 refreshFiles()
             end
         elseif optText == L.get("reindex") then
             forceReindex()
-            state = "LIST" -- Cerrar menú y volver a lista (que mostrará estado de indexación)
+            state = "LIST" -- Close menu and return to list (which will show indexing status)
         elseif optText:match(L.get("copy")) or optText:match(L.get("move_to"):match("^(.*)%s")) then -- Match "Mover a" prefix
             local isMove = optText:match(L.get("move_to"):match("^(.*)%s"))
             local targetDir, _ = filesystem.getTargetSDPath(romPath, config)
@@ -427,7 +454,7 @@ function stateHandlers.OPTIONS_MENU(key)
                 else
                     processItem(files[selectedIndex])
                 end
-                
+
                 if isMove then saveHistory() end
                 refreshFiles()
                 state = "LIST"
@@ -437,7 +464,7 @@ function stateHandlers.OPTIONS_MENU(key)
         end
         inputCooldown = 0.2
     elseif key == "tab" then
-         if menuTitle == L.get("config") then return end
+         if menuTitle == L.get("config") then return end -- Don't open submenu from config
 
          if menuTitle == L.get("version") then
              local item = files[selectedIndex]
@@ -450,13 +477,13 @@ function stateHandlers.OPTIONS_MENU(key)
                  selection = menuSelection,
                  focusedItem = focusedItem
              })
-             focusedItem = ver
+             focusedItem = ver -- Set focused item to version
              
              menuTitle = L.get("options") .. ": " .. ver.name
              menuMessage = ver.name
              findSaveFiles(ver)
              menuOptions = {L.get("info"), L.get("scraper"), L.get("save_games") .. " (" .. #saveFiles .. ")", L.get("delete")}
-             
+
              if favoriteRoms[ver.fullPath] then
                  table.insert(menuOptions, 2, L.get("remove_favorite"))
              else
@@ -469,7 +496,7 @@ function stateHandlers.OPTIONS_MENU(key)
              return
          end
 
-        -- Si estamos en un submenú (hay padre), Tab no debe cerrar todo de golpe
+        -- If in a submenu (there's a parent), Tab should not close everything at once
         if #menuStack > 0 then return end
 
         closingMenu = true
@@ -479,7 +506,7 @@ function stateHandlers.OPTIONS_MENU(key)
     elseif key == "backspace" then
         if #menuStack > 0 then
              closingMenu = true -- Trigger animation, menu will be popped on completion
-             inputCooldown = 0.2
+             inputCooldown = 0.2 -- Reset cooldown
         else
             closingMenu = true
             log("Menu exited: " .. menuTitle)
@@ -491,7 +518,7 @@ end
 -- Manejador para la Vista de Información
 function stateHandlers.INFO_VIEW(key)
     if key == "backspace" or key == "b" or key == "escape" then
-        if #menuStack > 0 then
+        if #menuStack > 0 then -- If there's a parent menu, go back to it
             state = "OPTIONS_MENU"
         else
             closingMenu = true
@@ -504,16 +531,16 @@ end
 -- Manejador para Opciones de Scraper
 function stateHandlers.SCRAPER_OPTIONS(key)
     if key == "return" or key == "kpenter" then
-        if menuOptions[menuSelection] == L.get("clean") then
+        if menuOptions[menuSelection] == L.get("clean") then -- If "Clean" option is selected
             local item = files[selectedIndex]
             local baseName = item.name:gsub("%..-$", "")
             os.remove(muosArtPath .. baseName .. ".png")
             os.remove(muosTextPath .. baseName .. ".txt")
             os.remove(muosTextPath .. baseName .. ".year")
             os.remove(muosPreviewPath .. baseName .. ".png")
-            preview.load()
+            preview.load(global_state, global_state.log, global_state.loader)
             state = "SCRAPER_VIEW"
-        end
+        end -- End if "Clean" option
         inputCooldown = 0.2
     elseif key == "backspace" or key == "x" or key == "escape" then
         closingMenu = true
@@ -525,7 +552,7 @@ end
 -- Manejador para Vista de Scraper
 function stateHandlers.SCRAPER_VIEW(key)
     if key == "backspace" then -- 'b' button
-        if #menuStack > 0 then
+        if #menuStack > 0 then -- If there's a parent menu, go back to it
             state = "OPTIONS_MENU"
         else
             state = "LIST"
@@ -536,7 +563,7 @@ function stateHandlers.SCRAPER_VIEW(key)
         startScraping()
     elseif key == "tab" then -- 'y' button
         state = "SCRAPER_OPTIONS"
-        menuTitle = L.get("options")
+        menuTitle = L.get("options") -- Set menu title
         menuAnim = 0
         menuMessage = ""
         menuOptions = {L.get("clean")}
@@ -557,7 +584,7 @@ function stateHandlers.SCRAPER_RESULTS(key)
         inputCooldown = 0.15
     elseif key == "right" then
         scraperSelection = math.min(#scraperResults, scraperSelection + 1)
-        inputCooldown = 0.15
+        inputCooldown = 0.15 -- Reset cooldown
     elseif (key == "return" or key == "kpenter") and #scraperResults > 0 then
         local sel = scraperResults[scraperSelection]
         if sel and not sel.error then
@@ -570,7 +597,7 @@ end
 -- Manejador para Gestor de Partidas
 function stateHandlers.SAVE_MANAGER(key)
     if key == "backspace" or key == "escape" then
-        if #menuStack > 0 then
+        if #menuStack > 0 then -- If there's a parent menu, go back to it
             state = "OPTIONS_MENU"
         else
             state = "LIST"
@@ -579,7 +606,7 @@ function stateHandlers.SAVE_MANAGER(key)
     elseif key == "return" or key == "kpenter" then
         -- Copiar save a la otra SD
         local item = saveFiles[saveManagerSelection]
-        if item then
+        if item then -- If an item is selected
             local targetRoot = item.location == "SD1" and "/mnt/sdcard" or "/mnt/mmc"
             -- Reconstruir ruta destino preservando estructura desde /mnt/xxx/
             local relPath = item.fullPath:match("/mnt/[^/]+/(.*)")
@@ -590,7 +617,7 @@ function stateHandlers.SAVE_MANAGER(key)
                 os.execute('cp "' .. item.fullPath .. '" "' .. destPath .. '"')
                 -- Refrescar lista para ver el nuevo archivo
                 findSaveFiles(files[selectedIndex])
-            end
+            end -- End if relPath
         end
         inputCooldown = 0.2
     end
@@ -602,7 +629,7 @@ function stateHandlers.CLEANUP_MENU(key)
         if key == "backspace" or key == "escape" or key == "b" then
             cleanupData.confirming = false
             inputCooldown = 0.2
-        elseif key == "return" or key == "kpenter" or key == "space" or key == "a" then
+        elseif key == "return" or key == "kpenter" or key == "space" or key == "a" then -- Confirm action
             -- Ejecutar acción de borrado confirmada
             if cleanupData.cursor.col == 1 then
                 -- Columna Huérfanos
@@ -610,7 +637,7 @@ function stateHandlers.CLEANUP_MENU(key)
                     -- Borrar TODOS
                     for _, orphan in ipairs(cleanupData.orphans) do
                         local success, err = os.remove(orphan.fullPath)
-                        if success then 
+                        if success then
                             log("Cleanup: Borrado " .. orphan.fullPath)
                             filesystem.logDeletion(orphan.fullPath, json.encode, json.decode)
                         else log("Cleanup Error: " .. orphan.fullPath .. " " .. tostring(err)) end
@@ -621,7 +648,7 @@ function stateHandlers.CLEANUP_MENU(key)
                     local idx = cleanupData.cursor.row - 1
                     local orphan = cleanupData.orphans[idx]
                     if orphan then
-                        local success, err = os.remove(orphan.fullPath)
+                        local success, err = os.remove(orphan.fullPath) -- Delete individual orphan
                         if success then 
                             log("Cleanup: Borrado " .. orphan.fullPath)
                             filesystem.logDeletion(orphan.fullPath, json.encode, json.decode)
@@ -637,7 +664,7 @@ function stateHandlers.CLEANUP_MENU(key)
                 local idx = cleanupData.cursor.row
                 local item = cleanupData.orphanedImages[idx]
                 if item then
-                    local success, err = os.remove(item.fullPath)
+                    local success, err = os.remove(item.fullPath) -- Delete orphaned image
                     if success then 
                         log("Cleanup: Borrado " .. item.fullPath)
                         filesystem.logDeletion(item.fullPath, json.encode, json.decode)
@@ -655,10 +682,10 @@ function stateHandlers.CLEANUP_MENU(key)
                 local idx = cleanupData.cursor.row
                 local item = cleanupData.duplicates[idx]
                 if item then
-                    local success, err = os.remove(item.fullPath)
-                    if success then 
+                    local success, err = os.remove(item.fullPath) -- Delete duplicate file
+                    if success then
                         log("Cleanup: Borrado " .. item.fullPath) 
-                        filesystem.logDeletion(item.fullPath, json.encode, json.decode)
+                        filesystem.logDeletion(item.fullPath, json.encode, json.decode) -- Log deletion
                         if romIndex then removeFromIndex(item.fullPath) end
                     else 
                         log("Cleanup Error: " .. item.fullPath .. " " .. tostring(err)) 
@@ -674,7 +701,7 @@ function stateHandlers.CLEANUP_MENU(key)
             end
             
             cleanupData.confirming = false
-            inputCooldown = 0.2
+            inputCooldown = 0.2 -- Reset cooldown
         end
         return
     end
@@ -683,7 +710,7 @@ function stateHandlers.CLEANUP_MENU(key)
         state = "LIST"
         inputCooldown = 0.2
     elseif not cleanupData.scanned then
-        if key == "return" or key == "kpenter" then
+        if key == "return" or key == "kpenter" then -- Start scan
             performCleanupScan()
         end
     else
@@ -693,7 +720,7 @@ function stateHandlers.CLEANUP_MENU(key)
                 cleanupData.cursor.col = 2
                 cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.duplicates)
             elseif cleanupData.cursor.col == 2 and #cleanupData.orphanedImages > 0 then
-                cleanupData.cursor.col = 3
+                cleanupData.cursor.col = 3 -- Move to orphaned images column
                 cleanupData.cursor.row = math.min(cleanupData.cursor.row, #cleanupData.orphanedImages)
             else
                 cleanupData.cursor.col = 1
@@ -703,7 +730,7 @@ function stateHandlers.CLEANUP_MENU(key)
             local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages
             cleanupData.cursor.row = math.max(1, cleanupData.cursor.row - pageSize)
         elseif key == "right" then -- Page Down (Pagination)
-            local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages
+            local maxRows = (cleanupData.cursor.col == 1 and #cleanupData.orphans + 1) or (cleanupData.cursor.col == 2 and #cleanupData.duplicates) or #cleanupData.orphanedImages -- Max rows for current column
             cleanupData.cursor.row = math.min(maxRows, cleanupData.cursor.row + pageSize)
         elseif key == "return" or key == "kpenter" then
             -- Verificar si hay algo válido seleccionado para borrar
@@ -718,7 +745,7 @@ function stateHandlers.CLEANUP_MENU(key)
             end
             
             if valid then
-                cleanupData.confirming = true
+                cleanupData.confirming = true -- Show confirmation modal
                 inputCooldown = 0.2
             end
         end
@@ -729,7 +756,7 @@ end
 function stateHandlers.DELETE_MENU(key)
     if key == "return" or key == "space" or key == "kpenter" then
         if menuOptions[menuSelection] == L.get("delete") then
-            if selectedFilesCount > 0 then
+            if selectedFilesCount > 0 then -- Delete multiple selected files
                 for _, item in ipairs(files) do
                     if item.selected then
                         local fullPath = item.fullPath or (romPath .. item.name)
@@ -740,8 +767,8 @@ function stateHandlers.DELETE_MENU(key)
                         else
                             log("Archivo borrado con éxito: " .. fullPath)
                             filesystem.logDeletion(fullPath, json.encode, json.decode)
-                        end
-                        if romIndex then removeFromIndex(fullPath) end
+                        end -- End if success
+                if romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
                         if playedRoms[fullPath] then
                             playedRoms[fullPath] = nil
                         end
@@ -750,11 +777,11 @@ function stateHandlers.DELETE_MENU(key)
                 saveHistory()
                 if isVirtualRoot and launchMode == "Juego Unico" then
                     files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                    preview.load()
+                    preview.load(global_state, global_state.log, global_state.loader) -- Reload preview after deletion
                 else
                     refreshFiles()
                 end
-                itemToDelete = nil
+                itemToDelete = nil -- Clear item to delete
             elseif itemToDelete then
                 local fullPath = itemToDelete.fullPath or (romPath .. itemToDelete.name)
                 deleteGameMedia(fullPath)
@@ -764,8 +791,8 @@ function stateHandlers.DELETE_MENU(key)
                 else
                     log("Archivo borrado con éxito: " .. fullPath)
                     filesystem.logDeletion(fullPath, json.encode, json.decode)
-                end
-                if romIndex then removeFromIndex(fullPath) end
+                end -- End if success
+                if romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
                 if playedRoms[fullPath] then
                     playedRoms[fullPath] = nil
                     saveHistory()
@@ -773,11 +800,11 @@ function stateHandlers.DELETE_MENU(key)
                 -- Deselect to avoid errors, then refresh
                 if isVirtualRoot and launchMode == "Juego Unico" then
                     files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                    preview.load()
+                    preview.load(global_state, global_state.log, global_state.loader) -- Reload preview after deletion
                 else
                     refreshFiles()
                 end
-                itemToDelete = nil
+                itemToDelete = nil -- Clear item to delete
             end
         end
         inputCooldown = 0.2
@@ -795,11 +822,11 @@ end
 -- Manejador para Post-Juego
 function stateHandlers.POST_GAME(key)
     if key == "return" or key == "space" or key == "kpenter" then -- 'a' button
-        os.remove(lastPlayedRom) 
-        state = "LIST" 
+        os.remove(lastPlayedRom)
+        state = "LIST"
         inputCooldown = 0.2
         refreshFiles()
-    elseif key == "backspace" then -- 'b' button
+    elseif key == "backspace" then -- 'b' button (Cancel)
         state = "LIST" 
         inputCooldown = 0.2
     end
@@ -813,7 +840,7 @@ local function handleListInput(key)
         if key == "backspace" then -- Allow going back from an empty directory
             local parent = romPath:gsub("[^/]+/$", "")
             log("Back (Empty). Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
-            
+
             -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
@@ -821,11 +848,15 @@ local function handleListInput(key)
             
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
-               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" then
-                 log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, romPath, favoriteRoms, hideFavorites)
-                 preview.load()
-                 inputCooldown = 0.2
+               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or romPath == "@Favorites/" then
+                 global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
+                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                    global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                    global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
+                 preview.load(global_state, global_state.log, global_state.loader)
+                 inputCooldown = 0.2 -- Reset cooldown
                  return
             end
             romPath = parent
@@ -836,7 +867,7 @@ local function handleListInput(key)
         else
             return -- Ignore other key presses for empty directory message
         end
-    end
+    end -- End if currentItem.empty
 
     -- Lógica de eliminación de Fantasma (Ghost) al moverse
     if (key == "up" or key == "down" or key == "left" or key == "right" or key == "pageup" or key == "pagedown") and currentItem and currentItem.pendingDelete then
@@ -848,15 +879,15 @@ local function handleListInput(key)
         -- Asegurar límites
         if selectedIndex > #files then selectedIndex = #files end
         if selectedIndex < 1 then selectedIndex = 1 end
-        
+
         -- Actualizar backup allFiles
         allFiles = {}
         for _, f in ipairs(files) do table.insert(allFiles, f) end
         
         inputCooldown = 0.2
-        preview.load()
+        preview.load(global_state, global_state.log, global_state.loader)
         return -- Consumir input (el movimiento visual ya ocurrió al borrar el item)
-    end
+    end -- End if currentItem.pendingDelete
 
     if key == "f" then
         state = "SEARCH"
@@ -866,7 +897,7 @@ local function handleListInput(key)
         love.keyboard.setTextInput(true) -- Enable text input
         filterFiles()
         return
-    end
+    end -- End if key == "f"
     
     if key == "f2" then -- L2: Clear filter
         searchQuery = ""
@@ -874,7 +905,7 @@ local function handleListInput(key)
         inputCooldown = 0.2
         return
     end
-
+    
     if key == "pageup" then
         if viewMode == "GRID" then
             selectedIndex = math.max(1, selectedIndex - (gridCols * 3))
@@ -883,7 +914,7 @@ local function handleListInput(key)
         end
         pendingLoad = true
         inputCooldown = 0.2
-        timer = 0
+        timer = 0 -- Reset timer
     elseif key == "pagedown" then
         if viewMode == "GRID" then
             selectedIndex = math.min(#files, selectedIndex + (gridCols * 3))
@@ -892,7 +923,7 @@ local function handleListInput(key)
         end
         pendingLoad = true
         inputCooldown = 0.2
-        timer = 0
+        timer = 0 -- Reset timer
     end
 
     if key == "kpenter" or (key == "return" and love.joystick.getJoystickCount() == 0) then -- 'a' button (Start envía return, lo ignoramos si hay gamepad)
@@ -910,18 +941,22 @@ local function handleListInput(key)
                 if item.name == ".." then
                     local newPath = romPath:gsub("[^/]+/$", "")
                     if newPath == "/mnt/mmc/ROMS/" or newPath == "/mnt/sdcard/ROMS/" then
-                        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                        preview.load()
+                        global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                           filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                           global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                           global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                           global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                        preview.load(global_state, global_state.log, global_state.loader) -- Reload preview
                         return
-                    end
+                end -- End if newPath is root
                     local cwd = love.filesystem.getSource()
                     if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
                     if newPath == cwd .. "/../" then -- Simulator path check
-                        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-                        preview.load()
-                        return
+                        global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                        preview.load(global_state, global_state.log, global_state.loader)
+                        return -- Reload preview
                     end
-                    romPath = newPath
+                    romPath = newPath -- Update romPath
                     secondaryPath = filesystem.resolveSecondary(romPath)
                 else
                     romPath = romPath .. item.name .. "/"
@@ -933,10 +968,10 @@ local function handleListInput(key)
         else
             -- Launch ROM
             local romToLaunch = nil
-            
+
             if launchMode == "Juego Unico" and item.versions then
                 if #item.versions > 1 then
-                    state = "OPTIONS_MENU"
+                    state = "OPTIONS_MENU" -- Open version selection menu
                     menuAnim = 0
                     menuTitle = L.get("version")
                     log("Menu opened: " .. menuTitle .. " for " .. item.name)
@@ -944,7 +979,7 @@ local function handleListInput(key)
                     menuOptions = {}
                     for _, v in ipairs(item.versions) do
                         local icon = utils.getSystemIcon(v.system)
-                        local sysDisplay = utils.getSystemDisplayName(v.system) or v.system
+                        local sysDisplay = utils.getSystemDisplayName(v.system) or v.system -- Get display name for system
                         local tags = ""
                         local stem = v.name:gsub("%.[^%.]+$", "")
                         for tag in stem:gmatch("%s*(%b())") do tags = tags .. " " .. tag end
@@ -963,7 +998,7 @@ local function handleListInput(key)
                     romToLaunch = item.versions[1].fullPath
                 end
             else
-                romToLaunch = isVirtualRoot and item.fullPath or romPath .. item.name
+                romToLaunch = isVirtualRoot and item.fullPath or romPath .. item.name -- Determine ROM to launch
             end
             
             if romToLaunch then
@@ -975,7 +1010,7 @@ local function handleListInput(key)
                 launching = true
                 launchTimer = 0
             end
-        end
+        end -- End if item.isDir
     elseif key == "backspace" then -- 'b' button
         if isVirtualRoot then
             inputCooldown = 0.2 -- Prevent phantom input when actionless
@@ -984,7 +1019,7 @@ local function handleListInput(key)
             local parent = romPath:gsub("[^/]+/$", "")
             log("Back. Verificando ruta: " .. romPath .. " -> Parent: " .. parent)
             
-            -- Comprobar si el padre es una raíz de sistema para volver al menú virtual
+            -- Check if parent is a system root to return to virtual menu
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simRoot = cwd .. "/../Simulador_SD/"
@@ -993,10 +1028,14 @@ local function handleListInput(key)
                romPath == "/mnt/mmc/ROMS/" or romPath == "/mnt/sdcard/ROMS/" or romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or
                romPath == "" or romPath == "@Favorites/" then
-                 log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, allFiles, romPath, favoriteRoms, hideFavorites)
+                 global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
+                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                    global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                    global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
                  log("Virtual Root created. Items: " .. #files)
-                 preview.load()
+                 preview.load(global_state, global_state.log, global_state.loader) -- Reload preview
                  inputCooldown = 0.2
                  return
             end
@@ -1008,7 +1047,7 @@ local function handleListInput(key)
         end
     elseif key == "tab" then -- 'Y' button
         local item = files[selectedIndex]
-        if item then
+        if item then -- If an item is selected
             if item.isDir then
                 -- Es una carpeta, no hacer nada para evitar comportamientos extraños.
                 inputCooldown = 0.2 -- Evita que se abra el menú si se suelta rápido y se detecta otra pulsación
@@ -1025,7 +1064,7 @@ local function handleListInput(key)
                     menuOptions = {}
                     for _, v in ipairs(item.versions) do
                         local icon = utils.getSystemIcon(v.system)
-                        local sysDisplay = utils.getSystemDisplayName(v.system) or v.system
+                        local sysDisplay = utils.getSystemDisplayName(v.system) or v.system -- Get display name for system
                         local tags = ""
                         local stem = v.name:gsub("%.[^%.]+$", "")
                         for tag in stem:gmatch("%s*(%b())") do tags = tags .. " " .. tag end
@@ -1041,8 +1080,8 @@ local function handleListInput(key)
                     inputCooldown = 0.15
                     return
                 end
-
-                state = "OPTIONS_MENU"
+                
+                state = "OPTIONS_MENU" -- Open options menu
                 menuAnim = 0
                 menuTitle = L.get("options") .. ":"
                 menuStack = {}
@@ -1055,7 +1094,7 @@ local function handleListInput(key)
                 
                 menuOptions = {}
                 -- 1. Info (Solo individual)
-                if selectedFilesCount <= 1 then
+                if selectedFilesCount <= 1 then -- Only show info for single item
                     table.insert(menuOptions, {text=L.get("info"), icon=iconInfo})
                 end
                 -- Favoritos
@@ -1082,14 +1121,14 @@ local function handleListInput(key)
                 -- 4. Borrar (Al final)
                 if not item.isFavorites then
                     if item.sourceLabel == "SD½" then
-                        table.insert(menuOptions, {text=L.get("delete_sd1"), icon=iconTrash})
+                        table.insert(menuOptions, {text=L.get("delete_sd1"), icon=iconTrash}) -- Delete from SD1
                         table.insert(menuOptions, {text=L.get("delete_sd2"), icon=iconTrash})
                     else
                         table.insert(menuOptions, {text=L.get("delete"), icon=iconTrash})
                     end
                 end
                 
-                inputCooldown = 0.15
+                inputCooldown = 0.15 -- Reset cooldown
             end
         end
     elseif key == "x" then
@@ -1107,36 +1146,36 @@ local function handleListInput(key)
     end
 end
 
-local function keypressed(key)
-    log("Key pressed: " .. key .. " (State: " .. state .. ")")
-    if inputCooldown > 0 then
-        log("Input ignored due to cooldown (" .. string.format("%.2f", inputCooldown) .. "s)")
+local function keypressed(key, global_state)
+    global_state.log("Key pressed: " .. key .. " (State: " .. global_state.state .. ")")
+    if global_state.inputCooldown > 0 then
+        global_state.log("Input ignored due to cooldown (" .. string.format("%.2f", global_state.inputCooldown) .. "s)")
         return
     end
 
     if key == "escape" then -- 'select' button on controller
-        log("Select button pressed, quitting application.")
+        global_state.log("Select button pressed, quitting application.")
         love.event.quit()
         return
     end
 
     -- Si se está mostrando la pantalla de indexación, bloquear casi toda la entrada.
-    if launchMode == "Juego Unico" and isVirtualRoot and not romIndex then
-        if state == "OPTIONS_MENU" then
+    if global_state.launchMode == "Juego Unico" and global_state.isVirtualRoot and not global_state.romIndex then
+        if global_state.state == "OPTIONS_MENU" then
             -- Permitir navegación si logramos abrir el menú
         elseif key == "f1" then
             -- Permitir Start para abrir configuración (cambiar vista, etc)
         else
             -- Bloquear cualquier otra tecla
-            return
+            return -- Block all other inputs
         end
     end
 
     -- Modal Help Menu Logic
-    if showHelp then
+    if global_state.showHelp then
         -- Close with the same help button (f3/R1) or the back button (B)
         if key == "f3" or key == "backspace" or key == "b" then
-            showHelp = false
+            global_state.showHelp = false
             closingHelp = true
             inputCooldown = 0.2 -- Evita que la pulsación de B también salga del menú subyacente
             return -- Salir inmediatamente para que no se procese nada más
@@ -1146,100 +1185,100 @@ local function keypressed(key)
     end
 
     if key == "f3" then
-        showHelp = true
+        global_state.showHelp = true
         return
     end
 
     if key == "f1" then -- Start button
-        if state == "OPTIONS_MENU" and menuTitle == L.get("config") then
-            closingMenu = true
-            log("Configuration Menu exited")
-            inputCooldown = 0.2
+        if global_state.state == "OPTIONS_MENU" and global_state.menuTitle == global_state.L.get("config") then
+            global_state.closingMenu = true
+            global_state.log("Configuration Menu exited")
+            global_state.inputCooldown = 0.2
             return
-        elseif state == "LIST" then
-            log("Opening Configuration Menu")
-            state = "OPTIONS_MENU"
-            menuAnim = 0
-            menuTitle = L.get("config")
-            menuStack = {}
-            menuMessage = ""
-            menuSelection = 1
-            menuOptions = {}
-            local displayMode = (launchMode == "Folder") and L.get("folder") or L.get("single_game")
-            local displayView = (viewMode == "LIST") and L.get("list") or L.get("grid")
-            if romPath ~= "@Favorites/" then
-                table.insert(menuOptions, {text = L.get("mode") .. ": " .. displayMode, icon = iconGame})
+        elseif global_state.state == "LIST" then
+            global_state.log("Opening Configuration Menu")
+            global_state.state = "OPTIONS_MENU"
+            global_state.menuAnim = 0
+            global_state.menuTitle = global_state.L.get("config")
+            global_state.menuStack = {}
+            global_state.menuMessage = ""
+            global_state.menuSelection = 1
+            global_state.menuOptions = {}
+            local displayMode = (global_state.launchMode == "Folder") and global_state.L.get("folder") or global_state.L.get("single_game")
+            local displayView = (global_state.viewMode == "LIST") and global_state.L.get("list") or global_state.L.get("grid")
+            if global_state.romPath ~= "@Favorites/" then
+                table.insert(global_state.menuOptions, {text = global_state.L.get("mode") .. ": " .. displayMode, icon = global_state.iconGame})
             end
-            table.insert(menuOptions, {text = L.get("view") .. ": " .. displayView, icon = iconFolder})
-            table.insert(menuOptions, {text = L.get("hide_empty") .. ": " .. (hideEmpty and L.get("on") or L.get("off")), icon = iconHide})
-            table.insert(menuOptions, {text = L.get("mark_played") .. ": " .. (markPlayed and L.get("yes") or L.get("no")), icon = iconRom})
-            table.insert(menuOptions, {text = L.get("hide_favorites") .. ": " .. (hideFavorites and L.get("on") or L.get("off")), icon = iconHide})
-            table.insert(menuOptions, {text = L.get("reindex"), icon = iconReload})
-            table.insert(menuOptions, {text = L.get("cleanup"), icon = iconTrash})
-            inputCooldown = 0.2
+            table.insert(global_state.menuOptions, {text = global_state.L.get("view") .. ": " .. displayView, icon = global_state.iconFolder})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("hide_empty") .. ": " .. (global_state.hideEmpty and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("mark_played") .. ": " .. (global_state.markPlayed and global_state.L.get("yes") or global_state.L.get("no")), icon = global_state.iconRom})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("reindex"), icon = global_state.iconReload})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("cleanup"), icon = global_state.iconTrash})
+            global_state.inputCooldown = 0.2
             return
         end
     end
 
     -- State Dispatch
-    local handler = stateHandlers[state]
+    local handler = stateHandlers[global_state.state]
     if handler then
-        handler(key)
+        handler(key, global_state)
     else
         -- Default LIST handler logic (including empty dir check)
-        handleListInput(key)
+        handleListInput(key, global_state)
     end
 end
 
-local function gamepadpressed(joystick, button)
+local function gamepadpressed(joystick, button, global_state)
     if button == "a" then
-        keypressed("kpenter") -- Usamos kpenter para mayor compatibilidad
+        keypressed("kpenter", global_state) -- Usamos kpenter para mayor compatibilidad
     elseif button == "b" then
-        keypressed("backspace")
+        keypressed("backspace", global_state)
     elseif button == "y" then
-        keypressed("tab") -- Physical Y (Left) -> Options
+        keypressed("tab", global_state) -- Physical Y (Left) -> Options
     elseif button == "x" then
-        keypressed("x") -- Physical X (Top) -> Select
+        keypressed("x", global_state) -- Physical X (Top) -> Select
     elseif button == "dpleft" then
-        keypressed("left")
+        keypressed("left", global_state)
     elseif button == "dpright" then
-        keypressed("right")
+        keypressed("right", global_state)
     elseif button == "back" then
-        keypressed("escape")
+        keypressed("escape", global_state)
     elseif button == "start" then
-        keypressed("f1")
+        keypressed("f1", global_state)
     elseif button == "leftshoulder" then
-        keypressed("f") -- L1 -> Search
+        keypressed("f", global_state) -- L1 -> Search
     elseif button == "triggerleft" then
-        keypressed("f2") -- L2 -> Clear Filter
+        keypressed("f2", global_state) -- L2 -> Clear Filter
     elseif button == "rightshoulder" then
-        keypressed("f3") -- R1 -> Help
+        keypressed("f3", global_state) -- R1 -> Help
     elseif button == "triggerright" then
-        keypressed("f4") -- R2 -> Unused
+        keypressed("f4", global_state) -- R2 -> Unused
     end
 end
 
-local function joystickpressed(joystick, button)
+local function joystickpressed(joystick, button, global_state)
     -- Fallback para botones que no se detectan como Gamepad (L1/R1/L2 a veces)
     -- Mapeo común en dispositivos Anbernic/muOS: 4=L1, 5=R1, 6=L2
     local isGamepad = joystick:isGamepad()
     
     if button == 4 then
-        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end
-        keypressed("f") -- L1 -> Buscar
+        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end -- Prevent double input
+        keypressed("f", global_state) -- L1 -> Buscar
     elseif button == 5 then
-        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end
-        keypressed("f3") -- R1 -> Ayuda
+        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end -- Prevent double input
+        keypressed("f3", global_state) -- R1 -> Ayuda
     elseif button == 6 then
-        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end
-        keypressed("f2") -- L2 -> Limpiar Filtro
+        if isGamepad and (joystick:isGamepadDown("a") or joystick:isGamepadDown("b") or joystick:isGamepadDown("x") or joystick:isGamepadDown("y")) then return end -- Prevent double input
+        keypressed("f2", global_state) -- L2 -> Limpiar Filtro
     end
 end
 
-local function textinput(t)
-    if showHelp then return end
-    if state == "SEARCH" then
-        searchQuery = searchQuery .. t
+local function textinput(t, global_state)
+    if global_state.showHelp then return end
+    if global_state.state == "SEARCH" then
+        global_state.searchQuery = global_state.searchQuery .. t
         filterFiles()
     end
 end

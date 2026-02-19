@@ -1,6 +1,4 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 local theme = {}
 
 -- Path to the new font

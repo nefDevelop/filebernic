@@ -1,6 +1,4 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 local M = {}
 
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
@@ -128,34 +126,33 @@ end
 
 local systemIconCache = {}
 
-function M.getSystemIcon(sysName)
+function M.getSystemIcon(sysName, fs_getInfo, gfx_newImage)
     if not sysName then return nil end
     if systemIconCache[sysName] then return systemIconCache[sysName] end
-    
+
     local variants = M.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
-        local path = "assets/systems/" .. v .. ".png"
-        if love.filesystem.getInfo(path) then
-            local img = love.graphics.newImage(path)
+        local path = "assets/systems/" .. v .. ".png" -- Construct path
+        if fs_getInfo(path) then -- Check if file exists
+            local img = gfx_newImage(path) -- Load image
             systemIconCache[sysName] = img
             return img
         end
     end
     return nil
 end
-
 local systemContentIconCache = {}
 
-function M.getSystemContentIcon(sysName)
+function M.getSystemContentIcon(sysName, fs_getInfo, gfx_newImage)
     if not sysName then return nil end
     if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
     local variants = M.getSystemVariants(sysName)
 
     for _, v in ipairs(variants) do
         local path = "assets/systems/" .. v .. "-content.png"
-        if love.filesystem.getInfo(path) then
-            local img = love.graphics.newImage(path)
+        if fs_getInfo(path) then
+            local img = gfx_newImage(path)
             systemContentIconCache[sysName] = img
             return img
         end

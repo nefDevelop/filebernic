@@ -1,6 +1,4 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 -- Define a local round function for compatibility with older Lua versions
 local round = math.round or love.math.round or function(x)
     return math.floor(x + 0.5)
@@ -1309,14 +1307,14 @@ local function drawGrid(w, h)
         local imageToDraw = nil
         if not item.isDir then
             local base = item.name:gsub("%..-$", "")
-            
+
             -- Determinar la ruta de la carátula correcta para el item (considerando virtual root)
             local systemForItem = utils.getSystemNameForItem(item, systemName, isVirtualRoot)
 
             if launchMode == "Juego Unico" and item.versions and #item.versions > 0 then
                 local v = item.versions[1]
                 base = v.name:gsub("%..-$", "")
-                systemForItem = v.system or systemForItem
+                systemForItem = v.system or systemForItem -- Use version's system if available
             end
 
             local artPathForItem = filesystem.getArtPathForSystem(systemForItem)
@@ -1357,17 +1355,17 @@ local function drawGrid(w, h)
             love.graphics.setColor(1, 1, 1)
             local icon = item.icon
             if not icon and item.isDir then
-                icon = utils.getSystemIcon(item.name)
+                icon = utils.getSystemIcon(item.name, love.filesystem.getInfo, love.graphics.newImage)
             end
             icon = icon or (item.isDir and iconFolder)
             
             if not icon then
                 if item.system then
-                    icon = utils.getSystemContentIcon(item.system)
+                    icon = utils.getSystemContentIcon(item.system, love.filesystem.getInfo, love.graphics.newImage)
                 end
                 if not icon then icon = currentSystemContentIcon or iconRom end
             end
-            
+
             local availableH = cellH - 65 -- Menos altura disponible para el icono
             local availableW = cellW - 20
             local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.7
@@ -1395,7 +1393,7 @@ local function drawGrid(w, h)
             
             for idx = #systems, 1, -1 do
                 local sys = systems[idx]
-                local sIcon = utils.getSystemIcon(sys)
+                local sIcon = utils.getSystemIcon(sys, love.filesystem.getInfo, love.graphics.newImage)
                 if sIcon then
                     if isLastPlayed and markPlayed and sys == playedSystem then
                         love.graphics.setColor(0.2, 0.8, 0.3) -- Verde más brillante para que se vea el icono
@@ -1452,7 +1450,7 @@ local function drawGrid(w, h)
 
         if isLastPlayed and markPlayed and launchMode ~= "Juego Unico" then
              local pIcon = iconRom
-             local sys = playedSystem
+             local sys = playedSystem -- This is already determined from playedRoms
              if not sys then sys = utils.getSystemNameForItem(item) end
              if sys then pIcon = utils.getSystemIcon(sys) or iconRom end
              
@@ -1718,7 +1716,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                 if not iconToDraw and item.system then
                     iconToDraw = utils.getSystemContentIcon(item.system) or utils.getSystemIcon(item.system)
                 end
-                iconToDraw = iconToDraw or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom)
+                iconToDraw = iconToDraw or (item.isDir and iconFolder) or (currentSystemContentIcon or iconRom) -- Fallback to global icons
                 local drawScale = layout.iconScale
                 if iconToDraw == iconFavorite then drawScale = favScale -- Usar favScale precalculado
                 elseif iconToDraw ~= iconFolder and iconToDraw ~= iconRom then -- Reducido de 0.8 para hacer el icono ~4px más pequeño
@@ -1861,7 +1859,7 @@ local function drawMainList(w, h, sdColX, sdColW, previewBoxW, previewBoxX, show
                     
                     for idx, sys in ipairs(systems) do
                         local icon = utils.getSystemIcon(sys)
-                        if icon then -- Asegurar que el icono existe
+                        if icon then -- Ensure the icon exists
                             local iconColor = (isLastPlayed and markPlayed and sys == playedSystem) and {0.2, 0.8, 0.3, 1} or {1, 1, 1, 1}
                             love.graphics.setColor(iconColor)
                             local scale = iconSize / icon:getHeight() -- Escala para los iconos de sistema apilados

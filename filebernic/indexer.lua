@@ -1,8 +1,7 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
 require "love.filesystem"
 require "love.timer"
+
 local json = require "libs.dkjson"
 local scraper = require "scraper"
 local filesystem = require "filesystem"
@@ -159,8 +158,8 @@ while true do
         local config = msg.config
         local systemName = msg.systemName
         
-        -- Proteger la llamada al scraper para que no mate el hilo si falla
-        local status, results = pcall(scraper.getScrapeResults, item, config, log, systemName)
+        -- Protect the scraper call to prevent thread termination on failure
+        local status, results = pcall(scraper.getScrapeResults, item, config, log, systemName, love.filesystem.getInfo)
         if status then
             channel_out:push({type="scrape_result", results=results})
         else
@@ -186,7 +185,7 @@ while true do
             -- Actualizar rutas si es necesario (para listas mixtas)
             local sName, mArt, mText, mPreview = filesystem.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
             
-            local status, results = pcall(scraper.getScrapeResults, item, config, log, sName)
+            local status, results = pcall(scraper.getScrapeResults, item, config, log, sName, love.filesystem.getInfo)
             
             if status then
                 if results and #results > 0 and not results[1].error then

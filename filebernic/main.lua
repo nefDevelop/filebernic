@@ -1,9 +1,7 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: lowercase-global
----@diagnostic disable: undefined-field
-
 local json = require "libs.dkjson"
 utils = require "utils"
+
 Loader = require "loader"
 State = require "state"
 preview = require "preview"
@@ -22,8 +20,7 @@ config = {
     scraperApi = "all", -- Opciones: "all", "libretro", "thegamesdb"
     thegamesdb_apikey = "",
     language = nil -- Idioma por defecto (nil para auto-detectar)
-}
-scraperApi = config.scraperApi
+    }
 secondaryPath = nil
 muosArtPath = ""
 muosTextPath = ""
@@ -31,7 +28,8 @@ muosPreviewPath = ""
 files = {}
 selectedIndex = 1
 state = "LIST" -- LIST, POST_GAME, DELETE_MENU, OPTIONS_MENU, SCRAPER_VIEW, SCRAPING_IN_PROGRESS, SCRAPER_RESULTS, SEARCH
-itemToDelete = nil
+itemToDelete = nil -- Item currently selected for deletion
+
 lastPlayedRom = ""
 playedRoms = {}
 iconFolder, iconRom, iconNetwork, iconReload, iconTrash, iconHide, iconInfo, iconSaveStates, iconList, iconGrid, iconGame, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
@@ -56,7 +54,8 @@ theme = nil
 fontList, fontTitle, fontSmall, fontMedium, fontHuge, fontTopBar, fontSelected, fontClock = nil, nil, nil, nil, nil, nil, nil, nil
 menuOptions = {} -- Inicializar vacío, se llenará dinámicamente
 menuSelection = 1
-menuTitle = ""
+menuTitle = "" -- Title of the current menu
+
 menuMessage = ""
 showHelp = false
 closingMenu = false
@@ -71,7 +70,8 @@ keyboardAnim = 0
 saveFiles = {}
 saveManagerSelection = 1
 cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = false, progress = 0, cursor = {col=1, row=1}, confirming = false }
-cleanupCoroutine = nil
+cleanupCoroutine = nil -- Coroutine for cleanup scan
+
 scraperResults = {}
 scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
 scraperSelection = 1
@@ -95,7 +95,8 @@ keyboardGrid = {
     {"Z", "X", "C", "V", "B", "N", "M", ".", "-", "OK"}
 }
 keyboardRow = 1
-keyboardCol = 1
+keyboardCol = 1 -- Current column in the virtual keyboard
+
 
 validExtensions = {
     -- Nintendo
@@ -185,44 +186,6 @@ keyHeld = nil -- ('up' o 'down')
 isVirtualRoot = false
 
 filesystem = require "filesystem"
-
-local systemIconCache = {}
-
-function getSystemIcon(sysName)
-    if not sysName then return nil end
-    if systemIconCache[sysName] then return systemIconCache[sysName] end
-    
-    local variants = utils.getSystemVariants(sysName)
-
-    for _, v in ipairs(variants) do
-        local path = "assets/systems/" .. v .. ".png"
-        if love.filesystem.getInfo(path) then
-            local img = love.graphics.newImage(path)
-            systemIconCache[sysName] = img
-            return img
-        end
-    end
-    return nil
-end
-
-local systemContentIconCache = {}
-
-function getSystemContentIcon(sysName)
-    if not sysName then return nil end
-    if systemContentIconCache[sysName] then return systemContentIconCache[sysName] end
-    local variants = utils.getSystemVariants(sysName)
-
-    for _, v in ipairs(variants) do
-        local path = "assets/systems/" .. v .. "-content.png"
-        if love.filesystem.getInfo(path) then
-            local img = love.graphics.newImage(path)
-            systemContentIconCache[sysName] = img
-            return img
-        end
-    end
-    return nil
-end
-
 function jumpToNextLetter()
     if #files == 0 then return end
     local current = files[selectedIndex].name:sub(1,1):upper()
@@ -281,15 +244,15 @@ function jumpToPrevLetter()
 end
 
 function updateSystemPaths()
-    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.graphics.newImage)
+    systemName, muosArtPath, muosTextPath, muosPreviewPath, currentSystemIcon, currentSystemContentIcon = filesystem.updateSystemPaths(systemName, romPath, log, love.filesystem.getInfo, love.graphics.newImage)
 end
 
 function refreshFiles()
     if romPath and romPath ~= "" and romPath:sub(-1) ~= "/" then romPath = romPath .. "/" end
     romPath = filesystem.fixPathCase(romPath) -- Corregir mayúsculas/minúsculas de la ruta
-    log("Refreshing files... Path: " .. romPath)
-    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, log)
-    preview.load()
+    log("Refreshing files... Path: " .. romPath) -- Log before refreshFiles
+    files, selectedFilesCount, selectedIndex, allFiles = filesystem.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode, hideEmpty, validExtensions, romPath, secondaryPath, selectedIndex, allFiles, log, favoriteRoms, hideFavorites)
+    preview.load(_G, log, loader)
 end
 
 function updateFileList(newIndex)
@@ -365,7 +328,7 @@ function updateFileList(newIndex)
     allFiles = {}
     for _, item in ipairs(files) do table.insert(allFiles, item) end
     
-    preview.load()
+    preview.load(_G, log, loader)
 end
 
 function log(message)
@@ -454,7 +417,7 @@ end
 
 function love.quit()
     log("Quitting application...")
-    State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites)
+    State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love.filesystem)
     filesystem.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json.encode, love.filesystem.getSource, io.open)
     loader:quit()
     if indexerChannelIn then indexerChannelIn:push({command="quit"}) end
@@ -499,8 +462,14 @@ function love.load(arg)
     end
     
     love.keyboard.setKeyRepeat(false) -- Desactivado para control manual
-    
-    loader = Loader:new(log)
+    scraperApi = config.scraperApi -- Initialize scraperApi after config is loaded
+
+    loader = Loader:new(log, {
+        thread = love.thread,
+        filesystem = love.filesystem,
+        image = love.image,
+        graphics = love.graphics
+    })
     
     -- Inicializar hilo de indexado
     indexerThread = love.thread.newThread("indexer.lua")
@@ -645,7 +614,7 @@ function love.load(arg)
     }
 
     -- Cargar configuración global (API keys, etc)
-    config = State.loadConfig(config)
+    config = State.loadConfig(config, love.filesystem)
     scraperApi = config.scraperApi
 
     -- Detectar idioma si no está forzado en config
@@ -659,7 +628,7 @@ function love.load(arg)
         end
     end
     L.current = config.language or "es" -- Establecer idioma actual (fallback a español)
-
+    
     -- Cargar configuración guardada
     local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")
     if f then
@@ -673,7 +642,8 @@ function love.load(arg)
             if loadedState.launchMode then launchMode = loadedState.launchMode end
             if loadedState.hideFavorites ~= nil then hideFavorites = loadedState.hideFavorites end
             if launchMode == "Juego Unico" then
-                romPath = "" -- Forzar raíz virtual en Modo Único
+                -- Forzar raíz virtual en Modo Único
+                romPath = ""
             elseif loadedState.romPath then 
                 romPath = normalizePath(loadedState.romPath)
                 if romPath and romPath ~= "" and romPath:sub(-1) ~= "/" then romPath = romPath .. "/" end
@@ -705,10 +675,11 @@ function love.load(arg)
     -- Determine initial view: app_state.json -> lastPlayedRom -> createMergedVirtualRoot
     if romPath == "" and launchMode ~= "Juego Unico" then -- Solo auto-navegar a carpeta en Modo Carpeta
         if lastPlayedRom and lastPlayedRom ~= "" then
-            playedRoms[lastPlayedRom] = true -- Ensure the last played is marked
+            -- Ensure the last played is marked
+            playedRoms[lastPlayedRom] = true
             romPath = lastPlayedRom:match("(.*/)")
             -- selectedIndex will be updated after refreshFiles
-        end
+        end -- End if lastPlayedRom
     end
 
     if romPath ~= "" then
@@ -721,12 +692,13 @@ function love.load(arg)
                     break
                 end
             end
-        end
-        preview.load()
+        end -- End if lastPlayedRom
+        preview.load(_G, log, loader)
     else
         log("Creating merged virtual root...")
-        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, getSystemIcon, allFiles, nil, favoriteRoms, hideFavorites)
-        preview.load()
+        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles =
+            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites)
+        preview.load(_G, log, loader)
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -746,27 +718,32 @@ function love.load(arg)
                  if found then break end
              end
              if found then
-                preview.load()
+                preview.load(_G, log, loader)
              end
-        end
+        end -- End if lastPlayedRom
     end
 
     -- Load modules
     love.draw = require "drawing"
     log("DEBUG: drawing.lua loaded. Type of love.draw: " .. type(love.draw))
-    love.update = require "update"
+    local update_function = require "update"
     local input = require "input"
-    love.keypressed = input.keypressed
-    love.gamepadpressed = input.gamepadpressed
-    love.joystickpressed = input.joystickpressed
-    love.textinput = input.textinput
+    love.keypressed = function(key) input.keypressed(key, _G) end
+    -- Pass global state to update function
+    love.update = function(dt)
+        update_function(dt, _G, log, loader, updateFileList)
+    end
+    love.gamepadpressed = function(j, b) input.gamepadpressed(j, b, _G) end
+    love.joystickpressed = function(j, b) input.joystickpressed(j, b, _G) end
+    love.textinput = function(t) input.textinput(t, _G) end
 
     -- Intentar cargar el índice ANTES de crear la vista inicial.
     -- Esto evita que la lista aparezca vacía (Files count: 0) si el índice ya existe y es válido.
     local needsIndexing = false
     
     -- 1. Intentar cargar Caché de Vista para arranque instantáneo
-    local cachedFiles, cachedIndex, cachedPath, cachedVirtual = filesystem.loadViewCache(json.decode, love.filesystem.getSource, io.open, getSystemIcon, getSystemContentIcon)
+    local cachedFiles, cachedIndex, cachedPath, cachedVirtual =
+        filesystem.loadViewCache(json.decode, love.filesystem.getSource, io.open, utils.getSystemIcon, utils.getSystemContentIcon, love.filesystem.getInfo, love.graphics.newImage)
     if cachedFiles and #cachedFiles > 0 then
         log("View Cache loaded. Items: " .. #cachedFiles)
         files = cachedFiles
@@ -774,11 +751,11 @@ function love.load(arg)
         romPath = cachedPath or ""
         isVirtualRoot = cachedVirtual
         allFiles = {} -- Reconstruir allFiles
-        for _, f in ipairs(files) do table.insert(allFiles, f) end
+        for _, f in ipairs(files) do table.insert(allFiles, f) end -- Populate allFiles from cache
     end
 
     -- Delegar la carga/comprobación del índice al hilo de fondo para no bloquear la UI
-    -- Si el índice es grande (20MB+), esto evitará que la app se congele al inicio.
+    -- If the index is large (20MB+), this will prevent the app from freezing at startup.
     isIndexing = true
     indexStateMessage = "Cargando base de datos..."
     indexerChannelIn:push({command="check_index", validExtensions=validExtensions, sourceDir=love.filesystem.getSource(), priorityPath=romPath})
@@ -786,11 +763,12 @@ function love.load(arg)
     -- Determine initial view: app_state.json -> lastPlayedRom -> createMergedVirtualRoot
     -- Si cargamos caché, romPath ya tiene valor, así que esto se salta si ya tenemos vista.
     if #files == 0 and romPath == "" and launchMode ~= "Juego Unico" then 
-        if lastPlayedRom and lastPlayedRom ~= "" then
+        if lastPlayedRom and lastPlayedRom ~= "" then -- If there's a last played ROM
+            -- Ensure the last played is marked
             playedRoms[lastPlayedRom] = true -- Ensure the last played is marked
             romPath = lastPlayedRom:match("(.*/)")
             -- selectedIndex will be updated after refreshFiles
-        end
+        end -- End if lastPlayedRom
     end
 
     if #files == 0 and romPath ~= "" then
@@ -803,12 +781,13 @@ function love.load(arg)
                     break
                 end
             end
-        end
-        preview.load()
+        end -- End if lastPlayedRom
+        preview.load(_G, log, loader)
     elseif #files == 0 then
         log("Creating merged virtual root...")
-        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles = filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, nil, allFiles, nil, favoriteRoms, hideFavorites)
-        preview.load()
+        files, isVirtualRoot, romPath, secondaryPath, selectedIndex, allFiles =
+            filesystem.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath, selectedIndex, launchMode, romIndex, hideEmpty, validExtensions, utils.getSystemIcon, love.filesystem.getInfo, love.graphics.newImage, allFiles, nil, favoriteRoms, hideFavorites)
+        preview.load(_G, log, loader)
         -- En Modo Único, buscar y seleccionar el último juego en la lista global
         if lastPlayedRom and lastPlayedRom ~= "" then
              local found = false
@@ -828,13 +807,13 @@ function love.load(arg)
                  if found then break end
              end
              if found then
-                preview.load()
+                preview.load(_G, log, loader)
              end
-        end
+        end -- End if lastPlayedRom
     end
     
     -- Si cargamos desde caché, asegurar que cargamos previews
     if #files > 0 then
-        preview.load()
+        preview.load(_G, log, loader)
     end
 end

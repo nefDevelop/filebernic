@@ -1,7 +1,4 @@
 ---@diagnostic disable: undefined-global
----@diagnostic disable: undefined-field
-
-
 local json = require "libs.dkjson"
 local utils = require "utils"
 local filesystem = require "filesystem"
@@ -18,7 +15,7 @@ function M.getScrapeResults(item, config, log, systemName)
     local localData = filesystem.findInGamelist(item.fullPath, item.name)
     if localData then
         local tempImgPath = nil
-        if localData.imagePath then
+        if localData.imagePath and fs_getInfo(localData.imagePath) then
             local f = io.open(localData.imagePath, "r")
             if f then
                 f:close()
@@ -32,7 +29,7 @@ function M.getScrapeResults(item, config, log, systemName)
                  imagePath = tempImgPath, description = localData.description, year = localData.year,
                  region = "Local", tempPath = tempImgPath, source = "Local XML"
              })
-             return results -- Si encontramos local, no buscamos online
+             return results -- If local data is found, no need to search online
         end
     end
 
@@ -54,7 +51,8 @@ function M.getScrapeResults(item, config, log, systemName)
                 local displaySystemName = utils.getSystemDisplayName(systemName)
                 platformParam = "&platform=" .. utils.urlencode(displaySystemName)
             end
-            local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName .. platformParam .. "&fields=overview,release_date&include=boxart,screenshot"
+            local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName ..
+                        platformParam .. "&fields=overview,release_date&include=boxart,screenshot"
             log("TGDB Request: " .. url)
 
             local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
@@ -63,7 +61,7 @@ function M.getScrapeResults(item, config, log, systemName)
                 response = handle:read("*a")
                 handle:close()
             end
-            log("TGDB Response: " .. (response or "nil"))
+            -- log("TGDB Response: " .. (response or "nil")) -- Commented for less verbosity
 
             if response and response:sub(1, 1) == "{" then
                 local data = json.decode(response)
@@ -75,7 +73,8 @@ function M.getScrapeResults(item, config, log, systemName)
                                 if art.side == "front" then
                                     local imageUrl = "https://cdn.thegamesdb.net/images/original/" .. art.filename
                                     local tempImgPath = "/tmp/scraper_tgdb_" .. gameId .. ".png"
-                                    os.execute("curl -s -L '" .. imageUrl .. "' -o " .. tempImgPath)
+                                    os.execute("curl -s -L '" .. imageUrl .. "' -o '" .. tempImgPath .. "'")
+
                                     
                                     local year = nil
                                     if game.release_date then
@@ -87,11 +86,10 @@ function M.getScrapeResults(item, config, log, systemName)
                                         local scr = data.include.screenshot.data[gameId][1]
                                         if scr then
                                             local screenUrl = "https://cdn.thegamesdb.net/images/original/" .. scr.filename
-                                            tempScreenPath = "/tmp/scraper_tgdb_scr_" .. gameId .. ".png"
-                                            os.execute("curl -s -L '" .. screenUrl .. "' -o " .. tempScreenPath)
+                                            tempScreenPath = "/tmp/scraper_tgdb_scr_" .. gameId .. ".png" -- Construct path
+                                            os.execute("curl -s -L '" .. screenUrl .. "' -o '" .. tempScreenPath .. "'") -- Download
                                         end
                                     end
-
                                     local exists = false
                                     if love.filesystem.getInfo(tempImgPath) then exists = true
                                     else
@@ -131,7 +129,8 @@ function M.getScrapeResults(item, config, log, systemName)
         
         local sysName = libretroSystems[systemName:lower()]
         if not sysName then
-             local msg = "Sistema no mapeado en Libretro: " .. tostring(systemName)
+             local msg = "Sistema no mapeado en Libretro: " .. tostring(systemName) -- Log message
+
              log(msg)
              table.insert(results, {error=true, text=msg})
         else
@@ -139,15 +138,14 @@ function M.getScrapeResults(item, config, log, systemName)
              
              local function tryLibretro(nameToTry, label, suffix)
                  local fullName = nameToTry .. (suffix or "")
-                 local nameEnc = utils.urlencode(fullName):gsub("%+", "%%20")
+                 local nameEnc = utils.urlencode(fullName):gsub("%+", "%%20") -- Encode name for URL
                  local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEnc .. ".png"
                  -- log("Libretro Request ("..label.."): " .. url) -- Menos verboso
                  
                  local tempImgPath = "/tmp/scraper_libretro_" .. label:gsub(" ", "_") .. (suffix and suffix:gsub("[^%w]", "") or "") .. ".png"
-                 local handle = io.popen("curl -v -s -L -f '" .. url .. "' -o " .. tempImgPath .. " 2>&1")
-                 local output = nil
+                 local handle = io.popen("curl -s -L -f '" .. url .. "' -o '" .. tempImgPath .. "'")
                  if handle then
-                     output = handle:read("*a")
+                     -- output = handle:read("*a") -- Not used, removed to avoid luacheck warning
                      handle:close()
                  end
                  -- log("Libretro Response ("..label.."): " .. (output or "nil"))
@@ -161,7 +159,8 @@ function M.getScrapeResults(item, config, log, systemName)
 
                  if data and #data > 0 then
                      local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
-                     local tempScreenPath = "/tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png"
+                     local tempScreenPath = "/tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png" -- Construct path
+
                      os.execute("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
                      
                      table.insert(results, {
@@ -187,7 +186,8 @@ function M.getScrapeResults(item, config, log, systemName)
                  local baseName = cleanName:gsub("%b()", ""):gsub("%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
                  
                  -- Lista de sufijos probables en orden de prioridad
-                 local suffixes = {
+                 local suffixes = { -- Common suffixes for regional variations
+
                      " (USA, Europe)", " (USA)", " (Europe)", " (Japan)", " (World)", 
                      " (USA) (Rev A)", " (USA, Europe) (Rev A)"
                  }
@@ -206,7 +206,8 @@ function M.getScrapeResults(item, config, log, systemName)
     if config.scraperApi == "mock" then
         log("Mock Scraping: " .. item.name)
         local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
-        local mockTemp = "/tmp/scraper_mock.png"
+        local mockTemp = "/tmp/scraper_mock.png" -- Temporary file path
+
         os.execute("cp '" .. mockSrc .. "' " .. mockTemp)
         
         local f = io.open(mockTemp, "r")
