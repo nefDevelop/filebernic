@@ -1,1 +1,3 @@
+/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Aladdin (USA).gb
 /home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Adventure Island II (UE) [!].gb
+/home/nef734/Documentos/Proyectos/filebernic/filebernic/../Simulador_SD/GB/Captain Tsubasa VS.gb

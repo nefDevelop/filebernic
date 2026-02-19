@@ -63,6 +63,9 @@ local function getFadeGradientMesh()
     return fadeGradientMesh
 end
 
+local topGradientMesh = nil -- Cache for the top gradient mesh
+local bottomGradientMesh = nil -- Cache for the bottom gradient mesh
+
 local function drawStar(x, y, size)
     local vertices = {}
     local outerRadius = size
@@ -2066,6 +2069,35 @@ local function draw(global_state)
     end
 
     drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
+
+    -- Draw the bottom gradient (between the list and the bottom bar)
+    -- Initialize bottomGradientMesh once
+    if not bottomGradientMesh then
+        local r, g, b = 0, 0, 0 -- Use black for the gradient to make it visible
+        local gradientLength = 20 -- As per request
+        local opaquePercentage = 40 -- As per request
+        local w_screen, _ = love.graphics.getDimensions()
+        local vertices = utils.createGradientVertices("bottom", opaquePercentage, gradientLength, w_screen, r, g, b)
+        bottomGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
+    end
+    love.graphics.setColor(1, 1, 1, 1) -- Reset color, mesh vertices handle alpha
+    -- Position it 20 pixels above the bottom bar (which starts at h - 30)
+    love.graphics.draw(bottomGradientMesh, 0, h - 30 - 20)
+
+    -- Draw the top gradient (moved here to be in front of the list but behind the top bar)
+    -- Initialize topGradientMesh once, covering the top bar and fading below it
+    if not topGradientMesh then
+        local r, g, b = 0, 0, 0 -- Use black for the gradient to make it visible
+        local topBarHeight = layout.listY -- The height of the top bar area (where title/subtitle ends)
+        local fadeLength = 60 -- The length over which the gradient will fade (from original 100px total, 40% opaque -> 60% fade)
+        local gradientLength = topBarHeight + fadeLength -- Total length of the gradient
+        local opaquePercentage = (topBarHeight / gradientLength) * 100 -- Percentage of the total length that is fully opaque
+        local w_screen, _ = love.graphics.getDimensions()
+        local vertices = utils.createGradientVertices("top", opaquePercentage, gradientLength, w_screen, r, g, b)
+        topGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
+    end
+    love.graphics.setColor(1, 1, 1, 1) -- Reset color, mesh vertices handle alpha
+    love.graphics.draw(topGradientMesh, 0, 0) -- Draw at the very top of the screen
 
     -- Title (Drawn after the list to be on top of background/dithering)
     drawTopBar(global_state, w, h)

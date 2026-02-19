@@ -209,4 +209,68 @@ local function urlencode(str)
 end
 M.urlencode = urlencode
 
+-- Function to create vertices for a gradient mesh (type "strip")
+-- direction: "top", "bottom", "left", "right"
+-- opaque_percentage: 0-100 (percentage of length that is fully opaque before fading)
+-- length: total length of the gradient (e.g., height for "top"/"bottom", width for "left"/"right")
+-- width: perpendicular width of the gradient (e.g., width for "top"/"bottom", height for "left"/"right")
+-- r, g, b: color components (0-1) for the opaque part of the gradient
+function M.createGradientVertices(direction, opaque_percentage, length, width, r, g, b)
+    local vertices = {}
+    local p = math.max(0, math.min(1, opaque_percentage / 100)) -- Opaque percentage as a fraction
+
+    -- Ensure color components are valid
+    r = r or 1
+    g = g or 1
+    b = b or 1
+
+    if direction == "top" then
+        local y_opaque_end = length * p
+        -- Vertices for a strip mesh (x, y, u, v, r, g, b, a)
+        -- Top-Left, Opaque
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, 1})
+        -- Top-Right, Opaque
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, 1})
+        -- Transition-Left, Opaque
+        table.insert(vertices, {0, y_opaque_end, 0, p, r, g, b, 1})
+        -- Transition-Right, Opaque
+        table.insert(vertices, {width, y_opaque_end, 1, p, r, g, b, 1})
+        -- Bottom-Left, Transparent
+        table.insert(vertices, {0, length, 0, 1, r, g, b, 0})
+        -- Bottom-Right, Transparent
+        table.insert(vertices, {width, length, 1, 1, r, g, b, 0})
+    elseif direction == "bottom" then
+        local y_opaque_start = length * (1 - p)
+        -- Top-Left, Transparent
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, 0})
+        -- Top-Right, Transparent
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, 0})
+        -- Transition-Left, Opaque
+        table.insert(vertices, {0, y_opaque_start, 0, 1 - p, r, g, b, 1})
+        -- Transition-Right, Opaque
+        table.insert(vertices, {width, y_opaque_start, 1, 1 - p, r, g, b, 1})
+        -- Bottom-Left, Opaque
+        table.insert(vertices, {0, length, 0, 1, r, g, b, 1})
+        -- Bottom-Right, Opaque
+        table.insert(vertices, {width, length, 1, 1, r, g, b, 1})
+    elseif direction == "left" then
+        local x_opaque_end = width * p
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, 1})
+        table.insert(vertices, {0, length, 0, 1, r, g, b, 1})
+        table.insert(vertices, {x_opaque_end, 0, p, 0, r, g, b, 1})
+        table.insert(vertices, {x_opaque_end, length, p, 1, r, g, b, 1})
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, 0})
+        table.insert(vertices, {width, length, 1, 1, r, g, b, 0})
+    elseif direction == "right" then
+        local x_opaque_start = width * (1 - p)
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, 0})
+        table.insert(vertices, {0, length, 0, 1, r, g, b, 0})
+        table.insert(vertices, {x_opaque_start, 0, 1 - p, 0, r, g, b, 1})
+        table.insert(vertices, {x_opaque_start, length, 1 - p, 1, r, g, b, 1})
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, 1})
+        table.insert(vertices, {width, length, 1, 1, r, g, b, 1})
+    end
+    return vertices
+end
+
 return M
