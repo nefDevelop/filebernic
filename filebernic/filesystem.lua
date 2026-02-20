@@ -1,8 +1,10 @@
 local M = {}
 local utils = require "utils"
 
+local artPathCache = {}
 function M.getArtPathForSystem(systemName)
     if not systemName or systemName == "" then return nil end
+    if artPathCache[systemName] then return artPathCache[systemName] end
     
     local baseMuosPath
     local f = io.open("/mnt/mmc", "r")
@@ -22,13 +24,18 @@ function M.getArtPathForSystem(systemName)
             if line:sub(-1) == "/" then
                 local dir = line:sub(1, -2)
                 if dir:lower() == systemName:lower() then
-                    return baseMuosPath .. dir .. "/box/"
+                    local res = baseMuosPath .. dir .. "/box/"
+                    h:close()
+                    artPathCache[systemName] = res
+                    return res
                 end
             end
         end
         h:close()
     end
-    return baseMuosPath .. systemName .. "/box/"
+    local res = baseMuosPath .. systemName .. "/box/"
+    artPathCache[systemName] = res
+    return res
 end
 
 function M.hasRoms(path, validExtensions)

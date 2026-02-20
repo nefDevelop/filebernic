@@ -53,8 +53,10 @@ local function getFadeGradientMesh()
         local vertices = {
             {0, 0, 0, 0, 1, 1, 1, 1}, -- Izquierda: Opaco
             {0, 1, 0, 1, 1, 1, 1, 1},
-            {0.7, 0, 0.7, 0, 1, 1, 1, 0}, -- 70%: Transparente (deja 30% visible)
-            {0.7, 1, 0.7, 1, 1, 1, 1, 0},
+            {0.15, 0, 0.15, 0, 1, 1, 1, 1}, -- 15%: Sigue Opaco
+            {0.15, 1, 0.15, 1, 1, 1, 1, 1},
+            {0.85, 0, 0.85, 0, 1, 1, 1, 0}, -- 85%: Transparente
+            {0.85, 1, 0.85, 1, 1, 1, 1, 0},
             {1, 0, 1, 0, 1, 1, 1, 0}, -- Derecha: Transparente (relleno)
             {1, 1, 1, 1, 1, 1, 1, 0}
         }
@@ -65,20 +67,6 @@ end
 
 local topGradientMesh = nil -- Cache for the top gradient mesh
 local bottomGradientMesh = nil -- Cache for the bottom gradient mesh
-
-local function drawStar(x, y, size)
-    local vertices = {}
-    local outerRadius = size
-    local innerRadius = size * 0.4
-    local steps = 10
-    for i = 0, steps - 1 do
-        local radius = (i % 2 == 0) and outerRadius or innerRadius
-        local angle = (i / steps) * math.pi * 2 - math.pi / 2
-        table.insert(vertices, x + math.cos(angle) * radius)
-        table.insert(vertices, y + math.sin(angle) * radius)
-    end
-    love.graphics.polygon("fill", vertices)
-end
 
 local function drawTrimmed(text, x, y, limit, font)
     local dText = text
@@ -577,7 +565,7 @@ local function drawMediaDetailContent(global_state, currentItem, x, y, w, h, alp
     local displayName = utils.getSystemDisplayName(sysName)
     local subtitle = (displayName or "Desconocido") .. " " .. regionInfo
     
-    local coverImg = currentImage or imgNoImage
+    local coverImg = global_state.currentImage -- Puede ser nil
 
     love.graphics.setFont(fontMedium)
     love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
@@ -589,66 +577,64 @@ local function drawMediaDetailContent(global_state, currentItem, x, y, w, h, alp
     
     local spacing = 20
     local coverW, screenW = 0, 0
-    local coverScale, screenScale = 0, 0
     local finalImageH = 0
     
-    if coverImg and global_state.currentScreenshot then
-        local ar1 = coverImg:getWidth() / coverImg:getHeight()
-        local ar2 = global_state.currentScreenshot:getWidth() / global_state.currentScreenshot:getHeight()
-        local totalAvailW = w - 40
-        
-        -- Calcular la altura si las imágenes llenaran el ancho disponible
-        local heightForWidth = (totalAvailW - spacing) / (ar1 + ar2)
-        
-        -- La altura final es el mínimo entre el espacio vertical y el calculado para el ancho
-        finalImageH = math.min(availableH, heightForWidth) -- Final image height
-        
-        coverScale = finalImageH / coverImg:getHeight()
-        screenScale = finalImageH / global_state.currentScreenshot:getHeight()
-    elseif coverImg then
-        coverScale = math.min(1, availableH / coverImg:getHeight())
-        local maxW = w - 40
-        if coverImg:getWidth() * coverScale > maxW then
-            coverScale = maxW / coverImg:getWidth()
-        end
-        finalImageH = coverImg:getHeight() * coverScale
-    elseif currentScreenshot then
-        screenScale = math.min(1, availableH / global_state.currentScreenshot:getHeight())
-        local maxW = w - 40
-        if global_state.currentScreenshot:getWidth() * screenScale > maxW then
-            screenScale = maxW / global_state.currentScreenshot:getWidth()
-        end
-        finalImageH = global_state.currentScreenshot:getHeight() * screenScale
-    end
+    -- Relaciones de aspecto por defecto si no hay imagen (Boxart ~0.7, Screen ~1.33)
+    local ar1 = coverImg and (coverImg:getWidth() / coverImg:getHeight()) or 0.7
+    local ar2 = global_state.currentScreenshot and (global_state.currentScreenshot:getWidth() / global_state.currentScreenshot:getHeight()) or 1.33
+    
+    local totalAvailW = w - 40
+    -- Calcular altura asumiendo que mostramos ambos espacios
+    local heightForWidth = (totalAvailW - spacing) / (ar1 + ar2)
+    finalImageH = math.min(availableH, heightForWidth)
+    
+    coverW = finalImageH * ar1
+    screenW = finalImageH * ar2
 
-    if coverImg then
-        coverW = coverImg:getWidth() * coverScale
-    end
-    if currentScreenshot then
-        screenW = currentScreenshot:getWidth() * screenScale
-    end
-
-    local totalW = coverW + (coverImg and currentScreenshot and spacing or 0) + screenW
+    local totalW = coverW + spacing + screenW
     local startX = x + (w - totalW) / 2
     local drawY = imagesY + (availableH - finalImageH) / 2 -- Y position to draw images
+    local placeholderRadius = 12
     
     love.graphics.setFont(fontMedium)
+    
+    -- Dibujar Boxart (o placeholder)
+    love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
+    local frontText = global_state.L.get("front")
+    local textW = fontMedium:getWidth(frontText)
+    love.graphics.print(frontText, startX + (coverW - textW) / 2, contentY)
+    
+    -- Marco redondeado para Boxart
+    love.graphics.setColor(theme.colors.side_menu_separator[1], theme.colors.side_menu_separator[2], theme.colors.side_menu_separator[3], alpha * 0.5)
+    love.graphics.rectangle("line", startX, drawY, coverW, finalImageH, placeholderRadius)
+
     if coverImg then
-        love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
-        local frontText = global_state.L.get("front")
-        local textW = fontMedium:getWidth(frontText)
-        love.graphics.print(frontText, startX + (coverW - textW) / 2, contentY)
         love.graphics.setColor(1, 1, 1, alpha * (global_state.currentImage and global_state.currentImageAlpha or 1))
-        love.graphics.draw(coverImg, startX, drawY, 0, coverScale, coverScale)
+        local coverScale = finalImageH / coverImg:getHeight()
+        -- Centrar imagen dentro del marco si la relación de aspecto difiere ligeramente
+        local imgW = coverImg:getWidth() * coverScale
+        local imgX = startX + (coverW - imgW) / 2
+        love.graphics.draw(coverImg, imgX, drawY, 0, coverScale, coverScale)
     end
-    if currentScreenshot then
-        local drawX = startX + (coverImg and (coverW + spacing) or 0) -- X position to draw screenshot
-        love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
-        local screenText = global_state.L.get("screen")
-        local textW = fontMedium:getWidth(screenText)
-        love.graphics.print(screenText, drawX + (screenW - textW) / 2, contentY)
+
+    -- Dibujar Screenshot (o placeholder)
+    local drawX = startX + coverW + spacing
+    
+    love.graphics.setColor(theme.colors.text_medium[1], theme.colors.text_medium[2], theme.colors.text_medium[3], alpha)
+    local screenText = global_state.L.get("screen")
+    local textW2 = fontMedium:getWidth(screenText)
+    love.graphics.print(screenText, drawX + (screenW - textW2) / 2, contentY)
+    
+    -- Marco redondeado para Screenshot
+    love.graphics.setColor(theme.colors.side_menu_separator[1], theme.colors.side_menu_separator[2], theme.colors.side_menu_separator[3], alpha * 0.5)
+    love.graphics.rectangle("line", drawX, drawY, screenW, finalImageH, placeholderRadius)
+
+    if global_state.currentScreenshot then
         love.graphics.setColor(1, 1, 1, alpha * global_state.currentScreenshotAlpha)
-        love.graphics.draw(global_state.currentScreenshot, drawX, drawY, 0, screenScale, screenScale)
+        local screenScale = finalImageH / global_state.currentScreenshot:getHeight()
+        local imgW = global_state.currentScreenshot:getWidth() * screenScale
+        local imgX = drawX + (screenW - imgW) / 2
+        love.graphics.draw(global_state.currentScreenshot, imgX, drawY, 0, screenScale, screenScale)
     end
 
     local textY = imagesY + availableH + 15
@@ -662,7 +648,7 @@ local function drawMediaDetailContent(global_state, currentItem, x, y, w, h, alp
     local descText = (currentDescription and currentDescription ~= "") and currentDescription or L.get("no_info")
     love.graphics.printf(descText, x + 20, textY + 25, w - 40, "left")
 
-    if not currentImage and not currentScreenshot and descText == L.get("no_info") then
+    if not coverImg and not global_state.currentScreenshot and descText == L.get("no_info") then
         love.graphics.setColor(global_state.theme.colors.text_medium[1], global_state.theme.colors.text_medium[2], global_state.theme.colors.text_medium[3], alpha)
         love.graphics.printf(global_state.L.get("no_images_info"), x, y + h/2, w, "center")
     end
@@ -828,6 +814,107 @@ local function drawOverlayMenus(global_state)
     end
 end
 
+local function drawScraperLayout(x, y, w, h, img1, img2, desc, isResultView, global_state)
+    local margin = 20
+    local imgSpacing = 10
+    
+    -- Calculate available height for images
+    local contentH = h
+    local singleImgH = (contentH - imgSpacing) / 2
+    
+    -- Calculate widths based on aspect ratio to fit height
+    local w1 = 0
+    if img1 then w1 = img1:getWidth() * (singleImgH / img1:getHeight()) end
+    
+    local w2 = 0
+    if img2 then w2 = img2:getWidth() * (singleImgH / img2:getHeight()) end
+    
+    -- Determine column width based on the widest image
+    local maxImgW = math.max(w1, w2)
+    
+    -- Default width if no images (or very thin)
+    if maxImgW < 200 then maxImgW = 200 end
+    
+    -- Clamp max width to 70% of screen width to ensure text space
+    local maxAllowedW = (w - margin * 3) * 0.70
+    if maxImgW > maxAllowedW then maxImgW = maxAllowedW end
+    
+    local leftW = maxImgW
+    local rightW = w - margin * 3 - leftW
+    
+    local leftX = x + margin
+    local rightX = leftX + leftW + margin
+    
+    -- Draw Images Column
+    -- Boxart
+    love.graphics.setColor(theme.colors.side_menu_separator[1], theme.colors.side_menu_separator[2], theme.colors.side_menu_separator[3], 0.5)
+    love.graphics.rectangle("line", leftX, y, leftW, singleImgH, 12)
+    
+    if img1 then
+        love.graphics.setColor(1, 1, 1)
+        local scale = math.min(leftW / img1:getWidth(), singleImgH / img1:getHeight())
+        local iw = img1:getWidth() * scale
+        local ih = img1:getHeight() * scale
+        local ix = leftX + (leftW - iw)/2
+        local iy = y + (singleImgH - ih)/2
+        
+        love.graphics.stencil(function()
+            love.graphics.rectangle("fill", leftX, y, leftW, singleImgH, 12)
+        end, "replace", 1)
+        love.graphics.setStencilTest("greater", 0)
+        love.graphics.draw(img1, ix, iy, 0, scale, scale)
+        love.graphics.setStencilTest()
+    else
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_dim)
+        love.graphics.printf(L.get("front"), leftX, y + singleImgH/2 - 10, leftW, "center")
+    end
+    
+    -- Screenshot
+    local screenY = y + singleImgH + imgSpacing
+    love.graphics.setColor(theme.colors.side_menu_separator[1], theme.colors.side_menu_separator[2], theme.colors.side_menu_separator[3], 0.5)
+    love.graphics.rectangle("line", leftX, screenY, leftW, singleImgH, 12)
+    
+    if img2 then
+        love.graphics.setColor(1, 1, 1)
+        local scale = math.min(leftW / img2:getWidth(), singleImgH / img2:getHeight())
+        local iw = img2:getWidth() * scale
+        local ih = img2:getHeight() * scale
+        local ix = leftX + (leftW - iw)/2
+        local iy = screenY + (singleImgH - ih)/2
+        
+        love.graphics.stencil(function()
+            love.graphics.rectangle("fill", leftX, screenY, leftW, singleImgH, 12)
+        end, "replace", 1)
+        love.graphics.setStencilTest("greater", 0)
+        love.graphics.draw(img2, ix, iy, 0, scale, scale)
+        love.graphics.setStencilTest()
+    else
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_dim)
+        love.graphics.printf(L.get("screen"), leftX, screenY + singleImgH/2 - 10, leftW, "center")
+    end
+    
+    -- Info Column
+    love.graphics.setFont(fontSmall)
+    love.graphics.setColor(theme.colors.text_medium)
+    local d = desc
+    if not d or d == "" then d = L.get("no_info") end
+    -- Text adapts to the calculated rightW
+    love.graphics.printf(d, rightX, y, rightW, "left")
+    
+    -- Search Button (Only in View mode)
+    if not isResultView then
+        local btnH = 40
+        local btnY = y + contentH - btnH
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", rightX, btnY, rightW, btnH, 8)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf(L.get("search_data"), rightX, btnY + (btnH - fontMedium:getHeight())/2, rightW, "center")
+    end
+end
+
 local function drawScraperView(global_state)
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background) -- Fondo de pantalla completa
@@ -835,21 +922,24 @@ local function drawScraperView(global_state)
     local currentItem = global_state.focusedItem or global_state.files[global_state.selectedIndex]
     if not currentItem then return end
 
-    -- Title
+    -- Title: Just the game name (no "Scraper: " prefix)
+    local mainName = currentItem.name:gsub("%.[^%.]+$", "")
     love.graphics.setFont(fontTitle)
     love.graphics.setColor(theme.colors.text_white)
-    love.graphics.printf(L.get("scraper_title", currentItem.name), 0, 15, w, "center")
+    love.graphics.printf(mainName, 0, 15, w, "center")
 
-    if state == "SCRAPER_VIEW" then
-        -- Usar la nueva función de dibujado de contenido
-        drawMediaDetailContent(global_state, currentItem, 0, 0, w, h, 1)
+    -- Subtitle: System Name only (Clean)
+    local sysName = utils.getSystemNameForItem(currentItem)
+    local displayName = utils.getSystemDisplayName(sysName)
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.text_dim)
+    love.graphics.printf(displayName or "System", 0, 50, w, "center")
 
-        -- Scrape button
-        love.graphics.setFont(fontMedium)
-        love.graphics.setColor(theme.colors.selection_accent)
-        love.graphics.rectangle("fill", w/2 - 100, h - 80, 200, 40, 5)
-        love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(L.get("search_data"), 0, h - 70, w, "center")
+    if global_state.state == "SCRAPER_VIEW" then
+        local topY = 80
+        local bottomBarH = 30
+        local availableH = h - topY - bottomBarH - 10
+        drawScraperLayout(0, topY, w, availableH, global_state.currentImage, global_state.currentScreenshot, global_state.currentDescription, false, global_state)
 
     elseif global_state.state == "SCRAPING_IN_PROGRESS" then
         love.graphics.printf(L.get("scraping_db"), 0, h/2, w, "center")
@@ -885,6 +975,9 @@ local function drawScraperView(global_state)
             local thumbSize = 80
             local spacing = 10
             local startX = 20
+
+            love.graphics.setColor(theme.colors.side_menu_separator)
+            love.graphics.rectangle("line", startX - 5, listY - 5, w - (startX - 5) * 2, thumbSize + 10, 8)
             
             for i, result in ipairs(global_state.scraperResults) do
                 local x = startX + (i-1) * (thumbSize + spacing)
@@ -892,7 +985,7 @@ local function drawScraperView(global_state)
                 
                 if i == global_state.scraperSelection then
                     love.graphics.setColor(theme.colors.selection_accent)
-                    love.graphics.rectangle("fill", x - 2, listY - 2, thumbSize + 4, thumbSize + 4)
+                    love.graphics.rectangle("fill", x - 2, listY - 2, thumbSize + 4, thumbSize + 4, 6)
                 end
                 
                 love.graphics.setColor(theme.colors.text_white)
@@ -901,11 +994,11 @@ local function drawScraperView(global_state)
                     love.graphics.draw(result.image, x + (thumbSize - result.image:getWidth()*scale)/2, listY + (thumbSize - result.image:getHeight()*scale)/2, 0, scale, scale)
                 elseif result.error then
                     love.graphics.setColor(1, 0.4, 0.4)
-                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
+                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize, 5)
                     love.graphics.setFont(fontTitle)
                     love.graphics.printf("!", x, listY + thumbSize/2 - 12, thumbSize, "center")
                 else
-                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize)
+                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize, 5)
                 end
             end
             
@@ -917,39 +1010,16 @@ local function drawScraperView(global_state)
                     love.graphics.setFont(fontMedium)
                     love.graphics.printf(sel.text or "Error", 40, 300, w - 80, "center")
                 else
-                local boxX, boxY, boxW, boxH = 40, 200, 160, 220
-                local screenX, screenY, screenW, screenH = 240, 200, 360, 200
-                local textX, textY, textW, textH = 40, 430, 560, 40
-                
-                -- Frontal
-                love.graphics.setColor(theme.colors.text_medium)
-                love.graphics.print(L.get("front"), boxX, boxY - 20)
-                if sel.image then
-                love.graphics.setColor(theme.colors.text_white)
-                    local scale = math.min(boxW/sel.image:getWidth(), boxH/sel.image:getHeight())
-                    love.graphics.draw(sel.image, boxX + (boxW - sel.image:getWidth()*scale)/2, boxY + (boxH - sel.image:getHeight()*scale)/2, 0, scale, scale)
-                end
-                
-                -- Screen
-                love.graphics.setColor(theme.colors.text_medium)
-                love.graphics.print(L.get("screen"), screenX, screenY - 20)
-                if sel.screenshot then
-                    love.graphics.setColor(theme.colors.text_white)
-                    local scale = math.min(screenW/sel.screenshot:getWidth(), screenH/sel.screenshot:getHeight())
-                    love.graphics.draw(sel.screenshot, screenX + (screenW - sel.screenshot:getWidth()*scale)/2, screenY + (screenH - sel.screenshot:getHeight()*scale)/2, 0, scale, scale)
-                else
-                    love.graphics.setColor(theme.colors.text_dim)
-                    love.graphics.printf(L.get("no_screen"), screenX, screenY + screenH/2, screenW, "center")
-                end
-                
-                -- Info
-                love.graphics.setFont(fontSmall)
-                love.graphics.setColor(theme.colors.text_white)
+                    -- Squash down: Draw layout below the list
+                    local topY = listY + thumbSize + 20
+                    local bottomBarH = 30
+                    local availableH = h - topY - bottomBarH - 10
+                    
                 local infoText = sel.description or L.get("no_desc")
                 if sel.source then
                     infoText = "[" .. sel.source .. "] " .. infoText
                 end
-                love.graphics.printf(infoText, textX, textY, textW, "left")
+                    drawScraperLayout(0, topY, w, availableH, sel.image, sel.screenshot, infoText, true, global_state)
                 end
             end
         end
@@ -976,35 +1046,72 @@ local function drawSaveManager(global_state)
     local w, h = love.graphics.getDimensions()
     love.graphics.clear(theme.colors.background)
     
-    love.graphics.setFont(fontTitle)
-    love.graphics.setColor(theme.colors.text_white)
-    love.graphics.printf(L.get("save_manager_title"), 0, 20, w, "center")
+    -- Header style from Scraper
+    local currentItem = global_state.files[global_state.selectedIndex]
+    if currentItem then
+        local mainName = currentItem.name:gsub("%.[^%.]+$", "")
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf(mainName, 0, 15, w, "center")
+    end
     
+    love.graphics.setFont(fontMedium)
+    love.graphics.setColor(theme.colors.text_dim)
+    love.graphics.printf(L.get("save_manager_title"), 0, 50, w, "center")
+    
+    local listY = 90
+    local listH = h - listY - 40
+    local margin = 40
+    local listW = w - margin * 2
+    local itemH = 40
+
     love.graphics.setFont(global_state.fontList)
-    local startY = 80
-    
+
     if #global_state.saveFiles == 0 then
         love.graphics.printf(L.get("no_saves_found"), 0, h/2, w, "center")
     else
-        for i, item in ipairs(saveFiles) do
-            local y = startY + (i-1) * 35
+        local visibleCount = math.floor(listH / itemH)
+        local startIdx = 1
+        if global_state.saveManagerSelection > visibleCount then
+            startIdx = global_state.saveManagerSelection - visibleCount + 1
+        end
+        local endIdx = math.min(#global_state.saveFiles, startIdx + visibleCount - 1)
+
+        for i = startIdx, endIdx do
+            local item = global_state.saveFiles[i]
+            local y = listY + (i - startIdx) * itemH
             
-            if i == saveManagerSelection then
+            if i == global_state.saveManagerSelection then
                 love.graphics.setColor(theme.colors.selection_accent)
-                love.graphics.rectangle("fill", 20, y - 2, w - 40, 30, 5) -- Highlight selected item
+                love.graphics.rectangle("fill", margin, y, listW, itemH - 4, 8)
+            else
+                love.graphics.setColor(theme.colors.side_menu_separator[1], theme.colors.side_menu_separator[2], theme.colors.side_menu_separator[3], 0.3)
+                love.graphics.rectangle("fill", margin, y, listW, itemH - 4, 8)
+            end
+            
+            -- Icon
+            local icon = (item.type == "SaveRAM") and global_state.iconSaveStates or global_state.iconRom
+            if icon then
+                local scale = 20 / icon:getHeight()
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.draw(icon, margin + 10, y + (itemH - 4 - icon:getHeight()*scale)/2, 0, scale, scale)
+            end
+
+            if i == global_state.saveManagerSelection then
                 love.graphics.setColor(theme.colors.text_white)
             else
                 love.graphics.setColor(theme.colors.text_medium)
             end
             
-            love.graphics.print(item.name, 30, y)
-            love.graphics.printf(item.type, w - 200, y, 100, "right")
+            love.graphics.print(item.name, margin + 40, y + (itemH - 4 - global_state.fontList:getHeight())/2)
             
-            -- Etiqueta SD
-            if item.location == "SD1" then love.graphics.setColor(0.4, 0.8, 1)
-            elseif item.location == "SD2" then love.graphics.setColor(1, 0.8, 0.4)
-            else love.graphics.setColor(0.7, 0.7, 0.7) end
-            love.graphics.print(item.location, w - 80, y)
+            local locText = item.location
+            local locColor = {0.7, 0.7, 0.7}
+            if locText == "SD1" then locColor = {0.4, 0.8, 1}
+            elseif locText == "SD2" then locColor = {1, 0.8, 0.4} end
+            
+            love.graphics.setColor(locColor)
+            love.graphics.printf(locText, margin + listW - 60, y + (itemH - 4 - global_state.fontList:getHeight())/2, 50, "right")
         end
     end -- End if #saveFiles == 0
     drawBottomBar(global_state)
@@ -1270,6 +1377,7 @@ local function drawCleanupMenu(global_state)
 end
 
 local function drawGrid(global_state, w, h)
+    local tStart = love.timer.getTime()
     local cols = global_state.gridCols
     local rows = 3
     local startY = 80 -- Bajamos el inicio para no pisar "Todos los sistemas"
@@ -1279,11 +1387,11 @@ local function drawGrid(global_state, w, h)
     local cellH = (h - startY - 40) / rows -- Ajustamos altura de celda al nuevo espacio
     
     -- Dibujar imagen de fondo global con dithering (basada en selección)
-    local bgImage = currentScreenshot or currentImage
+    local bgImage = global_state.currentScreenshot or global_state.currentImage
     if bgImage then
         local alpha = 1
-        if bgImage == currentScreenshot then alpha = currentScreenshotAlpha
-        elseif bgImage == currentImage then alpha = currentImageAlpha end
+        if bgImage == global_state.currentScreenshot then alpha = global_state.currentScreenshotAlpha
+        elseif bgImage == global_state.currentImage then alpha = global_state.currentImageAlpha end
         
         local scale = h / bgImage:getHeight()
         love.graphics.setColor(1, 1, 1, 0.15 * alpha) -- Más translúcido
@@ -1300,22 +1408,22 @@ local function drawGrid(global_state, w, h)
     end
 
     -- Animated scroll offset for the grid
-    local target_row_float = global_state.animGridRow or (global_state.animatedSelectionIndex / cols)
+    local target_row_float = global_state.animGridRow or math.ceil(global_state.animatedSelectionIndex / cols)
     local target_visual_row_float = rows / 2 -- Center point
     local gridScrollOffset = (target_row_float - target_visual_row_float) * cellH
 
     -- Clamp scroll offset
-    local minGridScrollOffset = (1 / cols - target_visual_row_float) * cellH
-    local maxGridScrollOffset = math.max(0, (math.ceil(#global_state.files / cols) - rows) * cellH)
+    local minGridScrollOffset = (1 - target_visual_row_float) * cellH
+    local maxGridScrollOffset = math.max(minGridScrollOffset, (math.ceil(#global_state.files / cols) - rows) * cellH)
     if #global_state.files <= rows * cols then
         gridScrollOffset = minGridScrollOffset
     end
     gridScrollOffset = math.max(minGridScrollOffset, math.min(maxGridScrollOffset, gridScrollOffset))
 
     -- Determine visible items
-    local firstVisibleRow = math.floor(gridScrollOffset / cellH)
+    local firstVisibleRow = math.floor(gridScrollOffset / cellH) - 1
     local startIndex = math.max(1, firstVisibleRow * cols + 1)
-    local numVisibleRows = rows + 2 -- Draw a couple extra for smooth scrolling
+    local numVisibleRows = rows + 4 -- Draw a couple extra for smooth scrolling
     local endIndex = math.min(#global_state.files, startIndex + (cols * numVisibleRows) - 1)
     
     for i = startIndex, endIndex do
@@ -1325,13 +1433,13 @@ local function drawGrid(global_state, w, h)
         local y = startY + r_abs * cellH - gridScrollOffset
         local item = global_state.files[i]
         
-        local checkPath = item.fullPath or (romPath .. item.name)
+        local checkPath = item.fullPath or (global_state.romPath .. item.name)
         local isLastPlayed = (not item.isDir) and global_state.playedRoms[checkPath]
         local playedSystem = item.system
 
         if global_state.launchMode == "Juego Unico" and item.versions then
-             for _, v in ipairs(item.versions) do -- Iterate through versions
-                 if playedRoms[v.fullPath] then isLastPlayed = true playedSystem = v.system break end
+             for _, v in ipairs(item.versions) do
+                 if global_state.playedRoms[v.fullPath] then isLastPlayed = true playedSystem = v.system break end
              end
         end
 
@@ -1354,11 +1462,11 @@ local function drawGrid(global_state, w, h)
             
             if artPathForItem then
                 local path = artPathForItem .. base .. ".png"
-                imageToDraw = loader:getImage(path)
+                imageToDraw = global_state.loader:getImage(path)
                 
                 -- Si no hay imagen y no es directorio, usar noImage
                 if not imageToDraw then
-                    imageToDraw = imgNoImage
+                    imageToDraw = global_state.imgNoImage
                 end
             end
         end
@@ -1369,7 +1477,7 @@ local function drawGrid(global_state, w, h)
             item.alpha = math.min(1, item.alpha + love.timer.getDelta() * 5)
             love.graphics.setColor(1, 1, 1, item.alpha)
             local scale = math.min(contentWidth / imageToDraw:getWidth(), (cellH - 80) / imageToDraw:getHeight())
-            if imageToDraw == imgNoImage then
+            if imageToDraw == global_state.imgNoImage then
                 scale = scale * 0.5
             end
             local imgW = imageToDraw:getWidth() * scale
@@ -1390,19 +1498,19 @@ local function drawGrid(global_state, w, h)
             if not icon and item.isDir then -- If no icon and it's a directory
                 icon = utils.getSystemIcon(item.name, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
             end
-            icon = icon or (item.isDir and global_state.iconFolder) -- Fallback to folder icon
+            icon = icon or (item.isDir and global_state.iconFolder)
             
             if not icon then -- If still no icon
                 if item.system then
                     icon = utils.getSystemContentIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
                 end
-                if not icon then icon = global_state.currentSystemContentIcon or global_state.iconRom end -- Fallback to global content icon or rom icon
+                if not icon then icon = global_state.currentSystemContentIcon or global_state.iconRom end
             end -- End if not icon
 
             local availableH = cellH - 65 -- Menos altura disponible para el icono
             local availableW = cellW - 20
             local scale = math.min(availableW / icon:getWidth(), availableH / icon:getHeight()) * 0.7
-            if icon == iconFolder then
+            if icon == global_state.iconFolder then
                 scale = scale * 0.7 -- Reducir tamaño de carpetas
             end
             local ix = x + (cellW - icon:getWidth()*scale)/2
@@ -1445,20 +1553,36 @@ local function drawGrid(global_state, w, h)
             love.graphics.printf(textToPrint, x + 10, textY, contentWidth, "center")
         end
 
-        if isLastPlayed and markPlayed and global_state.launchMode ~= "Juego Unico" then
-             local pIcon = global_state.iconRom
-             local sys = playedSystem -- This is already determined from playedRoms
-             if not sys then sys = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot) end -- Ensure sys is determined
-             if sys then pIcon = utils.getSystemIcon(sys, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage) or iconRom end
-             
-             local iconSize = 24
-             local iconX = x + cellW - iconSize - 8
-             local iconY = y + cellH - 40 - iconSize
-             
-             love.graphics.setColor(0.2, 0.8, 0.3) -- Verde más brillante para que se vea el icono
-             local scale = iconSize / pIcon:getHeight()
-             love.graphics.draw(pIcon, iconX, iconY, 0, scale, scale)
+        -- Draw status icons (Favorite / Played) side-by-side
+        local statusIconSize = 18
+        local iconPadding = 4
+        local rightOffset = 10
+        local iconY = y + cellH - 50 - statusIconSize
+
+        if global_state.favoriteRoms[item.fullPath] then
+            local icon = global_state.iconFavorite
+            local scale = statusIconSize / icon:getHeight()
+            local ix = x + cellW - rightOffset - (icon:getWidth() * scale)
+            love.graphics.setColor(theme.colors.selection_accent)
+            love.graphics.draw(icon, ix, iconY, 0, scale, scale)
+            rightOffset = rightOffset + (icon:getWidth() * scale) + iconPadding
         end
+
+        if isLastPlayed and global_state.markPlayed and global_state.launchMode ~= "Juego Unico" then
+            local pIcon = global_state.iconRom
+            local sys = playedSystem
+            if not sys then sys = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot) end
+            if sys then pIcon = utils.getSystemIcon(sys, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage) or global_state.iconRom end
+            
+            local scale = statusIconSize / pIcon:getHeight()
+            local ix = x + cellW - rightOffset - (pIcon:getWidth() * scale)
+            love.graphics.setColor(0.2, 0.8, 0.3)
+            love.graphics.draw(pIcon, ix, iconY, 0, scale, scale)
+        end
+    end
+    local tEnd = love.timer.getTime()
+    if tEnd - tStart > 0.033 then -- Log si baja de 30fps (33ms)
+        global_state.log("Slow Grid Draw: " .. string.format("%.4f", tEnd - tStart) .. "s")
     end
 
     -- Animated selection box (drawn after all items)
@@ -1472,7 +1596,7 @@ local function drawGrid(global_state, w, h)
     local animY = startY + r_abs * cellH - gridScrollOffset
 
     love.graphics.setColor(1, 1, 1, 0.2) -- Translucent white
-    love.graphics.rectangle("fill", animX + 2, animY + 2, cellW - 4, cellH - 2, 15)
+    love.graphics.rectangle("fill", animX + 2, animY + 2, cellW - 4, cellH + 1, 15)
 end
 
 local function drawJumpLetter(global_state)
@@ -1518,7 +1642,7 @@ local batteryImageCache = {}
 
 local function drawBattery(global_state, x, centerY)
     local now = love.timer.getTime()
-    if now - lastInternetCheck > 5 then
+    if now - lastInternetCheck > 15 then -- Check less frequently (15s) to reduce stutter
         lastInternetCheck = now
         local f = io.open("/sys/class/net/wlan0/operstate", "r")
         if f then
@@ -1684,16 +1808,16 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
             local y = layout.listY + (i - 1) * layout.rowHeight - (listScrollOffset or 0) -- Ensure listScrollOffset is not nil
             local item = global_state.files[i]
             
-            -- Verificar si es el último juego jugado
-            local playedSystem = nil
-            if launchMode == "Juego Unico" and item.versions then
-                for _, v in ipairs(item.versions) do if playedRoms[v.fullPath] then playedSystem = v.system break end end
-            elseif isLastPlayed and markPlayed then -- Para modo Folder o ROMs individuales en Juego Unico
-                playedSystem = utils.getSystemNameForItem(item)
-            end
-
             local checkPath = item.fullPath or (global_state.romPath .. item.name)
             local isLastPlayed = (not item.isDir) and global_state.playedRoms[checkPath]
+
+            -- Verificar si es el último juego jugado
+            local playedSystem = nil
+            if global_state.launchMode == "Juego Unico" and item.versions then
+                for _, v in ipairs(item.versions) do if global_state.playedRoms[v.fullPath] then isLastPlayed = true; playedSystem = v.system break end end
+            elseif isLastPlayed and global_state.markPlayed then -- Para modo Folder o ROMs individuales en Juego Unico
+                playedSystem = utils.getSystemNameForItem(item)
+            end
             
             if item.empty then -- If item is empty
                 love.graphics.setColor(theme.colors.text_disabled)
@@ -1740,7 +1864,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     iconToDraw = (item.isDir and global_state.iconFolder) or (global_state.currentSystemContentIcon or global_state.iconRom)
                 end
 
-                local targetH = 32
+                local targetH = 28
                 local drawScale = targetH / iconToDraw:getHeight()
                 if iconToDraw == global_state.iconFavorite and item.fullPath ~= "@Favorites/" then 
                     drawScale = favScale
@@ -1784,7 +1908,23 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                 end
 
                -- NEW: Dibujar fondo con trama para elementos jugados (independientemente de la selección)
-                -- (The dithered background drawing logic remains here, as it should be behind the icon and text)
+                if isLastPlayed and global_state.markPlayed then
+                    love.graphics.setColor(theme.colors.list_played_unselected)
+                    local adjustedH = global_state.layout.selHeight - 6
+                    local adjustedY = y + (global_state.layout.rowHeight - adjustedH) / 2
+                    local adjustedX = global_state.layout.selX + 3
+                    local adjustedW = currentItemStaticWidth - 6
+                    
+                    ditherShader:send("objPos", {adjustedX, adjustedY})
+                    love.graphics.setShader(ditherShader)
+                    love.graphics.stencil(function()
+                        love.graphics.rectangle("fill", adjustedX, adjustedY, adjustedW, adjustedH, 22)
+                    end, "replace", 1)
+                    love.graphics.setStencilTest("greater", 0)
+                    love.graphics.draw(getFadeGradientMesh(), adjustedX, adjustedY, 0, adjustedW, adjustedH)
+                    love.graphics.setStencilTest()
+                    love.graphics.setShader()
+                end
 
                 love.graphics.setColor(1, 1, 1, 1) -- Always opaque white for icon
                 local iconX = layout.selX + (70 - iconToDraw:getWidth() * drawScale) / 2
@@ -2092,8 +2232,12 @@ local function draw(global_state)
         bottomGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
     end
     love.graphics.setColor(1, 1, 1, 1) -- Reset color, mesh vertices handle alpha
+    local bottomY = h - 30 - 20
+    ditherShader:send("objPos", {0, bottomY})
+    love.graphics.setShader(ditherShader)
     -- Position it 20 pixels above the bottom bar (which starts at h - 30)
-    love.graphics.draw(bottomGradientMesh, 0, h - 30 - 20)
+    love.graphics.draw(bottomGradientMesh, 0, bottomY)
+    love.graphics.setShader()
 
     -- Draw the top gradient (moved here to be in front of the list but behind the top bar)
     -- Initialize topGradientMesh once, covering the top bar and fading below it
@@ -2102,13 +2246,16 @@ local function draw(global_state)
         local topBarHeight = layout.listY -- The height of the top bar area (where title/subtitle ends)
         local fadeLength = 54 -- Reduced by 10% (was 60)
         local gradientLength = topBarHeight + fadeLength -- Total length of the gradient
-        local opaquePercentage = (topBarHeight / gradientLength) * 100 -- Percentage of the total length that is fully opaque
+        local opaquePercentage = 35 -- Percentage of the total length that is fully opaque
         local w_screen, _ = love.graphics.getDimensions()
         local vertices = utils.createGradientVertices("top", opaquePercentage, gradientLength, w_screen, r, g, b)
         topGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
     end
-    love.graphics.setColor(1, 1, 1, 1) -- Reset color, mesh vertices handle alpha
+    love.graphics.setColor(1, 1, 1, 1) -- Reset color
+    ditherShader:send("objPos", {0, 0})
+    love.graphics.setShader(ditherShader)
     love.graphics.draw(topGradientMesh, 0, 0) -- Draw at the very top of the screen
+    love.graphics.setShader()
 
     -- Title (Drawn after the list to be on top of background/dithering)
     drawTopBar(global_state, w, h)

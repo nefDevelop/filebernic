@@ -9,7 +9,7 @@ require "locale" -- Cargar sistema de traducción
 input = require "input"
 
 -- Variables de configuración y estado
-DEBUG = 0 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 2 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
     DEFAULT = true
@@ -49,7 +49,7 @@ animatedSelectionIndex = 1 -- Para animación suave del cursor
 selectionAnimationSpeed = 10 -- Velocidad de la animación (ajustar según preferencia)
 animGridRow = nil -- Animación fila grid
 animGridCol = nil -- Animación columna grid
-gridSelectionAnimationSpeed = 8 -- Velocidad de animación para el modo Grid (más reducida)
+gridSelectionAnimationSpeed = 25 -- Velocidad de animación para el modo Grid (más rápida)
 viewMode = "LIST" -- "LIST" or "GRID"
 gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"
@@ -169,7 +169,8 @@ validExtensions = {
     wasm=true, -- WASM-4
     sv=true, -- Supervision
     wl6=true, n3d=true, sod=true, sdm=true, wl1=true, pk3=true, -- Wolfenstein
-    rar=true -- Archives
+    rar=true, -- Archives
+    rom=true -- Generic ROM
 }
 
 -- Configuración de diseño (Layout)

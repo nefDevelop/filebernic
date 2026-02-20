@@ -11,6 +11,9 @@ local lerp_fallback = function(a, b, t)
 end
 
 local function update(dt, global_state, log_func, loader_obj, updateFileList_func)
+    if dt > 0.05 then
+        log_func("Lag spike in update: " .. string.format("%.4f", dt) .. "s")
+    end
 
     -- Access global state variables via the passed global_state table
     local inputCooldown = global_state.inputCooldown
@@ -20,7 +23,9 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     -- Favorite animation
     if global_state.favAnim ~= global_state.favAnimTarget then
         local speed = 12 -- Animation speed for the star (increased from 7)
-        if global_state.favAnim < global_state.favAnimTarget then
+        if math.abs(global_state.favAnim - global_state.favAnimTarget) < 0.01 then
+            global_state.favAnim = global_state.favAnimTarget
+        elseif global_state.favAnim < global_state.favAnimTarget then
             global_state.favAnim = math.min(global_state.favAnimTarget, global_state.favAnim + dt * speed)
         else
             global_state.favAnim = math.max(global_state.favAnimTarget, global_state.favAnim - dt * speed)
@@ -96,31 +101,46 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     end
 
     if global_state.imageInvalid then
-        global_state.currentImageAlpha = math.max(0, global_state.currentImageAlpha - dt * 5)
-        if global_state.currentImageAlpha == 0 then global_state.currentImage = nil end
-    elseif global_state.currentImage then
+        if global_state.currentImageAlpha > 0 then
+            global_state.currentImageAlpha = math.max(0, global_state.currentImageAlpha - dt * 5)
+            if global_state.currentImageAlpha == 0 then global_state.currentImage = nil end
+        end
+    elseif global_state.currentImage and global_state.currentImageAlpha < 1 then
         global_state.currentImageAlpha = math.min(1, global_state.currentImageAlpha + dt * 5)
     end
 
     if global_state.screenshotInvalid then
-        global_state.currentScreenshotAlpha = math.max(0, global_state.currentScreenshotAlpha - dt * 5)
-        if global_state.currentScreenshotAlpha == 0 then global_state.currentScreenshot = nil end
-    elseif global_state.currentScreenshot then
+        if global_state.currentScreenshotAlpha > 0 then
+            global_state.currentScreenshotAlpha = math.max(0, global_state.currentScreenshotAlpha - dt * 5)
+            if global_state.currentScreenshotAlpha == 0 then global_state.currentScreenshot = nil end
+        end
+    elseif global_state.currentScreenshot and global_state.currentScreenshotAlpha < 1 then
         global_state.currentScreenshotAlpha = math.min(1, global_state.currentScreenshotAlpha + dt * 5)
     end
 
-    if (global_state.state == "OPTIONS_MENU" or global_state.state == "DELETE_MENU" or
+    local targetMenuAnim = ((global_state.state == "OPTIONS_MENU" or global_state.state == "DELETE_MENU" or
         global_state.state == "SCRAPER_OPTIONS" or global_state.state == "INFO_VIEW") and
-        not global_state.closingMenu then
-        global_state.menuAnim = math.min(1, global_state.menuAnim + dt * 6)
-    else
-        global_state.menuAnim = math.max(0, global_state.menuAnim - dt * 6)
+        not global_state.closingMenu) and 1 or 0
+
+    if global_state.menuAnim ~= targetMenuAnim then
+        if math.abs(global_state.menuAnim - targetMenuAnim) < 0.01 then
+            global_state.menuAnim = targetMenuAnim
+        elseif global_state.menuAnim < targetMenuAnim then
+            global_state.menuAnim = math.min(targetMenuAnim, global_state.menuAnim + dt * 6)
+        else
+            global_state.menuAnim = math.max(targetMenuAnim, global_state.menuAnim - dt * 6)
+        end
     end
 
-    if global_state.showHelp then
-        global_state.helpAnim = math.min(1, global_state.helpAnim + dt * 6)
-    else
-        global_state.helpAnim = math.max(0, global_state.helpAnim - dt * 6)
+    local targetHelpAnim = global_state.showHelp and 1 or 0
+    if global_state.helpAnim ~= targetHelpAnim then
+        if math.abs(global_state.helpAnim - targetHelpAnim) < 0.01 then
+            global_state.helpAnim = targetHelpAnim
+        elseif global_state.helpAnim < targetHelpAnim then
+            global_state.helpAnim = math.min(targetHelpAnim, global_state.helpAnim + dt * 6)
+        else
+            global_state.helpAnim = math.max(targetHelpAnim, global_state.helpAnim - dt * 6)
+        end
     end
 
     if global_state.state == "SEARCH" then
@@ -388,11 +408,17 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     if global_state.viewMode == "GRID" then
         currentAnimSpeed = global_state.gridSelectionAnimationSpeed or 20 -- Use faster speed for grid, with fallback
     end
-    global_state.animatedSelectionIndex = lerp(global_state.animatedSelectionIndex,
-                                                                      global_state.selectedIndex,
-                                                                      dt * currentAnimSpeed)
-    global_state.animatedSelectionIndex = math.max(1, math.min(#global_state.files,
-                                                               global_state.animatedSelectionIndex)) -- Line too long
+    
+    local t_selection = math.min(1.0, dt * currentAnimSpeed)
+    if math.abs(global_state.animatedSelectionIndex - global_state.selectedIndex) < 0.01 then
+        global_state.animatedSelectionIndex = global_state.selectedIndex
+    else
+        global_state.animatedSelectionIndex = lerp(global_state.animatedSelectionIndex,
+                                                                          global_state.selectedIndex,
+                                                                          t_selection)
+        global_state.animatedSelectionIndex = math.max(1, math.min(#global_state.files,
+                                                                   global_state.animatedSelectionIndex))
+    end
 
     -- Logic for Grid Animation (Row/Col interpolation)
     if global_state.viewMode == "GRID" then
@@ -405,8 +431,17 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
         if not global_state.animGridCol then global_state.animGridCol = targetCol end
         
         local gridSpeed = global_state.gridSelectionAnimationSpeed or 20
-        global_state.animGridRow = lerp(global_state.animGridRow, targetRow, dt * gridSpeed)
-        global_state.animGridCol = lerp(global_state.animGridCol, targetCol, dt * gridSpeed)
+        local t_grid = math.min(1.0, dt * gridSpeed)
+        if math.abs(global_state.animGridRow - targetRow) < 0.01 then
+            global_state.animGridRow = targetRow
+        else
+            global_state.animGridRow = lerp(global_state.animGridRow, targetRow, t_grid)
+        end
+        if math.abs(global_state.animGridCol - targetCol) < 0.01 then
+            global_state.animGridCol = targetCol
+        else
+            global_state.animGridCol = lerp(global_state.animGridCol, targetCol, t_grid)
+        end
     else
         global_state.animGridRow = nil
         global_state.animGridCol = nil

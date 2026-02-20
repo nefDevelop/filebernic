@@ -138,6 +138,10 @@ function Loader:getText(path)
     return nil
   end
 
+  if data == 'error' then
+    return nil
+  end
+
   if type(data) == 'string' then
     return data -- Already a decoded, cached string.
   elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
@@ -146,7 +150,7 @@ function Loader:getText(path)
     self.cache[path] = content -- Cache the final string.
     return content
   end
-  -- Return nil if it's still loading, an error, or not convertible.
+  -- Return nil if it's still loading or not convertible.
   return nil
 end
 

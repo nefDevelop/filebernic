@@ -236,7 +236,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                      filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                  end
                  -- Always update internal state
-                 if global_state.romIndex then removeFromIndex(fullPath) end
+                 if global_state.romIndex then removeFromIndex(fullPath, global_state) end
                  if global_state.playedRoms[fullPath] then global_state.playedRoms[fullPath] = nil; saveHistory(global_state) end
                  if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
                      global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
@@ -290,55 +290,55 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
              return
         end
         
-        local opt = menuOptions[menuSelection]
+        local opt = global_state.menuOptions[global_state.menuSelection]
         local optText = type(opt) == "table" and opt.text or opt
 
         if optText == "Borrar" then
-            if selectedFilesCount > 0 then
-                menuTitle = "Confirmar Borrado"
-                menuMessage = "¿Borrar " .. selectedFilesCount .. " archivos seleccionados?"
-                menuOptions = {"Borrar", "Cancelar"}
-                menuSelection = 2
-                log("Menu opened: " .. menuTitle)
-                state = "DELETE_MENU"
-            elseif (not isVirtualRoot or launchMode == "Juego Unico") and files[selectedIndex] and (not files[selectedIndex].isDir or files[selectedIndex].name ~= "..") then
-                itemToDelete = files[selectedIndex]
-                menuTitle = "Confirmar Borrado"
-                menuMessage = "¿Borrar este archivo?\n" .. itemToDelete.name
-                menuOptions = {"Borrar", "Cancelar"}
-                menuSelection = 2
-                log("Menu opened: " .. menuTitle)
-                state = "DELETE_MENU"
+            if global_state.selectedFilesCount > 0 then
+                global_state.menuTitle = "Confirmar Borrado"
+                global_state.menuMessage = "¿Borrar " .. global_state.selectedFilesCount .. " archivos seleccionados?"
+                global_state.menuOptions = {"Borrar", "Cancelar"}
+                global_state.menuSelection = 2
+                global_state.log("Menu opened: " .. global_state.menuTitle)
+                global_state.state = "DELETE_MENU"
+            elseif (not global_state.isVirtualRoot or global_state.launchMode == "Juego Unico") and global_state.files[global_state.selectedIndex] and (not global_state.files[global_state.selectedIndex].isDir or global_state.files[global_state.selectedIndex].name ~= "..") then
+                global_state.itemToDelete = global_state.files[global_state.selectedIndex]
+                global_state.menuTitle = "Confirmar Borrado"
+                global_state.menuMessage = "¿Borrar este archivo?\n" .. global_state.itemToDelete.name
+                global_state.menuOptions = {"Borrar", "Cancelar"}
+                global_state.menuSelection = 2
+                global_state.log("Menu opened: " .. global_state.menuTitle)
+                global_state.state = "DELETE_MENU"
             end
         elseif optText == "Info" then
-            state = "INFO_VIEW"
-            inputCooldown = 0.2
+            global_state.state = "INFO_VIEW"
+            global_state.inputCooldown = 0.2
         elseif optText == "Scraper" then
-            if selectedFilesCount > 0 then
+            if global_state.selectedFilesCount > 0 then
                 local items = {}
-                for _, f in ipairs(files) do
+                for _, f in ipairs(global_state.files) do
                     if f.selected then table.insert(items, f) end
                 end
                 performBatchScrape(items)
-                inputCooldown = 0.2
+                global_state.inputCooldown = 0.2
             else
-                state = "SCRAPER_VIEW"
-                inputCooldown = 0.2
+                global_state.state = "SCRAPER_VIEW"
+                global_state.inputCooldown = 0.2
             end
         elseif optText == L.get("delete_sd1") then
-            local item = files[selectedIndex]
+            local item = global_state.files[global_state.selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
             local success, err = os.remove(pathToDelete)
             if not success then
-                log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
+                global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
-                log("Archivo borrado con éxito: " .. pathToDelete)
-                filesystem.logDeletion(pathToDelete, json.encode, json.decode)
+                global_state.log("Archivo borrado con éxito: " .. pathToDelete)
+                filesystem.logDeletion(pathToDelete, global_state.json.encode, global_state.json.decode)
             end
-            if romIndex then removeFromIndex(pathToDelete) end -- Remove from index if it exists
-            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
-            if isVirtualRoot and launchMode == "Juego Unico" then
+            if global_state.romIndex then removeFromIndex(pathToDelete, global_state) end -- Remove from index if it exists
+            if global_state.playedRoms[pathToDelete] then global_state.playedRoms[pathToDelete] = nil saveHistory(global_state) end
+            if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
@@ -348,21 +348,21 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             else
                 refreshFiles(global_state)
             end
-            state = "LIST"
+            global_state.state = "LIST"
         elseif optText == L.get("delete_sd2") then
-            local item = files[selectedIndex]
+            local item = global_state.files[global_state.selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
             local success, err = os.remove(pathToDelete)
             if not success then
-                log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
+                global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
-                log("Archivo borrado con éxito: " .. pathToDelete)
-                filesystem.logDeletion(pathToDelete, json.encode, json.decode)
+                global_state.log("Archivo borrado con éxito: " .. pathToDelete)
+                filesystem.logDeletion(pathToDelete, global_state.json.encode, global_state.json.decode)
             end
-            if romIndex then removeFromIndex(pathToDelete) end -- Remove from index if it exists
-            if playedRoms[pathToDelete] then playedRoms[pathToDelete] = nil saveHistory() end
-            if isVirtualRoot and launchMode == "Juego Unico" then
+            if global_state.romIndex then removeFromIndex(pathToDelete, global_state) end -- Remove from index if it exists
+            if global_state.playedRoms[pathToDelete] then global_state.playedRoms[pathToDelete] = nil saveHistory(global_state) end
+            if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
@@ -372,7 +372,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             else
                 refreshFiles(global_state)
             end
-            state = "LIST"
+            global_state.state = "LIST"
         elseif optText:match(L.get("mode") .. ":") then
             global_state.launchMode = (global_state.launchMode == "Folder") and "Juego Unico" or "Folder"
             local displayMode = (global_state.launchMode == "Folder") and L.get("folder") or L.get("single_game")
@@ -800,7 +800,7 @@ function stateHandlers.DELETE_MENU(key, global_state)
                             global_state.log("Archivo borrado con éxito: " .. fullPath)
                             filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                         end -- End if success
-                        if global_state.romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
+                        if global_state.romIndex then removeFromIndex(fullPath, global_state) end -- Remove from index if it exists
                         if global_state.playedRoms[fullPath] then
                             global_state.playedRoms[fullPath] = nil
                         end
@@ -824,7 +824,7 @@ function stateHandlers.DELETE_MENU(key, global_state)
                     global_state.log("Archivo borrado con éxito: " .. fullPath)
                     filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
                 end -- End if success
-                if global_state.romIndex then removeFromIndex(fullPath) end -- Remove from index if it exists
+                if global_state.romIndex then removeFromIndex(fullPath, global_state) end -- Remove from index if it exists
                 if global_state.playedRoms[fullPath] then
                     global_state.playedRoms[fullPath] = nil
                     saveHistory(global_state)
