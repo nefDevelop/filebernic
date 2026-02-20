@@ -1695,11 +1695,13 @@ local function drawBattery(global_state, x, centerY)
     local img = batteryImageCache[imagePath]
     if img and img ~= "error" then
         local r, g, b, a = 1, 1, 1, 1
-        if state ~= "charging" then -- If not charging
-            if percent < 5 then
+        if state == "charging" then
+            r, g, b = 0.2, 1, 0.2
+        else
+            if percent <= 10 then
                 r, g, b = 1, 0.2, 0.2
                 a = (math.sin(love.timer.getTime() * 10) + 1) / 2
-            elseif percent < 10 then
+            elseif percent <= 20 then
                 r, g, b = 1, 0.2, 0.2
             end
         end
@@ -1715,8 +1717,13 @@ local function drawBattery(global_state, x, centerY)
         love.graphics.rectangle("line", x - batW, batY, batW, batH, 2)
         love.graphics.rectangle("fill", x, batY + (batH - nippleH)/2, nippleW, nippleH)
         local margin = 2; local maxFill = batW - (margin * 2); local fill = math.max(0, maxFill * (percent / 100))
-        if state == "charging" then love.graphics.setColor(0.2, 1, 0.2)
-        elseif percent <= 20 then love.graphics.setColor(1, 0.2, 0.2) end
+        if state == "charging" then 
+            love.graphics.setColor(0.2, 1, 0.2)
+        elseif percent <= 20 then 
+            local a = 1
+            if percent <= 10 then a = (math.sin(love.timer.getTime() * 10) + 1) / 2 end
+            love.graphics.setColor(1, 0.2, 0.2, a) 
+        end
         love.graphics.rectangle("fill", x - batW + margin, batY + margin, fill, batH - (margin * 2))
     end
 end
