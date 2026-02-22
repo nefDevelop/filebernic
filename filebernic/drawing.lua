@@ -1785,7 +1785,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
 
         -- Clamp the listScrollOffset so that the list doesn't scroll past its bounds
         local minListOffset = (1 - targetVisualRow) * global_state.layout.rowHeight
-        local maxListOffset = math.max(0, (#global_state.files - visibleRows) * global_state.layout.rowHeight)
+        local maxListOffset = math.max(0, (#global_state.files - targetVisualRow) * global_state.layout.rowHeight)
 
         listScrollOffset = math.max(minListOffset, math.min(maxListOffset, listScrollOffset))
 

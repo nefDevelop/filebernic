@@ -285,6 +285,31 @@ function M.saveLastPlayed(path)
     end
 end
 
+function M.savePendingHistory(path)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/pending_played.txt", "w")
+    if f then
+        f:write(path)
+        f:close()
+    end
+end
+
+function M.checkPendingHistory(playedRoms, saveHistoryFunc)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local path = dataDir .. "/pending_played.txt"
+    local f = io.open(path, "r")
+    if f then
+        local romPath = f:read("*all")
+        f:close()
+        if romPath and romPath ~= "" then
+            playedRoms[romPath] = true
+            saveHistoryFunc(playedRoms)
+        end
+        os.remove(path)
+    end
+    return playedRoms
+end
+
 function M.resolveSecondary(item)
     -- Permitir input de tipo string (ruta de carpeta)
     if type(item) == "string" then

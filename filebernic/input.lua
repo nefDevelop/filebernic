@@ -1037,7 +1037,7 @@ local function handleListInput(key, global_state)
                 global_state.log("Selected ROM for launch: " .. romToLaunch)
                 global_state.lastPlayedRom = romToLaunch
                 saveLastPlayed(global_state.lastPlayedRom)
-                addToHistory(global_state.lastPlayedRom, global_state)
+                filesystem.savePendingHistory(global_state.lastPlayedRom)
                 -- Iniciamos secuencia de lanzamiento (verde -> espera -> salir)
                 global_state.launching = true
                 global_state.launchTimer = 0

@@ -668,6 +668,9 @@ function love.load(arg)
         f:close()
     end
 
+    -- Check for pending history from previous session (post-game)
+    playedRoms = filesystem.checkPendingHistory(playedRoms, filesystem.saveHistory)
+
     -- Load Favorites
     favoriteRoms = filesystem.loadFavorites(json.decode) -- Load favorite ROMs
 
