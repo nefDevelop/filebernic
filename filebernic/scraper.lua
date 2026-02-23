@@ -4,8 +4,63 @@ local utils = require "utils"
 local filesystem = require "filesystem"
 
 local M = {}
+local L = _G.L or { get = function(key, ...) return string.format(key, ...) end } -- Acceso a la función de localización, con fallback para tests
 
-function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
+-- Helper function to download an image with curl and check its success
+local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
+    log_func("Downloading image: " .. imageUrl)
+    local max_retries = 3
+    local retry_delay = 1 -- seconds
+    
+    for attempt = 1, max_retries do
+        -- Add --max-time for image downloads to prevent hanging
+        -- --fail-with-body will make curl exit with error code on HTTP errors, but still output body.
+        -- We want to capture HTTP code from stdout, and any curl errors from stderr.
+        -- Add a user-agent to look more like a browser and avoid being blocked by CDNs.
+        -- Add -k to ignore SSL certificate verification, which often fails on embedded devices.
+        local curl_cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output '" .. tempPath .. "' --write-out '%{http_code}' '" .. imageUrl .. "'"
+        local curl_handle = io.popen(curl_cmd)
+        local http_code = nil
+        if curl_handle then
+            local output = curl_handle:read("*a")
+            -- The HTTP code is the last 3 digits of the output
+            http_code = output:match("(%d%d%d)$")
+            curl_handle:close()
+        end
+
+        if http_code and tonumber(http_code) and tonumber(http_code) >= 200 and tonumber(http_code) < 300 then
+            -- Check if the downloaded file actually exists and has content
+            local f = io.open(tempPath, "rb")
+            local size = 0
+            if f then
+                size = f:seek("end")
+                f:close()
+            end
+            local exists = (size > 0)
+            if not exists then
+                local msg = "Downloaded file " .. tempPath .. " is empty or invalid despite HTTP " .. http_code .. " status. (Attempt " .. attempt .. "/" .. max_retries .. ")"
+                log_func("Warning: " .. msg)
+                if progress_callback then progress_callback({type="scraper_warning", message=msg}) end
+            end
+            return exists
+        elseif http_code == nil or http_code == "" then
+            local msg = "Image download failed for " .. imageUrl .. " (No HTTP Code received, possibly curl error. Attempt " .. attempt .. "/" .. max_retries .. ")"
+            log_func("Warning: " .. msg)
+            if progress_callback then progress_callback({type="scraper_warning", message=msg}) end
+        else
+            local msg = "Image download failed for " .. imageUrl .. " (HTTP Code: " .. (http_code or "N/A") .. ", Attempt " .. attempt .. "/" .. max_retries .. ")"
+            log_func("Warning: " .. msg)
+            if progress_callback then progress_callback({type="scraper_warning", message=msg}) end
+            
+            if attempt < max_retries then
+                love.timer.sleep(retry_delay) -- Wait before retrying
+            end
+        end
+    end
+    return false -- All retries failed
+end
+
+function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_callback)
     local results = {}
     
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
@@ -19,8 +74,8 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
             local f = io.open(localData.imagePath, "r")
             if f then
                 f:close()
-                tempImgPath = "/tmp/scraper_local.png"
-                os.execute("cp '" .. localData.imagePath .. "' " .. tempImgPath)
+                tempImgPath = "tmp/scraper_local.png"
+                os.execute("cp '" .. localData.imagePath .. "' '" .. tempImgPath .. "'")
             end
         end
         
@@ -53,9 +108,12 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
             end
             local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=" .. apikey .. "&name=" .. encodedName ..
                         platformParam .. "&fields=overview,release_date&include=boxart,screenshot"
+            if progress_callback then progress_callback({type="scraper_progress", message=L.get("querying_api", "TheGamesDB")}) end
+            love.timer.sleep(0.05) -- Pausa para que la UI se actualice
+            
             log("TGDB Request: " .. url)
 
-            local handle = io.popen("curl -s -L --max-time 10 '" .. url .. "'")
+            local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'")
             local response = nil
             if handle then
                 response = handle:read("*a")
@@ -63,21 +121,28 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
             end
 
             if not response or response == "" then
-                table.insert(results, {error = true, text = "Error: No se pudo obtener respuesta de TheGamesDB"})
+                table.insert(results, {error = true, text = L.get("error_no_response_tgdb")})
             elseif response:sub(1, 1) ~= "{" then
-                table.insert(results, {error = true, text = "Error: Respuesta inválida de TheGamesDB"})
+                table.insert(results, {error = true, text = L.get("error_invalid_response_tgdb")})
             else
                 -- log("TGDB Response: " .. (response or "nil")) -- Commented for less verbosity
+                
                 local data = json.decode(response)
+                if data and data.data and data.data.games and #data.data.games > 0 then
+                    if progress_callback then progress_callback({type="scraper_progress", message=L.get("processing_results", #data.data.games, "TheGamesDB")}) end
+                    love.timer.sleep(0.5) -- Pausa para que el usuario vea el número de resultados
+                end
                 if data and data.data and data.data.games then
                     for _, game in ipairs(data.data.games) do
                         local gameId = tostring(game.id)
-                        if data.include and data.include.boxart and data.include.boxart.data and data.include.boxart.data[gameId] then
+                        if data.include and data.include.boxart and data.include.boxart.base_url and data.include.boxart.data and data.include.boxart.data[gameId] then
+                            local boxartBaseUrl = data.include.boxart.base_url.original or "https://cdn.thegamesdb.net/images/original/"
                             for _, art in ipairs(data.include.boxart.data[gameId]) do
                                 if art.side == "front" then
-                                    local imageUrl = "https://cdn.thegamesdb.net/images/original/" .. art.filename
-                                    local tempImgPath = "/tmp/scraper_tgdb_" .. gameId .. ".png"
-                                    os.execute("curl -s -L '" .. imageUrl .. "' -o '" .. tempImgPath .. "'")
+                                    if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "TheGamesDB")}) end
+                                    local imageUrl = boxartBaseUrl .. art.filename
+                                    local tempImgPath = "tmp/scraper_tgdb_" .. gameId .. ".png"
+                                    local imageDownloaded = downloadImage(imageUrl, tempImgPath, log, progress_callback)
                                     
                                     local year = nil
                                     if game.release_date then
@@ -85,18 +150,18 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
                                     end
                                     
                                     local tempScreenPath = nil
-                                    if data.include.screenshot and data.include.screenshot.data and data.include.screenshot.data[gameId] then
+                                    if data.include.screenshot and data.include.screenshot.base_url and data.include.screenshot.data and data.include.screenshot.data[gameId] then
+                                        local screenshotBaseUrl = data.include.screenshot.base_url.original or "https://cdn.thegamesdb.net/images/original/"
                                         local scr = data.include.screenshot.data[gameId][1]
                                         if scr then
-                                            local screenUrl = "https://cdn.thegamesdb.net/images/original/" .. scr.filename
-                                            tempScreenPath = "/tmp/scraper_tgdb_scr_" .. gameId .. ".png" -- Construct path
-                                            os.execute("curl -s -L '" .. screenUrl .. "' -o '" .. tempScreenPath .. "'") -- Download
+                                            local screenUrl = screenshotBaseUrl .. scr.filename
+                                            tempScreenPath = "tmp/scraper_tgdb_scr_" .. gameId .. ".png" -- Construct path
+                                            if not downloadImage(screenUrl, tempScreenPath, log, progress_callback) then
+                                                tempScreenPath = nil -- Clear path if download failed
+                                            end
                                         end
                                     end
-                                    -- Check if the downloaded image actually exists and is not empty
-                                    local exists = love.filesystem.getInfo(tempImgPath) and love.filesystem.getInfo(tempImgPath).type == "file" and love.filesystem.getInfo(tempImgPath).size > 0
-                                    
-                                    if exists then
+                                    if imageDownloaded then
                                         table.insert(results, {
                                             imagePath = tempImgPath,
                                             screenshotPath = tempScreenPath,
@@ -107,8 +172,6 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
                                             tempPath = tempImgPath,
                                             source = "TheGamesDB"
                                         })
-                                    else
-                                        log("Warning: TheGamesDB image download failed for " .. imageUrl)
                                     end
                                 end
                             end
@@ -143,28 +206,25 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
                  local nameEnc = utils.urlencode(fullName):gsub("%+", "%%20") -- Encode name for URL
                  local url = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Boxarts/" .. nameEnc .. ".png"
                  -- log("Libretro Request ("..label.."): " .. url) -- Menos verboso
+                 if progress_callback then progress_callback({type="scraper_progress", message=L.get("querying_api_libretro", label)}) end
+                 love.timer.sleep(0.05) -- Pausa para que la UI se actualice
                  
-                 local tempImgPath = "/tmp/scraper_libretro_" .. label:gsub(" ", "_") .. (suffix and suffix:gsub("[^%w]", "") or "") .. ".png"
-                 local handle = io.popen("curl -s -L -f '" .. url .. "' -o '" .. tempImgPath .. "'")
-                 if handle then
-                     -- output = handle:read("*a") -- Not used, removed to avoid luacheck warning
-                     handle:close()
-                 end
-                 -- log("Libretro Response ("..label.."): " .. (output or "nil"))
-                 
-                 local f = io.open(tempImgPath, "rb")
-                 local data = nil
-                 if f then
-                     data = f:read("*a")
-                     f:close()
-                 end
+                 local tempImgPath = "tmp/scraper_libretro_" .. label:gsub(" ", "_") .. (suffix and suffix:gsub("[^%w]", "") or "") .. ".png"
+                 local imageDownloaded = downloadImage(url, tempImgPath, log, progress_callback)
 
-                 if data and #data > 0 then
+                 if imageDownloaded then
+                     if progress_callback then progress_callback({type="scraper_progress", message=L.get("libretro_found", label)}) end
+                     love.timer.sleep(0.5)
                      local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
-                     local tempScreenPath = "/tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png" -- Construct path
+                     local tempScreenPath = "tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png" -- Construct path
 
-                     os.execute("curl -s -L -f '" .. snapUrl .. "' -o " .. tempScreenPath)
-                     
+                     -- Download screenshot, using the same helper
+                     if not downloadImage(snapUrl, tempScreenPath, log, progress_callback) then
+                         tempScreenPath = nil -- Clear path if download failed
+                     end
+                 end
+                 
+                 if imageDownloaded then
                      table.insert(results, {
                          imagePath = tempImgPath,
                          screenshotPath = tempScreenPath,
@@ -208,9 +268,9 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
     if config.scraperApi == "mock" then
         log("Mock Scraping: " .. item.name)
         local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
-        local mockTemp = "/tmp/scraper_mock.png" -- Temporary file path
+        local mockTemp = "tmp/scraper_mock.png" -- Temporary file path
 
-        os.execute("cp '" .. mockSrc .. "' " .. mockTemp)
+        os.execute("cp '" .. mockSrc .. "' '" .. mockTemp .. "'")
         
         local f = io.open(mockTemp, "r")
         if f then

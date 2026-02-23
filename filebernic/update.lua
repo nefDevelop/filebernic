@@ -33,6 +33,12 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     end
 
     if inputCooldown > 0 then global_state.inputCooldown = inputCooldown - dt end
+
+    -- Update scraper warning timer
+    if global_state.scraperWarningTimer > 0 then
+        global_state.scraperWarningTimer = global_state.scraperWarningTimer - dt
+        if global_state.scraperWarningTimer <= 0 then global_state.scraperWarningMessage = "" end
+    end
     
     -- Lógica para actualizar las variables de previsualización de forma asíncrona
     -- Use previewItem as the source of truth for what to display
@@ -253,6 +259,13 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                 global_state.scraperProgress.currentName = msg.currentName
                 global_state.scraperProgress.successes = msg.successes
                 global_state.scraperProgress.failures = msg.failures
+            elseif msg.type == "scraper_warning" then
+                global_state.scraperWarningMessage = msg.message
+                global_state.scraperWarningTimer = 3 -- Display warning for 3 seconds
+                log_func("Scraper Warning: " .. msg.message)
+            elseif msg.type == "scraper_progress" then
+                global_state.scraperProgressMessage = msg.message
+                log_func("Scraper Progress: " .. msg.message)
             elseif msg.type == "batch_done" then
                 log_func("Batch scraping finished. Successes: " .. msg.successes ..
                          " Failures: " .. msg.failures)

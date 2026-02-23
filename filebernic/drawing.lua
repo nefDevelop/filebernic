@@ -942,7 +942,25 @@ local function drawScraperView(global_state)
         drawScraperLayout(0, topY, w, availableH, global_state.currentImage, global_state.currentScreenshot, global_state.currentDescription, false, global_state)
 
     elseif global_state.state == "SCRAPING_IN_PROGRESS" then
-        love.graphics.printf(L.get("scraping_db"), 0, h/2, w, "center")
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_white)
+
+        local progressY = h/2 - fontMedium:getHeight()/2
+        
+        if global_state.scraperWarningMessage ~= "" and global_state.scraperWarningTimer > 0 then
+            -- Si hay una advertencia, centrar el bloque completo (progreso + advertencia)
+            local totalBlockHeight = fontMedium:getHeight() + 5 + fontSmall:getHeight()
+            progressY = h/2 - totalBlockHeight/2
+            
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(1, 0.4, 0.4) -- Red for warnings
+            local warningY = progressY + fontMedium:getHeight() + 5
+            love.graphics.printf(global_state.scraperWarningMessage, 0, warningY, w, "center")
+            
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_white)
+        end
+        love.graphics.printf(global_state.scraperProgressMessage, 0, progressY, w, "center")
 
     elseif global_state.state == "BATCH_SCRAPING" then
         love.graphics.setFont(fontTitle)

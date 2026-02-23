@@ -82,6 +82,9 @@ cleanupCoroutine = nil -- Coroutine for cleanup scan
 scraperResults = {}
 scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
 scraperSelection = 1
+scraperProgressMessage = "" -- New variable for scraper progress messages
+scraperWarningMessage = "" -- New variable for scraper warning messages
+scraperWarningTimer = 0 -- Timer for how long to display the warning
 searchQuery = ""
 menuStack = {}
 focusedItem = nil
@@ -457,6 +460,7 @@ function love.load(arg)
     log("Hardware info: " .. cores .. " cores detected.")
     -- Create data directories
     os.execute("mkdir -p " .. love.filesystem.getSource() .. "/data/log")
+    os.execute("mkdir -p 'tmp'") -- Create a local tmp directory for downloads
 
     -- Handle screen resolution from launch script
     if arg[1] then

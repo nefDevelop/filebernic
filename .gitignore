@@ -4,6 +4,7 @@ Simulador_SD
 view_cache.json
 app_state.json
 
+tmp/ 
 filebernic/data/log/filebernic.log
 filebernic/data/view_cache.json
 filebernic/data/app_state.json

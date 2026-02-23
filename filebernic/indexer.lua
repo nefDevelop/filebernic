@@ -2,6 +2,7 @@
 require "love.filesystem"
 require "love.timer"
 
+local locale = require "locale" -- Ensure locale is loaded in the thread's environment
 local json = require "libs.dkjson"
 local scraper = require "scraper"
 local filesystem = require "filesystem"
@@ -158,8 +159,11 @@ while true do
         local config = msg.config
         local systemName = msg.systemName
         
+        local scraper_callback = function(data) -- Now accepts a table {type, message}
+            channel_out:push(data)
+        end
         -- Protect the scraper call to prevent thread termination on failure
-        local status, results = pcall(scraper.getScrapeResults, item, config, log, systemName, love.filesystem.getInfo)
+        local status, results = pcall(scraper.getScrapeResults, item, config, log, systemName, love.filesystem.getInfo, scraper_callback)
         if status then
             channel_out:push({type="scrape_result", results=results})
         else
