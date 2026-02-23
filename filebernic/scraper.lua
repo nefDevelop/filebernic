@@ -5,7 +5,7 @@ local filesystem = require "filesystem"
 
 local M = {}
 
-function M.getScrapeResults(item, config, log, systemName)
+function M.getScrapeResults(item, config, log, systemName, fs_getInfo)
     local results = {}
     
     local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
@@ -61,9 +61,13 @@ function M.getScrapeResults(item, config, log, systemName)
                 response = handle:read("*a")
                 handle:close()
             end
-            -- log("TGDB Response: " .. (response or "nil")) -- Commented for less verbosity
 
-            if response and response:sub(1, 1) == "{" then
+            if not response or response == "" then
+                table.insert(results, {error = true, text = "Error: No se pudo obtener respuesta de TheGamesDB"})
+            elseif response:sub(1, 1) ~= "{" then
+                table.insert(results, {error = true, text = "Error: Respuesta inválida de TheGamesDB"})
+            else
+                -- log("TGDB Response: " .. (response or "nil")) -- Commented for less verbosity
                 local data = json.decode(response)
                 if data and data.data and data.data.games then
                     for _, game in ipairs(data.data.games) do
@@ -74,7 +78,6 @@ function M.getScrapeResults(item, config, log, systemName)
                                     local imageUrl = "https://cdn.thegamesdb.net/images/original/" .. art.filename
                                     local tempImgPath = "/tmp/scraper_tgdb_" .. gameId .. ".png"
                                     os.execute("curl -s -L '" .. imageUrl .. "' -o '" .. tempImgPath .. "'")
-
                                     
                                     local year = nil
                                     if game.release_date then
@@ -90,12 +93,9 @@ function M.getScrapeResults(item, config, log, systemName)
                                             os.execute("curl -s -L '" .. screenUrl .. "' -o '" .. tempScreenPath .. "'") -- Download
                                         end
                                     end
-                                    local exists = false
-                                    if love.filesystem.getInfo(tempImgPath) then exists = true
-                                    else
-                                        local f = io.open(tempImgPath, "r")
-                                        if f then f:close() exists = true end
-                                    end
+                                    -- Check if the downloaded image actually exists and is not empty
+                                    local exists = love.filesystem.getInfo(tempImgPath) and love.filesystem.getInfo(tempImgPath).type == "file" and love.filesystem.getInfo(tempImgPath).size > 0
+                                    
                                     if exists then
                                         table.insert(results, {
                                             imagePath = tempImgPath,
@@ -107,14 +107,16 @@ function M.getScrapeResults(item, config, log, systemName)
                                             tempPath = tempImgPath,
                                             source = "TheGamesDB"
                                         })
+                                    else
+                                        log("Warning: TheGamesDB image download failed for " .. imageUrl)
                                     end
                                 end
                             end
                         end
                     end
                 end
-            end
-        end
+            end -- End of else (valid JSON response)
+        end -- End of else (API key exists)
     end
 
     -- 3. Libretro

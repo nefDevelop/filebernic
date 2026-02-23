@@ -24,6 +24,10 @@ describe("State", function()
   before_each(function()
     -- Reset mocks
     mock_love_fs.getSource = function() return "/mock/source" end
+    -- Mock love.filesystem for saveAppState
+    love.filesystem = {
+      getSource = mock_love_fs.getSource
+    }
     mock_io.written_files = {}
     mock_io.read_files = {}
     mock_os.executed_commands = {}
@@ -68,36 +72,36 @@ describe("State", function()
 
   describe("saveAppState", function()
     it("should create data directory", function()
-      State.saveAppState("/path", 1, false, true, "list", "auto", false)
-      assert.are.equal("mkdir -p /mock/source/data", mock_os.executed_commands[1])
+      State.saveAppState("/path", 1, false, true, "list", "auto", false, love.filesystem) -- Pass love.filesystem
+      assert.are.equal("mkdir -p '/mock/source/data'", mock_os.executed_commands[1]) -- Expect quotes
     end)
 
     it("should save the state to app_state.json", function()
-      State.saveAppState("/path", 1, false, true, "list", "auto", false)
+      State.saveAppState("/path", 1, false, true, "list", "auto", false, love.filesystem)
       assert.is_not_nil(mock_io.written_files["/mock/source/data/app_state.json"])
       assert.are.equal("json_string", mock_io.written_files["/mock/source/data/app_state.json"])
     end)
 
     it("should normalize /mnt/mmc/ROMS/ paths", function()
       local path = "/mnt/mmc/ROMS/NES"
-      State.saveAppState(path, 1, false, true, "list", "auto", false)
+      State.saveAppState(path, 1, false, true, "list", "auto", false, love.filesystem)
       assert.are.equal("ROMS/NES", mock_json.encoded_data.romPath)
     end)
 
     it("should normalize /mnt/sdcard/ROMS/ paths", function()
       local path = "/mnt/sdcard/ROMS/SNES"
-      State.saveAppState(path, 1, false, true, "list", "auto", false)
+      State.saveAppState(path, 1, false, true, "list", "auto", false, love.filesystem)
       assert.are.equal("ROMS/SNES", mock_json.encoded_data.romPath)
     end)
 
     it("should normalize Simulador_SD paths", function()
       local path = "/some/path/Simulador_SD/GBA"
-      State.saveAppState(path, 1, false, true, "list", "auto", false)
+      State.saveAppState(path, 1, false, true, "list", "auto", false, love.filesystem)
       assert.are.equal("ROMS/GBA", mock_json.encoded_data.romPath)
     end)
 
     it("should save all state fields correctly", function()
-      State.saveAppState("/path", 123, true, false, "grid", "manual", true)
+      State.saveAppState("/path", 123, true, false, "grid", "manual", true, love.filesystem)
       local data = mock_json.encoded_data
       assert.are.equal("/path", data.romPath)
       assert.are.equal(123, data.selectedIndex)
@@ -116,7 +120,7 @@ describe("State", function()
       mock_io.read_files["/mock/source/data/config.json"] = "json_content"
       mock_json.decoded_data = { theme = "light", show_hidden = true }
       
-      local config = State.loadConfig(defaultConfig)
+      local config = State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
       
       assert.are.equal("light", config.theme) -- Overwritten by loaded
       assert.are.equal(10, config.volume) -- Kept from default
@@ -124,12 +128,12 @@ describe("State", function()
     end)
 
     it("should return defaults if config file does not exist", function()
-      local config = State.loadConfig(defaultConfig)
+      local config = State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
       assert.are.same(defaultConfig, config)
     end)
 
     it("should create a new config file with defaults if it does not exist", function()
-      State.loadConfig(defaultConfig)
+      State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
       -- Check that it was written
       assert.is_not_nil(mock_io.written_files["/mock/source/data/config.json"])
       -- Check that the data written was the default config

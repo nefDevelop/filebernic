@@ -213,6 +213,33 @@ end
 function stateHandlers.OPTIONS_MENU(key, global_state)
     local L = global_state.L
     if key == "return" or key == "kpenter" or (key == "return" and global_state.love.joystick.getJoystickCount() == 0) then -- Confirm selection
+        if global_state.menuTitle == "Seleccionar Sistema" then
+             local choice = global_state.menuOptions[global_state.menuSelection]
+             local core = nil
+             if choice == "Arcade (FBNeo)" then core = "fbneo_libretro.so"
+             elseif choice == "Super Nintendo" then core = "snes9x_libretro.so"
+             elseif choice == "Nintendo (NES)" then core = "fceumm_libretro.so"
+             elseif choice == "Sega Genesis/MD" then core = "picodrive_libretro.so"
+             elseif choice == "PlayStation" then core = "pcsx_rearmed_libretro.so"
+             elseif choice == "GBA" then core = "mgba_libretro.so"
+             elseif choice == "GBC/GB" then core = "gambatte_libretro.so"
+             end
+             
+             if core then
+                 local f = io.open("/tmp/launch_core", "w")
+                 if f then f:write(core) f:close() end
+             end
+             
+             local romToLaunch = global_state.itemToLaunch
+             global_state.log("Selected ROM for launch (with core): " .. romToLaunch)
+             global_state.lastPlayedRom = romToLaunch
+             saveLastPlayed(global_state.lastPlayedRom)
+             filesystem.savePendingHistory(global_state.lastPlayedRom)
+             global_state.launching = true
+             global_state.launchTimer = 0
+             return
+        end
+
         if #global_state.menuStack > 0 then
              -- Acciones del sub-menú de versión
              local opt = global_state.menuOptions[global_state.menuSelection]
@@ -1034,6 +1061,32 @@ local function handleListInput(key, global_state)
             end
             
             if romToLaunch then
+                -- Detección de ambigüedad (zip/7z en carpetas desconocidas)
+                local ext = romToLaunch:match("%.([^%.]+)$")
+                local isZip = ext and (ext:lower() == "zip" or ext:lower() == "7z")
+                
+                if isZip then
+                    local folder = romToLaunch:match(".*/ROMS/([^/]+)/") or romToLaunch:match(".*/([^/]+)/")
+                    local known = false
+                    if folder then
+                        -- Usar la lista de variantes de utils para comprobar si es un sistema conocido
+                        if utils.isKnownSystem(folder) then
+                            known = true
+                        end
+                    end
+                    
+                    if not known then
+                        global_state.state = "OPTIONS_MENU"
+                        global_state.menuTitle = "Seleccionar Sistema"
+                        global_state.menuMessage = "Archivo ambiguo detectado.\nSelecciona el sistema:"
+                        global_state.menuOptions = {"Arcade (FBNeo)", "Super Nintendo", "Nintendo (NES)", "Sega Genesis/MD", "PlayStation", "GBA", "GBC/GB"}
+                        global_state.menuSelection = 1
+                        global_state.itemToLaunch = romToLaunch
+                        global_state.inputCooldown = 0.2
+                        return
+                    end
+                end
+
                 global_state.log("Selected ROM for launch: " .. romToLaunch)
                 global_state.lastPlayedRom = romToLaunch
                 saveLastPlayed(global_state.lastPlayedRom)

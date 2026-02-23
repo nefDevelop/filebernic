@@ -8,7 +8,7 @@ local systemVariants = {
     {"SNES", "snes", "sfc", "Super Nintendo", "Super Famicom", "Nintendo - Super Nintendo Entertainment System"},
     {"NES", "nes", "fc", "Nintendo Entertainment System", "Famicom", "Nintendo - Nintendo Entertainment System"},
     {"GB", "gb", "Game Boy", "Nintendo - Game Boy"},
-    {"FDS", "fds", "Famicom Disk System", "Nintendo - Family Computer Disk System"},
+    {"FDS", "fds", "Famicom Disk System", "Nintendo - Family Computer Disk System", "Family Computer"},
     {"GBC", "gbc", "Game Boy Color", "Nintendo - Game Boy Color"},
     {"N64", "n64", "Nintendo 64", "Nintendo - Nintendo 64"},
     {"NDS", "nds", "Nintendo DS", "Nintendo - Nintendo DS", "Nintendo - Nintendo DS Decrypted"},
@@ -18,7 +18,7 @@ local systemVariants = {
     {"SATELLAVIEW", "bs", "satellaview", "Nintendo - Satellaview"},
     {"SUFAMI", "sufami", "Nintendo - Sufami Turbo"},
     -- Sega
-    {"MD", "md", "gen", "Genesis", "Mega Drive", "Sega - Mega Drive - Genesis"},
+    {"MD", "md", "gen", "Genesis", "Mega Drive", "Sega - Mega Drive - Genesis", "Mega"},
     {"SMS", "sms", "Master System", "Sega - Master System - Mark III"},
     {"GG", "gg", "Game Gear", "Sega - Game Gear"},
     {"SEGACD", "cd", "Mega CD", "Sega CD", "Sega - Mega-CD - Sega CD"},
@@ -30,7 +30,7 @@ local systemVariants = {
     {"SG1000", "sg1000", "Sega SG-1000"},
     {"SATURN", "saturn", "Sega - Saturn"},
     -- Sony
-    {"PS", "ps", "ps1", "psx", "PlayStation", "Sony - PlayStation"},
+    {"PS", "ps", "ps1", "psx", "PlayStation", "Sony - PlayStation", "Sony"},
     {"PSP", "psp", "PlayStation Portable", "Sony - PlayStation Portable"},
     -- Arcade / SNK
     {"MAME", "mame", "arcade", "fbneo", "Arcade", "FB Alpha - Arcade Games"},
@@ -39,7 +39,7 @@ local systemVariants = {
     {"NGP", "ngp", "Neo Geo Pocket", "SNK - Neo Geo Pocket"},
     {"NGPC", "ngpc", "Neo Geo Pocket Color", "SNK - Neo Geo Pocket Color"},
     -- NEC
-    {"PCE", "pce", "PC Engine", "TurboGrafx-16", "NEC - PC Engine - TurboGrafx 16"},
+    {"PCE", "pce", "PC Engine", "TurboGrafx-16", "NEC - PC Engine - TurboGrafx 16", "Turbo"},
     {"PCECD", "pcecd", "PC Engine CD", "NEC - PC Engine CD - TurboGrafx-CD"},
     {"SGX", "sgx", "SuperGrafx", "NEC - PC Engine SuperGrafx"},
     {"PC88", "pc88", "NEC PC-8800"},
@@ -117,6 +117,11 @@ end
 function M.getSystemVariants(sysName)
     if not sysName then return {} end
     return variantToGroup[sysName:lower()] or {sysName}
+end
+
+function M.isKnownSystem(sysName)
+    if not sysName then return false end
+    return variantToGroup[sysName:lower()] ~= nil
 end
 
 function M.getSystemDisplayName(sysName)

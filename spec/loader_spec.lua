@@ -60,7 +60,7 @@ describe("Loader", function()
 
   before_each(function()
     -- Create a new loader instance before each test
-    loader = Loader:new(function() end) -- Mock logger
+    loader = Loader:new(function() end, love_mocks) -- Mock logger
   end)
 
   it("should be created with an empty cache", function()
@@ -81,10 +81,10 @@ describe("Loader", function()
 
   it("should update cache with loaded data", function()
     loader:request("test.txt")
-    local fileData = love_mocks.filesystem.newFileData("file content", "test.txt")
-    loader.channelOut:push({path = "test.txt", data = fileData})
+    -- The thread sends raw string data, not FileData objects
+    loader.channelOut:push({path = "test.txt", data = "file content"})
     loader:update()
-    assert.are.same(fileData, loader.cache["test.txt"])
+    assert.are.equal("file content", loader.cache["test.txt"].__data) -- Check the content of the FileData object
   end)
 
   it("should handle loading errors", function()

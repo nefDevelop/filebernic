@@ -91,8 +91,11 @@ while true; do
         FILENAME=$(basename "$LAST_ROM")
         EXT="${FILENAME##*.}"
         EXT="${EXT,,}" # Convertir a minúsculas
-        DIRNAME=$(dirname "$LAST_ROM")
-        SYSTEM_FOLDER=$(basename "$DIRNAME")
+        
+        # Intentar detectar el sistema desde la ruta base (ej: .../ROMS/GBA/Sub/Juego.zip -> GBA)
+        SYSTEM_FOLDER=$(echo "$LAST_ROM" | sed -n 's|.*/ROMS/\([^/]*\)/.*|\1|p')
+        # Fallback si no encuentra /ROMS/ (ej: simulador o rutas absolutas directas)
+        if [ -z "$SYSTEM_FOLDER" ]; then SYSTEM_FOLDER=$(basename "$(dirname "$LAST_ROM")"); fi
         
         case "$EXT" in
             # Nintendo
@@ -136,6 +139,8 @@ while true; do
             # Archivos ambiguos (zip, 7z, bin, iso, cue, chd, m3u, img, rom) - Intentar adivinar por carpeta
             zip|7z|rar|bin|iso|cue|chd|m3u|img|rom|dsk|cas|tap|wav|cmd)
                 case "$SYSTEM_FOLDER" in
+                    *SNES*|*SFC*) CORE="snes9x_libretro.so" ;;
+                    *NES*|*FC*) CORE="fceumm_libretro.so" ;;
                     *PS*|*Sony*) CORE="pcsx_rearmed_libretro.so" ;;
                     *PCE*|*Turbo*) CORE="mednafen_pce_fast_libretro.so" ;;
                     *Saturn*) CORE="yabasanshiro_libretro.so" ;;
@@ -146,8 +151,6 @@ while true; do
                     *3DO*) CORE="opera_libretro.so" ;;
                     *Amiga*) CORE="puae_libretro.so" ;;
                     *Arcade*|*ARCADE*|*CPS*|*MAME*|*FBNeo*) CORE="fbneo_libretro.so" ;;
-                    *NES*|*FC*) CORE="fceumm_libretro.so" ;;
-                    *SNES*|*SFC*) CORE="snes9x_libretro.so" ;;
                     *GBA*) CORE="mgba_libretro.so" ;;
                     *GBC*|*GB*) CORE="gambatte_libretro.so" ;;
                     *N64*) CORE="mupen64plus_next_libretro.so" ;;
@@ -164,6 +167,13 @@ while true; do
                 esac
                 ;;
         esac
+
+        # Override: Si la App especificó un núcleo (porque preguntó al usuario), usarlo.
+        if [ -f /tmp/launch_core ]; then
+            CORE=$(cat /tmp/launch_core)
+            rm -f /tmp/launch_core
+            echo "[DEBUG] Overriding core with: $CORE" >>"$LOGFILE"
+        fi
 
         # 2. Usar el script de lanzamiento encontrado en la lista: lr-general.sh
         MUOS_LAUNCHER="/opt/muos/script/launch/lr-general.sh"

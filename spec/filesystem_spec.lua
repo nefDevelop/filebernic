@@ -151,3 +151,52 @@ describe("filesystem.hasRoms", function()
     assert.is_true(filesystem.hasRoms("/roms/SNES/", validExtensions))
   end)
 end)
+
+describe("filesystem.findInGamelist", function()
+  local filesystem = require("filebernic.filesystem")
+  local mock_io = {}
+  local original_io_open = io.open
+
+  before_each(function()
+    mock_io.open_files = {}
+    io.open = function(path, mode)
+      if (mode == "r" or mode == "rb") and mock_io.open_files[path] then
+        return { read = function() return mock_io.open_files[path] end, close = function() end }
+      end
+      return nil
+    end
+  end)
+
+  after_each(function()
+    io.open = original_io_open
+  end)
+
+  it("should return nil if gamelist.xml does not exist", function()
+    assert.is_nil(filesystem.findInGamelist("/roms/nes/game.zip", "game.zip"))
+  end)
+
+  it("should return nil if gamelist.xml is empty", function()
+    mock_io.open_files["/roms/nes/gamelist.xml"] = ""
+    assert.is_nil(filesystem.findInGamelist("/roms/nes/game.zip", "game.zip"))
+  end)
+
+  it("should return nil if gamelist.xml is malformed (missing game block)", function()
+    mock_io.open_files["/roms/nes/gamelist.xml"] = "<gameList><game><path>./game.zip</path></gameList>"
+    assert.is_nil(filesystem.findInGamelist("/roms/nes/game.zip", "game.zip"))
+  end)
+
+  it("should return nil if gamelist.xml exists but does not contain the rom", function()
+    mock_io.open_files["/roms/nes/gamelist.xml"] = "<gameList><game><path>./other_game.zip</path><name>Other Game</name></game></gameList>"
+    assert.is_nil(filesystem.findInGamelist("/roms/nes/game.zip", "game.zip"))
+  end)
+
+  it("should return data if gamelist.xml contains the rom", function()
+    mock_io.open_files["/roms/nes/gamelist.xml"] = "<gameList><game><path>./game.zip</path><name>Test Game</name><desc>A test description.</desc><releasedate>19900101T000000</releasedate><image>./media/images/game.png</image></game></gameList>"
+    local result = filesystem.findInGamelist("/roms/nes/game.zip", "game.zip")
+    assert.is_not_nil(result)
+    assert.are.equal("A test description.", result.description)
+    assert.are.equal("1990", result.year)
+    assert.are.equal("/roms/nes/media/images/game.png", result.imagePath)
+    assert.are.equal("Gamelist.xml", result.source)
+  end)
+end)
