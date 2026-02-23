@@ -38,7 +38,9 @@ locale.data = {
         cleanup = "Limpieza",
         api_settings = "Ajustes API",
         scraper_api = "Fuente Scraper",
-        api_key = "API Key",
+        api_key = "TGDB Key",
+        ss_user = "Usuario SS",
+        ss_password = "Password SS",
         
         -- Valores
         yes = "Si",
@@ -141,7 +143,9 @@ locale.data = {
         cleanup = "Cleanup",
         api_settings = "API Settings",
         scraper_api = "Scraper Source",
-        api_key = "API Key",
+        api_key = "TGDB Key",
+        ss_user = "SS User",
+        ss_password = "SS Password",
         
         -- Values
         yes = "Yes",

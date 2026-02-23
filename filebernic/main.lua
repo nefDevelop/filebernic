@@ -18,8 +18,12 @@ DEBUG_SECTIONS = {
 systemName = ""
 romPath = ""
 config = {
-    scraperApi = "all", -- Opciones: "all", "libretro", "thegamesdb"
+    scraperApi = "all", -- Opciones: "all", "libretro", "thegamesdb", "screenscraper" (o combinaciones separadas por coma)
     thegamesdb_apikey = "",
+    screenscraper_user = "",
+    screenscraper_password = "",
+    screenscraper_devid = "",
+    screenscraper_devpassword = "",
     language = nil -- Idioma por defecto (nil para auto-detectar)
     }
 secondaryPath = nil

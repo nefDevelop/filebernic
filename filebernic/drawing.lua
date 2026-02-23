@@ -50,19 +50,22 @@ end
 local fadeGradientMesh
 local function getFadeGradientMesh()
     if not fadeGradientMesh then
-        local vertices = {
-            {0, 0, 0, 0, 1, 1, 1, 1}, -- Izquierda: Opaco
-            {0, 1, 0, 1, 1, 1, 1, 1},
-            {0.15, 0, 0.15, 0, 1, 1, 1, 1}, -- 15%: Sigue Opaco
-            {0.15, 1, 0.15, 1, 1, 1, 1, 1},
-            {0.85, 0, 0.85, 0, 1, 1, 1, 0}, -- 85%: Transparente
-            {0.85, 1, 0.85, 1, 1, 1, 1, 0},
-            {1, 0, 1, 0, 1, 1, 1, 0}, -- Derecha: Transparente (relleno)
-            {1, 1, 1, 1, 1, 1, 1, 0}
-        }
+        -- Usar la función de utilidad para generar el degradado
+        -- Dirección "left", 0% opaco, 1x1 tamaño, blanco, 1.0 alpha máx (sin salto), 40% fin (más corto)
+        local vertices = utils.createGradientVertices("left", 0, 1, 1, 1, 1, 1, 1.0, 40)
         fadeGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
     end
     return fadeGradientMesh
+end
+
+local playedGameGradientMesh
+local function getPlayedGameGradientMesh()
+    if not playedGameGradientMesh then
+        -- Dirección "left", 10% opaco (zona sólida inicial), 1x1 tamaño, blanco, 1.0 alpha máx, 40% fin
+        local vertices = utils.createGradientVertices("left", 25, 1, 1, 1, 1, 1, 1.0, 60)
+        playedGameGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
+    end
+    return playedGameGradientMesh
 end
 
 local topGradientMesh = nil -- Cache for the top gradient mesh
@@ -2043,7 +2046,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                         love.graphics.rectangle("fill", adjustedX, adjustedY, adjustedW, adjustedH, 22)
                     end, "replace", 1)
                     love.graphics.setStencilTest("greater", 0)
-                    love.graphics.draw(getFadeGradientMesh(), adjustedX, adjustedY, 0, adjustedW, adjustedH)
+                    love.graphics.draw(getPlayedGameGradientMesh(), adjustedX, adjustedY, 0, adjustedW, adjustedH)
                     love.graphics.setStencilTest()
                     love.graphics.setShader()
                 end
@@ -2346,11 +2349,11 @@ local function draw(global_state)
     -- Draw the bottom gradient (between the list and the bottom bar)
     -- Initialize bottomGradientMesh once
     if not bottomGradientMesh then
-        local r, g, b = 0, 0, 0 -- Use black for the gradient to make it visible
+        local r, g, b = unpack(theme.colors.background) -- Use background color instead of black
         local gradientLength = 20 -- As per request
         local opaquePercentage = 40 -- As per request
         local w_screen, _ = love.graphics.getDimensions()
-        local vertices = utils.createGradientVertices("bottom", opaquePercentage, gradientLength, w_screen, r, g, b)
+        local vertices = utils.createGradientVertices("bottom", opaquePercentage, gradientLength, w_screen, r, g, b, 1.0)
         bottomGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
     end
     love.graphics.setColor(1, 1, 1, 1) -- Reset color, mesh vertices handle alpha
@@ -2364,13 +2367,13 @@ local function draw(global_state)
     -- Draw the top gradient (moved here to be in front of the list but behind the top bar)
     -- Initialize topGradientMesh once, covering the top bar and fading below it
     if not topGradientMesh then
-        local r, g, b = 0, 0, 0 -- Use black for the gradient to make it visible
+        local r, g, b = unpack(theme.colors.background) -- Use background color
         local topBarHeight = layout.listY -- The height of the top bar area (where title/subtitle ends)
         local fadeLength = 54 -- Reduced by 10% (was 60)
         local gradientLength = topBarHeight + fadeLength -- Total length of the gradient
-        local opaquePercentage = 35 -- Percentage of the total length that is fully opaque
+        local opaquePercentage = 50 -- Percentage of the total length that is fully opaque
         local w_screen, _ = love.graphics.getDimensions()
-        local vertices = utils.createGradientVertices("top", opaquePercentage, gradientLength, w_screen, r, g, b)
+        local vertices = utils.createGradientVertices("top", opaquePercentage, gradientLength, w_screen, r, g, b, 1.0)
         topGradientMesh = love.graphics.newMesh(vertices, "strip", "static")
     end
     love.graphics.setColor(1, 1, 1, 1) -- Reset color

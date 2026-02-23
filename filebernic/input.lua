@@ -245,7 +245,11 @@ function stateHandlers.EDIT_TEXT(key, global_state)
         local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol]
         if char == "OK" then
             -- Save and exit
-            global_state.config.thegamesdb_apikey = global_state.textToEdit
+            if global_state.textEditKey then
+                global_state.config[global_state.textEditKey] = global_state.textToEdit
+            else
+                global_state.config.thegamesdb_apikey = global_state.textToEdit -- Fallback
+            end
             local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
             if f then f:write(global_state.json.encode(global_state.config)) f:close() end
             
@@ -520,6 +524,8 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 L.get("scraper_api") .. ": " .. (global_state.config.scraperApi or "all"),
                 L.get("api_key") .. ": " .. (global_state.config.thegamesdb_apikey ~= "" and "******" or "Empty")
             }
+            table.insert(global_state.menuOptions, L.get("ss_user") .. ": " .. (global_state.config.screenscraper_user ~= "" and global_state.config.screenscraper_user or "Empty"))
+            table.insert(global_state.menuOptions, L.get("ss_password") .. ": " .. (global_state.config.screenscraper_password ~= "" and "******" or "Empty"))
             global_state.menuSelection = 1
             global_state.menuAnim = 0
         elseif optText:match(L.get("scraper_api")) then
@@ -540,6 +546,23 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             global_state.state = "EDIT_TEXT"
             global_state.textToEdit = global_state.config.thegamesdb_apikey or ""
             global_state.textEditLabel = L.get("api_key")
+            global_state.textEditKey = "thegamesdb_apikey"
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
+            global_state.love.keyboard.setTextInput(true)
+        elseif optText:match(L.get("ss_user")) then
+            global_state.state = "EDIT_TEXT"
+            global_state.textToEdit = global_state.config.screenscraper_user or ""
+            global_state.textEditLabel = L.get("ss_user")
+            global_state.textEditKey = "screenscraper_user"
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
+            global_state.love.keyboard.setTextInput(true)
+        elseif optText:match(L.get("ss_password")) then
+            global_state.state = "EDIT_TEXT"
+            global_state.textToEdit = global_state.config.screenscraper_password or ""
+            global_state.textEditLabel = L.get("ss_password")
+            global_state.textEditKey = "screenscraper_password"
             global_state.keyboardRow = 1
             global_state.keyboardCol = 1
             global_state.love.keyboard.setTextInput(true)
@@ -684,7 +707,10 @@ end
 function stateHandlers.SCRAPER_OPTIONS(key, global_state)
     local L = global_state.L
     if key == "return" or key == "kpenter" then
-        if global_state.menuOptions[global_state.menuSelection] == L.get("clean") then -- If "Clean" option is selected
+        local opt = global_state.menuOptions[global_state.menuSelection]
+        local text = type(opt) == "table" and opt.text or opt
+
+        if text == L.get("clean") then -- If "Clean" option is selected
             local item = global_state.files[global_state.selectedIndex]
             local baseName = item.name:gsub("%..-$", "")
             os.remove(global_state.muosArtPath .. baseName .. ".png")
@@ -693,7 +719,37 @@ function stateHandlers.SCRAPER_OPTIONS(key, global_state)
             os.remove(global_state.muosPreviewPath .. baseName .. ".png")
             preview.load(global_state, global_state.log, global_state.loader)
             global_state.state = "SCRAPER_VIEW"
-        end -- End if "Clean" option
+        elseif opt.value == "tgdb" or opt.value == "libretro" or opt.value == "ss" then
+            local api = global_state.config.scraperApi or "all"
+            local tgdbOn = (api == "all" or api:find("thegamesdb"))
+            local libretroOn = (api == "all" or api:find("libretro"))
+            local ssOn = (api == "all" or api:find("screenscraper"))
+
+            if opt.value == "tgdb" then tgdbOn = not tgdbOn end
+            if opt.value == "libretro" then libretroOn = not libretroOn end
+            if opt.value == "ss" then ssOn = not ssOn end
+
+            if tgdbOn and libretroOn and ssOn then
+                global_state.config.scraperApi = "all"
+            else
+                local newApi = {}
+                if tgdbOn then table.insert(newApi, "thegamesdb") end
+                if libretroOn then table.insert(newApi, "libretro") end
+                if ssOn then table.insert(newApi, "screenscraper") end
+                
+                if #newApi == 0 then global_state.config.scraperApi = "none"
+                else global_state.config.scraperApi = table.concat(newApi, ",") end
+            end
+
+            -- Update menu text
+            global_state.menuOptions[1].text = "TheGamesDB: " .. (tgdbOn and L.get("on") or L.get("off"))
+            global_state.menuOptions[2].text = "Libretro: " .. (libretroOn and L.get("on") or L.get("off"))
+            global_state.menuOptions[3].text = "ScreenScraper: " .. (ssOn and L.get("on") or L.get("off"))
+
+            -- Save config
+            local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
+            if f then f:write(global_state.json.encode(global_state.config)) f:close() end
+        end
         global_state.inputCooldown = 0.2
     elseif key == "backspace" or key == "x" or key == "escape" then
         global_state.closingMenu = true
@@ -723,7 +779,18 @@ function stateHandlers.SCRAPER_VIEW(key, global_state)
             global_state.menuTitle = global_state.L.get("options") -- Set menu title
             global_state.menuAnim = 0
             global_state.menuMessage = ""
-            global_state.menuOptions = {global_state.L.get("clean")}
+            
+            local api = global_state.config.scraperApi or "all"
+            local tgdbOn = (api == "all" or api:find("thegamesdb"))
+            local libretroOn = (api == "all" or api:find("libretro"))
+            local ssOn = (api == "all" or api:find("screenscraper"))
+            
+            global_state.menuOptions = {
+                {text = "TheGamesDB: " .. (tgdbOn and global_state.L.get("on") or global_state.L.get("off")), value = "tgdb"},
+                {text = "Libretro: " .. (libretroOn and global_state.L.get("on") or global_state.L.get("off")), value = "libretro"},
+                {text = "ScreenScraper: " .. (ssOn and global_state.L.get("on") or global_state.L.get("off")), value = "ss"},
+                {text = global_state.L.get("clean")}
+            }
             global_state.menuSelection = 1
             global_state.log("Menu opened: " .. global_state.menuTitle)
         end

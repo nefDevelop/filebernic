@@ -62,6 +62,21 @@ local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
     return false -- All retries failed
 end
 
+-- Mapeo de sistemas para ScreenScraper (IDs)
+local screenScraperSystems = {
+    gba = 12, snes = 4, sfc = 4, nes = 3, fc = 3, gb = 9, gbc = 10,
+    md = 1, gen = 1, sms = 2, gg = 21, ps = 57, ps1 = 57, psx = 57,
+    nds = 15, n64 = 14, neogeo = 142, arcade = 75, mame = 75, fbneo = 75,
+    pce = 31, tg16 = 31, ngp = 82, ngpc = 82,
+    ws = 45, wsc = 46, vb = 11, segacd = 20, ["32x"] = 19,
+    dc = 23, saturn = 22, psp = 150,
+    atari2600 = 26, a2600 = 26, atari7800 = 28, a7800 = 28,
+    lynx = 29, jaguar = 30,
+    amiga = 64, c64 = 66, zxspectrum = 76,
+    msx = 113, msx2 = 116,
+    dos = 135, scummvm = 123
+}
+
 function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_callback)
     local results = {}
     
@@ -91,7 +106,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
     end
 
     -- 2. TheGamesDB
-    if config.scraperApi == "all" or config.scraperApi == "thegamesdb" then
+    if config.scraperApi == "all" or config.scraperApi:find("thegamesdb") then
         local apikey = config.thegamesdb_apikey or ""
         
         local skipTGDB = false
@@ -196,7 +211,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
     end
 
     -- 3. Libretro
-    if config.scraperApi == "all" or config.scraperApi == "libretro" then
+    if config.scraperApi == "all" or config.scraperApi:find("libretro") then
         local libretroSystems = {
             gba = "Nintendo - Game Boy Advance", snes = "Nintendo - Super Nintendo Entertainment System", sfc = "Nintendo - Super Nintendo Entertainment System",
             nes = "Nintendo - Nintendo Entertainment System", fc = "Nintendo - Nintendo Entertainment System", gb = "Nintendo - Game Boy", gbc = "Nintendo - Game Boy Color",
@@ -275,6 +290,90 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
              if not found then
                  table.insert(results, {error=true, text="Libretro: No encontrado", source="Libretro"})
              end
+        end
+    end
+
+    -- 4. ScreenScraper
+    if config.scraperApi == "all" or config.scraperApi:find("screenscraper") then
+        local ssUser = config.screenscraper_user or ""
+        local ssPass = config.screenscraper_password or ""
+        local devId = config.screenscraper_devid or ""
+        local devPass = config.screenscraper_devpassword or ""
+        
+        -- ScreenScraper requiere credenciales de desarrollador o usuario.
+        -- Si no hay devid configurado, intentamos sin él (aunque probablemente falle o esté limitado)
+        -- o usamos las credenciales de usuario si están presentes.
+        
+        local sysId = screenScraperSystems[systemName:lower()]
+        if sysId then
+            local url = "https://www.screenscraper.fr/api2/jeuInfos.php?output=json&romNom=" .. encodedName .. "&systeme=" .. sysId
+            
+            if ssUser ~= "" and ssPass ~= "" then
+                url = url .. "&ssid=" .. utils.urlencode(ssUser) .. "&sspassword=" .. utils.urlencode(ssPass)
+            end
+            if devId ~= "" and devPass ~= "" then
+                url = url .. "&devid=" .. utils.urlencode(devId) .. "&devpassword=" .. utils.urlencode(devPass)
+            end
+            
+            if progress_callback then progress_callback({type="scraper_progress", message=L.get("querying_api", "ScreenScraper")}) end
+            love.timer.sleep(0.05)
+            
+            log("ScreenScraper Request: " .. (url:sub(1, 80)) .. "...")
+            
+            local handle = io.popen("curl -s -L -k --max-time 15 -A 'Mozilla/5.0' '" .. url .. "'")
+            local response = nil
+            if handle then
+                response = handle:read("*a")
+                handle:close()
+            end
+            
+            if response and response:sub(1, 1) == "{" then
+                local data = json.decode(response)
+                if data and data.response and data.response.jeu then
+                    local game = data.response.jeu
+                    
+                    -- Buscar imagen (media type: box-2d, box-3d, o ss)
+                    local imgUrl, screenUrl
+                    if game.medias then
+                        for _, media in ipairs(game.medias) do
+                            if media.type == "box-2d" or media.type == "box-3d" then
+                                if not imgUrl then imgUrl = media.url end -- Priorizar el primero encontrado
+                            elseif media.type == "ss" or media.type == "screenshot" then
+                                if not screenUrl then screenUrl = media.url end
+                            end
+                        end
+                    end
+                    
+                    local tempImgPath = "tmp/scraper_ss_" .. game.id .. ".png"
+                    local tempScreenPath = "tmp/scraper_ss_scr_" .. game.id .. ".png"
+                    
+                    local imgDownloaded = imgUrl and downloadImage(imgUrl, tempImgPath, log, progress_callback)
+                    local scrDownloaded = screenUrl and downloadImage(screenUrl, tempScreenPath, log, progress_callback)
+                    
+                    if imgDownloaded or scrDownloaded then
+                        local desc = (game.synopsis and game.synopsis[1] and game.synopsis[1].text) or L.get("no_desc")
+                        -- Buscar sinopsis en español si existe
+                        if game.synopsis then
+                            for _, s in ipairs(game.synopsis) do
+                                if s.langue == "es" then desc = s.text break end
+                            end
+                        end
+                        
+                        table.insert(results, {
+                            imagePath = imgDownloaded and tempImgPath or nil,
+                            screenshotPath = scrDownloaded and tempScreenPath or nil,
+                            tempScreenPath = scrDownloaded and tempScreenPath or nil,
+                            tempPath = imgDownloaded and tempImgPath or nil,
+                            description = desc,
+                            year = game.dates and game.dates[1] and game.dates[1].text and game.dates[1].text:match("^(%d%d%d%d)"),
+                            region = game.noms and game.noms[1] and game.noms[1].text,
+                            source = "ScreenScraper"
+                        })
+                    end
+                end
+            end
+        else
+            log("ScreenScraper: Sistema no mapeado ID para " .. systemName)
         end
     end
 

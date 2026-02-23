@@ -220,9 +220,11 @@ M.urlencode = urlencode
 -- length: total length of the gradient (e.g., height for "top"/"bottom", width for "left"/"right")
 -- width: perpendicular width of the gradient (e.g., width for "top"/"bottom", height for "left"/"right")
 -- r, g, b: color components (0-1) for the opaque part of the gradient
-function M.createGradientVertices(direction, opaque_percentage, length, width, r, g, b)
+function M.createGradientVertices(direction, opaque_percentage, length, width, r, g, b, max_alpha, fade_end_percentage)
     local vertices = {}
     local p = math.max(0, math.min(1, opaque_percentage / 100)) -- Opaque percentage as a fraction
+    local p_end = fade_end_percentage and math.max(0, math.min(1, fade_end_percentage / 100)) or 1
+    local a = max_alpha or 1
 
     -- Ensure color components are valid
     r = r or 1
@@ -233,13 +235,13 @@ function M.createGradientVertices(direction, opaque_percentage, length, width, r
         local y_opaque_end = length * p
         -- Vertices for a strip mesh (x, y, u, v, r, g, b, a)
         -- Top-Left, Opaque
-        table.insert(vertices, {0, 0, 0, 0, r, g, b, 1})
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, a})
         -- Top-Right, Opaque
-        table.insert(vertices, {width, 0, 1, 0, r, g, b, 1})
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, a})
         -- Transition-Left, Opaque
-        table.insert(vertices, {0, y_opaque_end, 0, p, r, g, b, 1})
+        table.insert(vertices, {0, y_opaque_end, 0, p, r, g, b, a})
         -- Transition-Right, Opaque
-        table.insert(vertices, {width, y_opaque_end, 1, p, r, g, b, 1})
+        table.insert(vertices, {width, y_opaque_end, 1, p, r, g, b, a})
         -- Bottom-Left, Transparent
         table.insert(vertices, {0, length, 0, 1, r, g, b, 0})
         -- Bottom-Right, Transparent
@@ -251,29 +253,34 @@ function M.createGradientVertices(direction, opaque_percentage, length, width, r
         -- Top-Right, Transparent
         table.insert(vertices, {width, 0, 1, 0, r, g, b, 0})
         -- Transition-Left, Opaque
-        table.insert(vertices, {0, y_opaque_start, 0, 1 - p, r, g, b, 1})
+        table.insert(vertices, {0, y_opaque_start, 0, 1 - p, r, g, b, a})
         -- Transition-Right, Opaque
-        table.insert(vertices, {width, y_opaque_start, 1, 1 - p, r, g, b, 1})
+        table.insert(vertices, {width, y_opaque_start, 1, 1 - p, r, g, b, a})
         -- Bottom-Left, Opaque
-        table.insert(vertices, {0, length, 0, 1, r, g, b, 1})
+        table.insert(vertices, {0, length, 0, 1, r, g, b, a})
         -- Bottom-Right, Opaque
-        table.insert(vertices, {width, length, 1, 1, r, g, b, 1})
+        table.insert(vertices, {width, length, 1, 1, r, g, b, a})
     elseif direction == "left" then
         local x_opaque_end = width * p
-        table.insert(vertices, {0, 0, 0, 0, r, g, b, 1})
-        table.insert(vertices, {0, length, 0, 1, r, g, b, 1})
-        table.insert(vertices, {x_opaque_end, 0, p, 0, r, g, b, 1})
-        table.insert(vertices, {x_opaque_end, length, p, 1, r, g, b, 1})
-        table.insert(vertices, {width, 0, 1, 0, r, g, b, 0})
-        table.insert(vertices, {width, length, 1, 1, r, g, b, 0})
+        local x_fade_end = width * p_end
+        table.insert(vertices, {0, 0, 0, 0, r, g, b, a})
+        table.insert(vertices, {0, length, 0, 1, r, g, b, a})
+        table.insert(vertices, {x_opaque_end, 0, p, 0, r, g, b, a})
+        table.insert(vertices, {x_opaque_end, length, p, 1, r, g, b, a})
+        table.insert(vertices, {x_fade_end, 0, p_end, 0, r, g, b, 0})
+        table.insert(vertices, {x_fade_end, length, p_end, 1, r, g, b, 0})
+        if p_end < 1 then
+            table.insert(vertices, {width, 0, 1, 0, r, g, b, 0})
+            table.insert(vertices, {width, length, 1, 1, r, g, b, 0})
+        end
     elseif direction == "right" then
         local x_opaque_start = width * (1 - p)
         table.insert(vertices, {0, 0, 0, 0, r, g, b, 0})
         table.insert(vertices, {0, length, 0, 1, r, g, b, 0})
-        table.insert(vertices, {x_opaque_start, 0, 1 - p, 0, r, g, b, 1})
-        table.insert(vertices, {x_opaque_start, length, 1 - p, 1, r, g, b, 1})
-        table.insert(vertices, {width, 0, 1, 0, r, g, b, 1})
-        table.insert(vertices, {width, length, 1, 1, r, g, b, 1})
+        table.insert(vertices, {x_opaque_start, 0, 1 - p, 0, r, g, b, a})
+        table.insert(vertices, {x_opaque_start, length, 1 - p, 1, r, g, b, a})
+        table.insert(vertices, {width, 0, 1, 0, r, g, b, a})
+        table.insert(vertices, {width, length, 1, 1, r, g, b, a})
     end
     return vertices
 end
