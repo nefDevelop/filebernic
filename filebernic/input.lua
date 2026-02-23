@@ -121,10 +121,15 @@ end
 local function startScraping(global_state)
     local item = global_state.files[global_state.selectedIndex]
     if not item then return end
+
+    if global_state.lastScrapedRom ~= item.fullPath then
+        os.execute("rm -f tmp/scraper_*.png")
+        global_state.lastScrapedRom = item.fullPath
+    end
+
     global_state.log("Starting interactive scrape for: " .. item.name)
     global_state.state = "SCRAPING_IN_PROGRESS"
     global_state.scraperResults = {}
-    os.execute("rm -f /tmp/scraper_*.png")
     global_state.indexerChannelIn:push({ command = "scrape_single", item = item, config = global_state.config, systemName = global_state.systemName })
 end
 
@@ -136,16 +141,27 @@ local function performBatchScrape(items)
     indexerChannelIn:push({ command = "scrape_batch", items = items, config = config, systemName = systemName, romPath = romPath, muosArtPath = muosArtPath, muosTextPath = muosTextPath, muosPreviewPath = muosPreviewPath })
 end
 
-local function saveSelectedArt(global_state)
-    global_state.log("Saving selected art...")
-    local result = global_state.scraperResults[global_state.scraperSelection]
+local function saveCompositeArt(global_state)
+    global_state.log("Saving composite art...")
+    local frontRes = global_state.scraperResults[global_state.scraperFrontIndex]
+    local screenRes = global_state.scraperResults[global_state.scraperScreenIndex]
+    local textRes = global_state.scraperResults[global_state.scraperTextIndex]
+    
+    local compositeResult = {
+        imagePath = frontRes and frontRes.imagePath,
+        tempPath = frontRes and frontRes.tempPath,
+        screenshotPath = screenRes and screenRes.screenshotPath,
+        tempScreenPath = screenRes and screenRes.tempScreenPath,
+        description = textRes and textRes.description,
+        year = textRes and textRes.year
+    }
+
     local item = global_state.files[global_state.selectedIndex]
     global_state.systemName, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath = filesystem.updateSystemForFile(item, global_state.romPath, global_state.systemName, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath)
-    filesystem.saveScrapeResult(item, result, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath, global_state.log)
+    filesystem.saveScrapeResult(item, compositeResult, global_state.muosArtPath, global_state.muosTextPath, global_state.muosPreviewPath, global_state.log)
     
     local baseName = item.name:gsub("%..-$", "") -- Remove extension
     if global_state.muosArtPath and global_state.muosArtPath ~= "" then
-        global_state.log("Invalidating art paths for: " .. baseName)
         global_state.loader:invalidate(global_state.muosArtPath .. baseName .. ".png")
         global_state.loader:invalidate(global_state.muosTextPath .. baseName .. ".txt")
         global_state.loader:invalidate(global_state.muosTextPath .. baseName .. ".year")
@@ -205,6 +221,47 @@ function stateHandlers.SEARCH(key, global_state)
         global_state.files = global_state.allFiles -- Restore full list
         global_state.searchQuery = ""
         global_state.love.keyboard.setTextInput(false) -- Disable text input
+        global_state.inputCooldown = 0.2
+    end
+end
+
+-- Manejador para Edición de Texto (API Key)
+function stateHandlers.EDIT_TEXT(key, global_state)
+    if key == "up" then
+        global_state.keyboardRow = math.max(1, global_state.keyboardRow - 1)
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.inputCooldown = 0.15
+    elseif key == "down" then
+        global_state.keyboardRow = math.min(#global_state.keyboardGrid, global_state.keyboardRow + 1)
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.inputCooldown = 0.15
+    elseif key == "left" then
+        global_state.keyboardCol = math.max(1, global_state.keyboardCol - 1)
+        global_state.inputCooldown = 0.15
+    elseif key == "right" then
+        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol + 1)
+        global_state.inputCooldown = 0.15
+    elseif key == "return" or key == "kpenter" or key == "space" then
+        local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol]
+        if char == "OK" then
+            -- Save and exit
+            global_state.config.thegamesdb_apikey = global_state.textToEdit
+            local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
+            if f then f:write(global_state.json.encode(global_state.config)) f:close() end
+            
+            global_state.state = "OPTIONS_MENU"
+            global_state.love.keyboard.setTextInput(false)
+        elseif char == "BACK" then
+            global_state.textToEdit = global_state.textToEdit:sub(1, -2)
+        elseif char == "SPACE" then
+            global_state.textToEdit = global_state.textToEdit .. " "
+        else
+            global_state.textToEdit = global_state.textToEdit .. char
+        end
+        global_state.inputCooldown = 0.2
+    elseif key == "escape" or key == "backspace" then
+        global_state.state = "OPTIONS_MENU"
+        global_state.love.keyboard.setTextInput(false)
         global_state.inputCooldown = 0.2
     end
 end
@@ -350,6 +407,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 global_state.inputCooldown = 0.2
             else
                 global_state.state = "SCRAPER_VIEW"
+                global_state.scraperSelection = 1
                 global_state.inputCooldown = 0.2
             end
         elseif optText == L.get("delete_sd1") then
@@ -449,6 +507,42 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end -- Update option text
             State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem)
             refreshFiles(global_state)
+        elseif optText == L.get("api_settings") then
+            table.insert(global_state.menuStack, {
+                 title = global_state.menuTitle,
+                 message = global_state.menuMessage,
+                 options = global_state.menuOptions,
+                 selection = global_state.menuSelection
+            })
+            global_state.menuTitle = L.get("api_settings")
+            global_state.menuMessage = ""
+            global_state.menuOptions = {
+                L.get("scraper_api") .. ": " .. (global_state.config.scraperApi or "all"),
+                L.get("api_key") .. ": " .. (global_state.config.thegamesdb_apikey ~= "" and "******" or "Empty")
+            }
+            global_state.menuSelection = 1
+            global_state.menuAnim = 0
+        elseif optText:match(L.get("scraper_api")) then
+            local current = global_state.config.scraperApi or "all"
+            local nextApi = "all"
+            if current == "all" then nextApi = "libretro"
+            elseif current == "libretro" then nextApi = "thegamesdb"
+            elseif current == "thegamesdb" then nextApi = "all" end
+            global_state.config.scraperApi = nextApi
+            
+            -- Save config
+            local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
+            if f then f:write(global_state.json.encode(global_state.config)) f:close() end
+            
+            local newVal = L.get("scraper_api") .. ": " .. nextApi
+            if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end
+        elseif optText:match(L.get("api_key")) then
+            global_state.state = "EDIT_TEXT"
+            global_state.textToEdit = global_state.config.thegamesdb_apikey or ""
+            global_state.textEditLabel = L.get("api_key")
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
+            global_state.love.keyboard.setTextInput(true)
         elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
             local item = global_state.files[global_state.selectedIndex] -- Get selected item
             local path = item.fullPath
@@ -618,38 +712,73 @@ function stateHandlers.SCRAPER_VIEW(key, global_state)
         end
         global_state.showHelp = false
         global_state.inputCooldown = 0.2
+    elseif key == "left" or key == "right" then
+        if global_state.scraperSelection == 1 then global_state.scraperSelection = 2 else global_state.scraperSelection = 1 end
+        global_state.inputCooldown = 0.15
     elseif key == "return" or key == "kpenter" then -- 'a' button
-        startScraping(global_state)
-    elseif key == "tab" then -- 'y' button
-        global_state.state = "SCRAPER_OPTIONS"
-        global_state.menuTitle = global_state.L.get("options") -- Set menu title
-        global_state.menuAnim = 0
-        global_state.menuMessage = ""
-        global_state.menuOptions = {global_state.L.get("clean")}
-        global_state.menuSelection = 1
-        global_state.log("Menu opened: " .. global_state.menuTitle)
+        if global_state.scraperSelection == 1 then
+            startScraping(global_state)
+        elseif global_state.scraperSelection == 2 then
+            global_state.state = "SCRAPER_OPTIONS"
+            global_state.menuTitle = global_state.L.get("options") -- Set menu title
+            global_state.menuAnim = 0
+            global_state.menuMessage = ""
+            global_state.menuOptions = {global_state.L.get("clean")}
+            global_state.menuSelection = 1
+            global_state.log("Menu opened: " .. global_state.menuTitle)
+        end
         global_state.inputCooldown = 0.2
     end
 end
 
 -- Manejador para Resultados de Scraper
 function stateHandlers.SCRAPER_RESULTS(key, global_state)
+    local count = #global_state.scraperResults
+    if count == 0 then
+        if key == "backspace" then global_state.state = "SCRAPER_VIEW" end
+        return
+    end
+
     if key == "backspace" then
         global_state.state = "SCRAPER_VIEW"
         global_state.showHelp = false
         global_state.inputCooldown = 0.2
+    elseif key == "f" or key == "tab" then -- L1 / Tab cycles focus
+        if global_state.scraperFocus == "FRONT" then global_state.scraperFocus = "SCREEN"
+        elseif global_state.scraperFocus == "SCREEN" then global_state.scraperFocus = "TEXT"
+        else global_state.scraperFocus = "FRONT" end
+        global_state.inputCooldown = 0.2
     elseif key == "left" then
-        global_state.scraperSelection = math.max(1, global_state.scraperSelection - 1)
+        if global_state.scraperFocus == "FRONT" then
+            global_state.scraperFrontIndex = global_state.scraperFrontIndex - 1
+            if global_state.scraperFrontIndex < 1 then global_state.scraperFrontIndex = count end
+            global_state.scraperTextIndex = global_state.scraperFrontIndex -- Sync text
+            global_state.scraperScreenIndex = global_state.scraperFrontIndex -- Sync screen
+        elseif global_state.scraperFocus == "SCREEN" then
+            global_state.scraperScreenIndex = global_state.scraperScreenIndex - 1
+            if global_state.scraperScreenIndex < 1 then global_state.scraperScreenIndex = count end
+        elseif global_state.scraperFocus == "TEXT" then
+            global_state.scraperTextIndex = global_state.scraperTextIndex - 1
+            if global_state.scraperTextIndex < 1 then global_state.scraperTextIndex = count end
+        end
         global_state.inputCooldown = 0.15
     elseif key == "right" then
-        global_state.scraperSelection = math.min(#global_state.scraperResults, global_state.scraperSelection + 1)
-        global_state.inputCooldown = 0.15 -- Reset cooldown
-    elseif (key == "return" or key == "kpenter") and #global_state.scraperResults > 0 then
-        local sel = global_state.scraperResults[global_state.scraperSelection]
-        if sel and not sel.error then
-            saveSelectedArt(global_state)
-            global_state.inputCooldown = 0.2
+        if global_state.scraperFocus == "FRONT" then
+            global_state.scraperFrontIndex = global_state.scraperFrontIndex + 1
+            if global_state.scraperFrontIndex > count then global_state.scraperFrontIndex = 1 end
+            global_state.scraperTextIndex = global_state.scraperFrontIndex -- Sync text
+            global_state.scraperScreenIndex = global_state.scraperFrontIndex -- Sync screen
+        elseif global_state.scraperFocus == "SCREEN" then
+            global_state.scraperScreenIndex = global_state.scraperScreenIndex + 1
+            if global_state.scraperScreenIndex > count then global_state.scraperScreenIndex = 1 end
+        elseif global_state.scraperFocus == "TEXT" then
+            global_state.scraperTextIndex = global_state.scraperTextIndex + 1
+            if global_state.scraperTextIndex > count then global_state.scraperTextIndex = 1 end
         end
+        global_state.inputCooldown = 0.15 -- Reset cooldown
+    elseif (key == "return" or key == "kpenter") then
+        saveCompositeArt(global_state)
+        global_state.inputCooldown = 0.2
     end
 end
 
@@ -1365,6 +1494,8 @@ local function textinput(t, global_state)
     if global_state.state == "SEARCH" then
         global_state.searchQuery = global_state.searchQuery .. t
         filterFiles(global_state)
+    elseif global_state.state == "EDIT_TEXT" then
+        global_state.textToEdit = global_state.textToEdit .. t
     end
 end
 

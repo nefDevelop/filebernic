@@ -36,6 +36,9 @@ locale.data = {
         hide_favorites = "Ocultar Favoritos",
         reindex = "Re-indexar",
         cleanup = "Limpieza",
+        api_settings = "Ajustes API",
+        scraper_api = "Fuente Scraper",
+        api_key = "API Key",
         
         -- Valores
         yes = "Si",
@@ -136,6 +139,9 @@ locale.data = {
         hide_favorites = "Hide Favorites",
         reindex = "Re-index",
         cleanup = "Cleanup",
+        api_settings = "API Settings",
+        scraper_api = "Scraper Source",
+        api_key = "API Key",
         
         -- Values
         yes = "Yes",

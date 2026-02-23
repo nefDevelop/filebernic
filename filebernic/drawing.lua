@@ -191,9 +191,11 @@ local function drawBottomBar(global_state)
         drawHint(global_state.buttonIcons.r1, global_state.L.get("help"))
         drawHint(global_state.buttonIcons.select, global_state.L.get("exit"))
     elseif global_state.state == "SCRAPER_VIEW" then
-        drawHint(global_state.buttonIcons.a, global_state.L.get("search"))
+        drawHint(global_state.buttonIcons.a, global_state.L.get("accept"))
         drawHint(global_state.buttonIcons.b, global_state.L.get("back"))
-        drawHint(global_state.buttonIcons.y, global_state.L.get("options"))
+    elseif global_state.state == "EDIT_TEXT" then
+        drawHint(global_state.buttonIcons.a, global_state.L.get("accept"))
+        drawHint(global_state.buttonIcons.b, global_state.L.get("cancel"))
     elseif global_state.state == "SCRAPER_OPTIONS" then
         drawHint(global_state.buttonIcons.a, global_state.L.get("accept"))
         drawHint(global_state.buttonIcons.b, global_state.L.get("back"))
@@ -907,12 +909,154 @@ local function drawScraperLayout(x, y, w, h, img1, img2, desc, isResultView, glo
     if not isResultView then
         local btnH = 40
         local btnY = y + contentH - btnH
+        local spacing = 10
+        local btnW = (rightW - spacing) / 2
+        
+        -- Search Button (1)
         love.graphics.setFont(fontMedium)
-        love.graphics.setColor(theme.colors.selection_accent)
-        love.graphics.rectangle("fill", rightX, btnY, rightW, btnH, 8)
+        if global_state.scraperSelection == 1 then
+            love.graphics.setColor(theme.colors.selection_accent)
+        else
+            love.graphics.setColor(0.25, 0.25, 0.25)
+        end
+        love.graphics.rectangle("fill", rightX, btnY, btnW, btnH, 8)
+        
         love.graphics.setColor(theme.colors.text_white)
-        love.graphics.printf(L.get("search_data"), rightX, btnY + (btnH - fontMedium:getHeight())/2, rightW, "center")
+        love.graphics.printf(L.get("search_data"), rightX, btnY + (btnH - fontMedium:getHeight())/2, btnW, "center")
+
+        -- Options Button (2)
+        local optX = rightX + btnW + spacing
+        if global_state.scraperSelection == 2 then
+            love.graphics.setColor(theme.colors.selection_accent)
+        else
+            love.graphics.setColor(0.25, 0.25, 0.25)
+        end
+        love.graphics.rectangle("fill", optX, btnY, btnW, btnH, 8)
+        
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf(L.get("options"), optX, btnY + (btnH - fontMedium:getHeight())/2, btnW, "center")
     end
+end
+
+local function drawScraperSelector(x, y, w, h, isFocused, index, total, drawContentFunc)
+    -- Background
+    love.graphics.setColor(0, 0, 0, 0.3)
+    love.graphics.rectangle("fill", x, y, w, h, 8)
+
+    -- Content
+    love.graphics.stencil(function()
+        love.graphics.rectangle("fill", x, y, w, h, 8)
+    end, "replace", 1)
+    love.graphics.setStencilTest("greater", 0)
+    drawContentFunc(x, y, w, h)
+    love.graphics.setStencilTest()
+
+    -- Border
+    if isFocused then
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.setLineWidth(3)
+    else
+        love.graphics.setColor(theme.colors.side_menu_separator)
+        love.graphics.setLineWidth(1)
+    end
+    love.graphics.rectangle("line", x, y, w, h, 8)
+    love.graphics.setLineWidth(1)
+
+    -- Indicator (e.g. 1/4)
+    if total > 1 then
+        local indText = index .. "/" .. total
+        love.graphics.setFont(fontSmall)
+        local tw = fontSmall:getWidth(indText) + 10
+        local th = fontSmall:getHeight() + 4
+        
+        -- Draw indicator background pill
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", x + w - tw - 5, y + h - th - 5, tw, th, 4)
+        
+        -- Draw text
+        if isFocused then
+            love.graphics.setColor(theme.colors.selection_accent)
+        else
+            love.graphics.setColor(theme.colors.text_dim)
+        end
+        love.graphics.print(indText, x + w - tw - 5 + 5, y + h - th - 5 + 2)
+    end
+end
+
+local function drawScraperEditor(global_state, x, y, w, h)
+    local results = global_state.scraperResults
+    local total = #results
+    if total == 0 then return end
+
+    local colSpacing = 20
+    
+    -- Layout: Left Col (Images) 35%, Right Col (Text) Rest
+    local leftW = w * 0.35
+    local rightW = w - leftW - colSpacing
+    
+    local imgSpacing = 10
+    local topH = (h - imgSpacing) * 0.55 -- Front box height
+    local botH = h - topH - imgSpacing -- Screen box height
+    
+    -- Front Box (Top Left)
+    local frontRes = results[global_state.scraperFrontIndex]
+    drawScraperSelector(x, y, leftW, topH, global_state.scraperFocus == "FRONT", global_state.scraperFrontIndex, total, function(bx, by, bw, bh)
+        if frontRes and frontRes.image then
+            love.graphics.setColor(1, 1, 1)
+            local scale = math.min(bw / frontRes.image:getWidth(), bh / frontRes.image:getHeight())
+            local iw = frontRes.image:getWidth() * scale
+            local ih = frontRes.image:getHeight() * scale
+            love.graphics.draw(frontRes.image, bx + (bw - iw)/2, by + (bh - ih)/2, 0, scale, scale)
+        else
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_dim)
+            love.graphics.printf(L.get("front"), bx, by + bh/2 - 10, bw, "center")
+        end
+    end)
+    
+    -- Screen Box (Bottom Left)
+    local screenRes = results[global_state.scraperScreenIndex]
+    drawScraperSelector(x, y + topH + imgSpacing, leftW, botH, global_state.scraperFocus == "SCREEN", global_state.scraperScreenIndex, total, function(bx, by, bw, bh)
+        if screenRes and screenRes.screenshot then
+            love.graphics.setColor(1, 1, 1)
+            local scale = math.min(bw / screenRes.screenshot:getWidth(), bh / screenRes.screenshot:getHeight())
+            local iw = screenRes.screenshot:getWidth() * scale
+            local ih = screenRes.screenshot:getHeight() * scale
+            love.graphics.draw(screenRes.screenshot, bx + (bw - iw)/2, by + (bh - ih)/2, 0, scale, scale)
+        else
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_dim)
+            love.graphics.printf(L.get("screen"), bx, by + bh/2 - 10, bw, "center")
+        end
+    end)
+    
+    -- Text Box (Right)
+    local textRes = results[global_state.scraperTextIndex]
+    drawScraperSelector(x + leftW + colSpacing, y, rightW, h, global_state.scraperFocus == "TEXT", global_state.scraperTextIndex, total, function(bx, by, bw, bh)
+        local padding = 15
+        local tx = bx + padding
+        local ty = by + padding
+        local tw = bw - padding * 2
+        
+        if textRes then
+            -- Source / Region
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(theme.colors.selection_accent)
+            local sourceText = (textRes.region or "") .. (textRes.source and (" [" .. textRes.source .. "]") or "")
+            love.graphics.printf(sourceText, tx, ty, tw, "left")
+            ty = ty + fontSmall:getHeight() + 5
+            
+            -- Description
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_medium)
+            local desc = textRes.description or L.get("no_desc")
+            love.graphics.printf(desc, tx, ty, tw, "left")
+        else
+            love.graphics.setFont(fontMedium)
+            love.graphics.setColor(theme.colors.text_dim)
+            love.graphics.printf(L.get("no_info"), tx, ty, tw, "center")
+        end
+    end)
 end
 
 local function drawScraperView(global_state)
@@ -988,58 +1132,11 @@ local function drawScraperView(global_state)
         if #global_state.scraperResults == 0 then
             love.graphics.printf(L.get("no_results"), 20, 100, w, "left")
         else
-            -- Lista horizontal de miniaturas
-            local listY = 90
-            local thumbSize = 80
-            local spacing = 10
-            local startX = 20
-
-            love.graphics.setColor(theme.colors.side_menu_separator)
-            love.graphics.rectangle("line", startX - 5, listY - 5, w - (startX - 5) * 2, thumbSize + 10, 8)
-            
-            for i, result in ipairs(global_state.scraperResults) do
-                local x = startX + (i-1) * (thumbSize + spacing)
-                if x > w - thumbSize then break end
-                
-                if i == global_state.scraperSelection then
-                    love.graphics.setColor(theme.colors.selection_accent)
-                    love.graphics.rectangle("fill", x - 2, listY - 2, thumbSize + 4, thumbSize + 4, 6)
-                end
-                
-                love.graphics.setColor(theme.colors.text_white)
-                if result.image then
-                    local scale = math.min(thumbSize/result.image:getWidth(), thumbSize/result.image:getHeight()) -- Scale image to fit thumbnail
-                    love.graphics.draw(result.image, x + (thumbSize - result.image:getWidth()*scale)/2, listY + (thumbSize - result.image:getHeight()*scale)/2, 0, scale, scale)
-                elseif result.error then
-                    love.graphics.setColor(1, 0.4, 0.4)
-                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize, 5)
-                    love.graphics.setFont(fontTitle)
-                    love.graphics.printf("!", x, listY + thumbSize/2 - 12, thumbSize, "center")
-                else
-                    love.graphics.rectangle("line", x, listY, thumbSize, thumbSize, 5)
-                end
-            end
-            
-            -- Preview of selected result (Split layout)
-            local sel = global_state.scraperResults[global_state.scraperSelection]
-            if sel then
-                if sel.error then
-                    love.graphics.setColor(1, 0.4, 0.4)
-                    love.graphics.setFont(fontMedium)
-                    love.graphics.printf(sel.text or "Error", 40, 300, w - 80, "center")
-                else
-                    -- Squash down: Draw layout below the list
-                    local topY = listY + thumbSize + 20
-                    local bottomBarH = 30
-                    local availableH = h - topY - bottomBarH - 10
-                    
-                local infoText = sel.description or L.get("no_desc")
-                if sel.source then
-                    infoText = "[" .. sel.source .. "] " .. infoText
-                end
-                    drawScraperLayout(0, topY, w, availableH, sel.image, sel.screenshot, infoText, true, global_state)
-                end
-            end
+            -- Editor de resultados (Composite)
+            local topY = 90
+            local bottomBarH = 30
+            local availableH = h - topY - bottomBarH - 10
+            drawScraperEditor(global_state, 20, topY, w - 40, availableH)
         end
     end
 
@@ -2307,7 +2404,7 @@ local function draw(global_state)
     drawJumpLetter(global_state)
 
     -- Draw Search UI if active
-    if state == "SEARCH" or keyboardAnim > 0 then
+    if state == "SEARCH" or state == "EDIT_TEXT" or keyboardAnim > 0 then
         local t = keyboardAnim
         local ease = 1 - (1 - t)^3
         local panelH = 250 -- Height of keyboard panel
@@ -2321,7 +2418,11 @@ local function draw(global_state)
         local r, g, b = unpack(global_state.theme.colors.text_white)
         love.graphics.setColor(r, g, b, ease)
         love.graphics.setFont(fontTitle)
-        love.graphics.printf(L.get("search_label", searchQuery), 20, currentY + 10, w - 40, "left")
+        if state == "EDIT_TEXT" then
+            love.graphics.printf(global_state.textEditLabel .. ": " .. global_state.textToEdit .. "_", 20, currentY + 10, w - 40, "left")
+        else
+            love.graphics.printf(L.get("search_label", searchQuery), 20, currentY + 10, w - 40, "left")
+        end
         
         -- Virtual Keyboard
         love.graphics.setFont(fontMedium)

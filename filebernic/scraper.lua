@@ -8,7 +8,9 @@ local L = _G.L or { get = function(key, ...) return string.format(key, ...) end 
 
 -- Helper function to download an image with curl and check its success
 local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
-    log_func("Downloading image: " .. imageUrl)
+    local shortUrl = imageUrl
+    if #shortUrl > 50 then shortUrl = shortUrl:sub(1, 47) .. "..." end
+    log_func("Downloading image: " .. shortUrl)
     local max_retries = 3
     local retry_delay = 1 -- seconds
     
@@ -111,7 +113,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
             if progress_callback then progress_callback({type="scraper_progress", message=L.get("querying_api", "TheGamesDB")}) end
             love.timer.sleep(0.05) -- Pausa para que la UI se actualice
             
-            log("TGDB Request: " .. url)
+            log("TGDB Request: " .. (url:sub(1, 60)) .. "...")
 
             local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'")
             local response = nil
@@ -135,45 +137,56 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
                 if data and data.data and data.data.games then
                     for _, game in ipairs(data.data.games) do
                         local gameId = tostring(game.id)
-                        if data.include and data.include.boxart and data.include.boxart.base_url and data.include.boxart.data and data.include.boxart.data[gameId] then
-                            local boxartBaseUrl = data.include.boxart.base_url.original or "https://cdn.thegamesdb.net/images/original/"
+                        
+                        -- Collect Fronts
+                        local fronts = {}
+                        if data.include and data.include.boxart and data.include.boxart.data and data.include.boxart.data[gameId] then
                             for _, art in ipairs(data.include.boxart.data[gameId]) do
-                                if art.side == "front" then
-                                    if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "TheGamesDB")}) end
-                                    local imageUrl = boxartBaseUrl .. art.filename
-                                    local tempImgPath = "tmp/scraper_tgdb_" .. gameId .. ".png"
-                                    local imageDownloaded = downloadImage(imageUrl, tempImgPath, log, progress_callback)
-                                    
-                                    local year = nil
-                                    if game.release_date then
-                                        year = game.release_date:match("^(%d%d%d%d)")
-                                    end
-                                    
-                                    local tempScreenPath = nil
-                                    if data.include.screenshot and data.include.screenshot.base_url and data.include.screenshot.data and data.include.screenshot.data[gameId] then
-                                        local screenshotBaseUrl = data.include.screenshot.base_url.original or "https://cdn.thegamesdb.net/images/original/"
-                                        local scr = data.include.screenshot.data[gameId][1]
-                                        if scr then
-                                            local screenUrl = screenshotBaseUrl .. scr.filename
-                                            tempScreenPath = "tmp/scraper_tgdb_scr_" .. gameId .. ".png" -- Construct path
-                                            if not downloadImage(screenUrl, tempScreenPath, log, progress_callback) then
-                                                tempScreenPath = nil -- Clear path if download failed
-                                            end
-                                        end
-                                    end
-                                    if imageDownloaded then
+                                if art.side == "front" then table.insert(fronts, art) end
+                            end
+                        end
+                        
+                        -- Collect Screens
+                        local screens = {}
+                        if data.include and data.include.screenshot and data.include.screenshot.data and data.include.screenshot.data[gameId] then
+                            for _, scr in ipairs(data.include.screenshot.data[gameId]) do
+                                table.insert(screens, scr)
+                            end
+                        end
+                        
+                        local loopCount = math.max(#fronts, #screens)
+                        if loopCount == 0 then loopCount = 1 end -- Allow text-only result if no images found
+                        
+                        for i = 1, loopCount do
+                            local tempImgPath, tempScreenPath
+                            local imgDownloaded, scrDownloaded = false, false
+                            
+                            if fronts[i] then
+                                local boxartBaseUrl = (data.include.boxart.base_url and data.include.boxart.base_url.original) or "https://cdn.thegamesdb.net/images/original/"
+                                local imageUrl = boxartBaseUrl .. fronts[i].filename
+                                tempImgPath = "tmp/scraper_tgdb_" .. gameId .. "_" .. i .. ".png"
+                                if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "TheGamesDB")}) end
+                                imgDownloaded = downloadImage(imageUrl, tempImgPath, log, progress_callback)
+                            end
+                            
+                            if screens[i] then
+                                local screenshotBaseUrl = (data.include.screenshot.base_url and data.include.screenshot.base_url.original) or "https://cdn.thegamesdb.net/images/original/"
+                                local screenUrl = screenshotBaseUrl .. screens[i].filename
+                                tempScreenPath = "tmp/scraper_tgdb_scr_" .. gameId .. "_" .. i .. ".png"
+                                scrDownloaded = downloadImage(screenUrl, tempScreenPath, log, progress_callback)
+                            end
+                            
+                            if imgDownloaded or scrDownloaded or (i == 1) then
                                         table.insert(results, {
-                                            imagePath = tempImgPath,
-                                            screenshotPath = tempScreenPath,
-                                            tempScreenPath = tempScreenPath,
+                                            imagePath = imgDownloaded and tempImgPath or nil,
+                                            screenshotPath = scrDownloaded and tempScreenPath or nil,
+                                            tempScreenPath = scrDownloaded and tempScreenPath or nil,
+                                            tempPath = imgDownloaded and tempImgPath or nil,
                                             description = game.overview or "Sin descripción.",
-                                            year = year,
+                                            year = game.release_date and game.release_date:match("^(%d%d%d%d)"),
                                             region = game.game_title,
-                                            tempPath = tempImgPath,
                                             source = "TheGamesDB"
                                         })
-                                    end
-                                end
                             end
                         end
                     end

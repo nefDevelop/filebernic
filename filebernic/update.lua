@@ -149,7 +149,7 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
         end
     end
 
-    if global_state.state == "SEARCH" then
+    if global_state.state == "SEARCH" or global_state.state == "EDIT_TEXT" then
         global_state.keyboardAnim = math.min(1, global_state.keyboardAnim + dt * 6)
     else
         global_state.keyboardAnim = math.max(0, global_state.keyboardAnim - dt * 6)
@@ -252,6 +252,10 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                     end
                 end
                 global_state.scraperSelection = 1
+                global_state.scraperFrontIndex = 1
+                global_state.scraperScreenIndex = 1
+                global_state.scraperTextIndex = 1
+                global_state.scraperFocus = "FRONT"
                 global_state.state = "SCRAPER_RESULTS"
             elseif msg.type == "batch_progress" then
                 global_state.scraperProgress.current = msg.current

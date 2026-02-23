@@ -33,7 +33,7 @@ itemToDelete = nil -- Item currently selected for deletion
 
 lastPlayedRom = ""
 playedRoms = {}
-iconFolder, iconRom, iconNetwork, iconReload, iconTrash, iconHide, iconInfo, iconSaveStates, iconList, iconGrid, iconGame, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+iconFolder, iconRom, iconNetwork, iconReload, iconTrash, iconHide, iconInfo, iconSaveStates, iconList, iconGrid, iconGame, iconKey, imgNoImage, imgOn, imgOff, currentImage, currentScreenshot, currentYear, buttonIcons, currentSystemIcon, currentSystemContentIcon = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 currentImageAlpha, currentScreenshotAlpha, imageInvalid, screenshotInvalid = 0, 0, false, false
 currentDescription = ""
 timer, delay, pendingLoad = 0, 0.05, false
@@ -82,10 +82,16 @@ cleanupCoroutine = nil -- Coroutine for cleanup scan
 scraperResults = {}
 scraperProgress = { current = 0, total = 0, currentName = "", successes = 0, failures = 0 }
 scraperSelection = 1
+scraperFocus = "FRONT"
+scraperFrontIndex = 1
+scraperScreenIndex = 1
+scraperTextIndex = 1
 scraperProgressMessage = "" -- New variable for scraper progress messages
 scraperWarningMessage = "" -- New variable for scraper warning messages
 scraperWarningTimer = 0 -- Timer for how long to display the warning
 searchQuery = ""
+textToEdit = "" -- Variable for text editing
+textEditLabel = "" -- Label for text editing
 menuStack = {}
 focusedItem = nil
 allFiles = {}
@@ -551,6 +557,9 @@ function love.load(arg)
     iconList = love.graphics.newImage("assets/ui/list.png")
     iconGrid = love.graphics.newImage("assets/ui/grid.png")
     iconGame = love.graphics.newImage("assets/ui/game.png")
+    if love.filesystem.getInfo("assets/ui/key.png") then
+        iconKey = love.graphics.newImage("assets/ui/key.png")
+    end
     imgNoImage = love.graphics.newImage("assets/ui/noImage.png")
     imgOn = love.graphics.newImage("assets/ui/on.png")
     imgOff = love.graphics.newImage("assets/ui/off.png")
