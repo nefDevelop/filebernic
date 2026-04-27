@@ -37,6 +37,7 @@ locale.data = {
         reindex = "Re-indexar",
         cleanup = "Limpieza",
         api_settings = "Ajustes API",
+        missing_api_key_warn = "AVISO: Falta la clave de TheGamesDB. El scraper de TGDB no funcionará hasta que añadas una.",
         scraper_api = "Fuente Scraper",
         api_key = "TGDB Key",
         ss_user = "Usuario SS",

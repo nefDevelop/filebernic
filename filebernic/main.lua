@@ -9,10 +9,10 @@ require "locale" -- Cargar sistema de traducción
 input = require "input"
 
 -- Variables de configuración y estado
-DEBUG = 2 -- 0: No logs, 1: Errors only, 2: All logs
+DEBUG = 1 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
     LOADER = false,
-    DEFAULT = true
+    DEFAULT = false
 }
 
 systemName = ""

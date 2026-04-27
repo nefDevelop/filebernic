@@ -1,39 +1,54 @@
-# FileBernic
+# FileBernic 🎮
 
-**FileBernic** es un gestor de ROMs simple, eficiente y elegante diseñado específicamente para dispositivos portátiles que ejecutan **muOS**.
+**FileBernic** es un gestor de ROMs avanzado, eficiente y con una interfaz cuidada, diseñado específicamente para dispositivos portátiles con **muOS** (como la familia Anbernic RG35XX y similares).
 
-![Screenshot](assets/screenshot.png) *(Pendiente de añadir)*
+![FileBernic](glyph/filebernic.png)
 
-## Características
+## ✨ Características
 
-- **Diseño Nativo**: Interfaz minimalista que se siente como parte del sistema operativo.
-- **Rápido y Ligero**: Optimizado para dispositivos de bajo consumo.
-- **Scraper Integrado**: Descarga carátulas y metadatos automáticamente (ScreenScraper / TheGamesDB).
-- **Gestión de Archivos**: Copia, mueve y borra ROMs y partidas guardadas entre tarjetas SD.
-- **Favoritos e Historial**: Acceso rápido a tus juegos más jugados.
-- **Modo "Juego Único"**: Lanza ROMs directamente sin complicaciones.
+- **Diseño Nativo**: Interfaz fluida y minimalista integrada con la estética de muOS.
+- **Doble SD**: Gestión completa entre `/mnt/mmc` (SD1) y `/mnt/sdcard` (SD2).
+- **Scraper Multifuente**: Descarga carátulas, capturas y descripciones usando TheGamesDB, ScreenScraper y Libretro.
+- **Gestión de Partidas**: Copia y mueve tus *Save Games* entre tarjetas SD fácilmente.
+- **Mantenimiento**: Herramientas integradas para limpiar archivos huérfanos e imágenes innecesarias.
+- **Vistas Flexibles**: Elige entre modo **Lista** o modo **Grid**.
+- **Modo "Juego Único"**: Combina versiones de distintas regiones en una sola entrada para una biblioteca más limpia.
 
-## Instalación
+## 🚀 Instalación en muOS
 
-1. Descarga el archivo `.muxapp` de la sección [Releases](https://github.com/tu-usuario/filebernic/releases).
-2. Copia el archivo `FileBernic.muxapp` a la carpeta `Applications` o `ROMS/Applications` de tu tarjeta SD.
-3. Inserta la tarjeta en tu dispositivo muOS.
-4. Busca "FileBernic" en el menú de aplicaciones y ¡listo!
+1. Ve a la sección de [Releases](https://github.com/nef734/filebernic/releases) y descarga el archivo `filebernic.muxapp` más reciente.
+2. Conecta tu tarjeta SD al PC o usa el explorador de archivos de muOS.
+3. Copia el archivo `filebernic.muxapp` en la carpeta `MUOS/application/` de tu tarjeta SD principal.
+4. En tu dispositivo, abre el menú de **Applications** y selecciona **FileBernic**.
 
-## Uso
+## 🛠️ Configuración del Scraper
 
-- **A**: Aceptar / Abrir carpeta / Lancer juego
-- **B**: Atrás / Subir nivel
-- **Y**: Menú de Opciones (Scraper, Gestión de Archivos)
-- **X**: Marcar archivo (para operaciones en lote)
-- **Start**: Configuración Global
-- **Select**: Salir
+Para aprovechar al máximo el Scraper de **TheGamesDB**, se recomienda introducir tu propia API Key:
+1. Pulsa **Start** para abrir la configuración.
+2. Ve a **Ajustes API**.
+3. Selecciona **TheGamesDB API Key** e introduce tu clave.
+4. *Opcional*: También puedes configurar tus credenciales de **ScreenScraper**.
 
-## Créditos
+## 🎮 Controles
 
-Desarrollado con ❤️ usando LÖVE framework.
-Gracias a la comunidad de muOS por su soporte.
+- **A**: Aceptar / Entrar en Carpeta / Lanzar Juego.
+- **B**: Atrás / Subir de nivel.
+- **Y**: Menú de Opciones (Scraper, Copiar, Mover, Borrar, Favoritos).
+- **X**: Selección múltiple (para borrar o scrapear en lote).
+- **L1**: Buscador rápido.
+- **R1**: Ayuda en pantalla (menú contextual).
+- **Start**: Menú de Configuración (Vista, Modo, Re-indexar, Limpieza).
+- **Select**: Salir de la aplicación.
 
-## Licencia
+## 🤝 Contribuciones
 
-Este proyecto está bajo la licencia MIT. Ver archivo `LICENSE` para más detalles.
+¿Has encontrado un error o tienes una idea genial? 
+- Abre una [Issue](https://github.com/nef734/filebernic/issues) explicando el problema.
+- Si eres desarrollador, los Pull Requests son bienvenidos.
+
+## 📄 Licencia
+
+Este proyecto está bajo la **Licencia MIT**. Siéntete libre de usarlo, modificarlo y compartirlo. Consulta el archivo `LICENSE` para más detalles.
+
+---
+Desarrollado con ❤️ para la comunidad de muOS.

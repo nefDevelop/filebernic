@@ -528,7 +528,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                  selection = global_state.menuSelection
             })
             global_state.menuTitle = L.get("api_settings")
-            global_state.menuMessage = ""
+            global_state.menuMessage = (global_state.config.thegamesdb_apikey == "") and L.get("missing_api_key_warn") or ""
             global_state.menuOptions = {
                 L.get("scraper_api") .. ": " .. (global_state.config.scraperApi or "all"),
                 L.get("api_key") .. ": " .. (global_state.config.thegamesdb_apikey ~= "" and "******" or "Empty")
