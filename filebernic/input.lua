@@ -510,7 +510,16 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             local newVal = L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and L.get("on") or L.get("off"))
             if type(opt) == "table" then opt.text = newVal else global_state.menuOptions[global_state.menuSelection] = newVal end -- Update option text
             State.saveAppState(global_state.romPath, global_state.selectedIndex, global_state.hideEmpty, global_state.markPlayed, global_state.viewMode, global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem)
-            refreshFiles(global_state)
+            if global_state.isVirtualRoot then
+                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
+                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
+                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
+                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
+                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                preview.load(global_state, global_state.log, global_state.loader)
+            else
+                refreshFiles(global_state)
+            end
         elseif optText == L.get("api_settings") then
             table.insert(global_state.menuStack, {
                  title = global_state.menuTitle,

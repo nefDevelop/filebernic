@@ -989,7 +989,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     local hasFavorites = false
     if favoriteRoms then for k,v in pairs(favoriteRoms) do hasFavorites = true break end end
     
-    if hasFavorites and not hideFavorites then
+    if hasFavorites then
         table.insert(files, 1, {
             name = "Favoritos",
             isDir = true,

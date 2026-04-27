@@ -1,14 +1,24 @@
-Simulador_SD
-*.muxapp
-.log
-view_cache.json
-app_state.json
+# Datos de usuario y configuración generada
+filebernic/data/
+/tmp/
 
-tmp/ 
-filebernic/data/log/filebernic.log
-filebernic/data/view_cache.json
-filebernic/data/app_state.json
-filebernic/data/config.json
-filebernic/data/log/
-filebernic/data/app_state.json
-filebernic/data/app_state.json
+# Binarios y paquetes
+*.muxapp
+*.love
+*.zip
+filebernic/libs/*.so
+filebernic/libs/*.so.*
+
+# Juegos y recursos externos (Simulador)
+Simulador_SD/
+
+# Archivos del sistema y logs
+*.log
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+
