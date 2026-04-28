@@ -78,6 +78,25 @@ while true; do
         kill -9 "$GPTOKEYB_PID"
     fi
 
+    # --- SISTEMA DE ACTUALIZACIÓN OTA ---
+    if [ -f /tmp/filebernic_update ]; then
+        DOWNLOAD_URL=$(cat /tmp/filebernic_update)
+        echo "[OTA] Descargando actualización desde: $DOWNLOAD_URL" >>"$LOGFILE"
+        
+        # Descargar el nuevo empaquetado (.zip o .muxapp)
+        curl -L -k -o /tmp/filebernic_new.zip "$DOWNLOAD_URL" >>"$LOGFILE" 2>&1
+        
+        if [ -f /tmp/filebernic_new.zip ]; then
+            echo "[OTA] Descomprimiendo actualización..." >>"$LOGFILE"
+            # Extraer sobrescribiendo los archivos antiguos en la carpeta actual
+            unzip -o /tmp/filebernic_new.zip -d "$APP_DIR" >>"$LOGFILE" 2>&1
+            rm /tmp/filebernic_new.zip
+        fi
+        rm -f /tmp/filebernic_update
+        # El bucle continue, por lo que LÖVE se volverá a abrir inmediatamente con la nueva versión
+        continue
+    fi
+
     # Verificar si hay una ROM para lanzar
     if [ -f /tmp/launch_rom ]; then
         LAST_ROM=$(cat /tmp/launch_rom)

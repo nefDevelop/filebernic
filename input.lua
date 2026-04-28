@@ -624,6 +624,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             
             local latestVer, downloadUrl = utils.checkGitHubUpdate(global_state.APP_VERSION)
             if latestVer and downloadUrl then
+                global_state.updateAvailable = { version = latestVer, url = downloadUrl } -- Cache the result
                 global_state.updateUrl = downloadUrl
                 global_state.menuTitle = L.get("update_available")
                 global_state.menuMessage = L.get("update_msg", latestVer)
@@ -633,6 +634,20 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 global_state.menuMessage = L.get("no_update_msg")
                 global_state.menuOptions = {L.get("cancel")}
             end
+            global_state.menuSelection = 1
+            global_state.menuAnim = 0
+        elseif optText:match("^" .. L.get("update_available")) then
+            -- Manejador rápido para la actualización encontrada en segundo plano
+            table.insert(global_state.menuStack, {
+                 title = global_state.menuTitle,
+                 message = global_state.menuMessage,
+                 options = global_state.menuOptions,
+                 selection = global_state.menuSelection
+            })
+            global_state.updateUrl = global_state.updateAvailable.url
+            global_state.menuTitle = L.get("update_available")
+            global_state.menuMessage = L.get("update_msg", global_state.updateAvailable.version)
+            global_state.menuOptions = {L.get("update_now"), L.get("cancel")}
             global_state.menuSelection = 1
             global_state.menuAnim = 0
         elseif optText == L.get("update_now") then
@@ -1533,7 +1548,11 @@ local function keypressed(key, global_state)
             table.insert(global_state.menuOptions, {text = global_state.L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
             table.insert(global_state.menuOptions, {text = global_state.L.get("reindex"), icon = global_state.iconReload})
             table.insert(global_state.menuOptions, {text = global_state.L.get("cleanup"), icon = global_state.iconTrash})
-            table.insert(global_state.menuOptions, {text = global_state.L.get("check_update"), icon = global_state.iconNetwork})
+            if global_state.updateAvailable then
+                table.insert(global_state.menuOptions, {text = global_state.L.get("update_available") .. " (" .. global_state.updateAvailable.version .. ")", icon = global_state.iconNetwork})
+            else
+                table.insert(global_state.menuOptions, {text = global_state.L.get("check_update"), icon = global_state.iconNetwork})
+            end
             global_state.inputCooldown = 0.2
             return
         end

@@ -8,6 +8,10 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 input = require "input"
 
+APP_VERSION = "v1.0.0"
+updateUrl = ""
+updateAvailable = nil
+
 -- Variables de configuración y estado
 DEBUG = 1 -- 0: No logs, 1: Errors only, 2: All logs
 DEBUG_SECTIONS = {
@@ -785,6 +789,9 @@ function love.load(arg)
     isIndexing = true
     indexStateMessage = "Cargando base de datos..."
     indexerChannelIn:push({command="check_index", validExtensions=validExtensions, sourceDir=love.filesystem.getSource(), priorityPath=romPath})
+    
+    -- Comprobar actualizaciones en segundo plano (OTA) al iniciar
+    indexerChannelIn:push({command="check_update_ota", currentVersion=APP_VERSION})
     
     -- Determine initial view: app_state.json -> lastPlayedRom -> createMergedVirtualRoot
     -- Si cargamos caché, romPath ya tiene valor, así que esto se salta si ya tenemos vista.

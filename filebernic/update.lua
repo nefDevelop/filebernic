@@ -275,6 +275,9 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                          " Failures: " .. msg.failures)
                 global_state.state = "LIST"
                 global_state.refreshFiles() -- Assuming refreshFiles is a global function
+            elseif msg.type == "update_available" then
+                global_state.updateAvailable = { version = msg.version, url = msg.url }
+                log_func("OTA Update found in background: " .. msg.version)
             end
         end
     end

@@ -285,4 +285,36 @@ function M.createGradientVertices(direction, opaque_percentage, length, width, r
     return vertices
 end
 
+-- Comprueba si hay una nueva versión en el repositorio de GitHub
+function M.checkGitHubUpdate(currentVersion)
+    local json = require "libs.dkjson"
+    local url = "https://api.github.com/repos/nef734/filebernic/releases/latest"
+    local cmd = "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'"
+    
+    local handle = io.popen(cmd)
+    local response = handle and handle:read("*a") or ""
+    if handle then handle:close() end
+
+    if response ~= "" and response:sub(1,1) == "{" then
+        local data = json.decode(response)
+        if data and data.tag_name then
+            local latestVersion = data.tag_name
+            -- Si la versión obtenida de GitHub es diferente a la actual
+            if latestVersion ~= currentVersion then
+                local downloadUrl = nil
+                if data.assets then
+                    for _, asset in ipairs(data.assets) do
+                        if asset.name:match("%.zip$") or asset.name:match("%.muxapp$") then
+                            downloadUrl = asset.browser_download_url
+                            break
+                        end
+                    end
+                end
+                return latestVersion, downloadUrl
+            end
+        end
+    end
+    return nil, nil
+end
+
 return M

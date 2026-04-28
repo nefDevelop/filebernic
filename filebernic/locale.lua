@@ -110,6 +110,12 @@ locale.data = {
         single_game = "Juego Unico",
         grid = "GRID",
         list = "LIST",
+        check_update = "Buscar Actualización",
+        update_available = "Actualización Disponible",
+        update_msg = "Se ha encontrado la versión %s.\n¿Deseas actualizar y reiniciar?",
+        update_now = "Actualizar Ahora",
+        no_update = "Sin Actualizaciones",
+        no_update_msg = "Ya tienes la última versión o no hay conexión.",
     },
     en = {
         -- Actions / Buttons
@@ -215,6 +221,12 @@ locale.data = {
         single_game = "Single Game",
         grid = "GRID",
         list = "LIST",
+        check_update = "Check for Updates",
+        update_available = "Update Available",
+        update_msg = "Version %s has been found.\nDo you want to update and restart?",
+        update_now = "Update Now",
+        no_update = "No Updates",
+        no_update_msg = "You already have the latest version or no network connection.",
     }
 }
 

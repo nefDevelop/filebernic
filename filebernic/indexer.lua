@@ -6,6 +6,7 @@ local locale = require "locale" -- Ensure locale is loaded in the thread's envir
 local json = require "libs.dkjson"
 local scraper = require "scraper"
 local filesystem = require "filesystem"
+local utils = require "utils"
 
 local channel_in = love.thread.getChannel("indexer_in")
 local channel_out = love.thread.getChannel("indexer_out")
@@ -149,6 +150,12 @@ while true do
         elseif needsIndexing then
             channel_out:push({type="progress", message="Cambios detectados. Actualizando..."})
             performIndexing(validExtensions, sourceDir, priorityPath)
+        end
+        
+    elseif msg.command == "check_update_ota" then
+        local latestVer, downloadUrl = utils.checkGitHubUpdate(msg.currentVersion)
+        if latestVer and downloadUrl then
+            channel_out:push({type="update_available", version=latestVer, url=downloadUrl})
         end
 
     elseif msg.command == "start" then
