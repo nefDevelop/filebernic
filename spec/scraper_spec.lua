@@ -4,7 +4,20 @@ _G.love = {
   filesystem = {
     getInfo = function() end,
     getSource = function() end
+  },
+  timer = {
+    sleep = function() end
   }
+}
+
+_G.L = {
+  get = function(key, ...)
+    local translations = {
+      error_no_response_tgdb = "Error: No se pudo obtener respuesta de TheGamesDB",
+      error_invalid_response_tgdb = "Error: Respuesta inválida de TheGamesDB"
+    }
+    return translations[key] or key
+  end
 }
 
 describe("Scraper", function()
@@ -35,6 +48,7 @@ describe("Scraper", function()
     mock_filesystem.findInGamelist = function() return nil end
     filesystem.findInGamelist = function(...) return mock_filesystem.findInGamelist(...) end
     mock_json.decode = function(s) return {} end
+    mock_io.popen_calls = {}
     mock_io.popen_results = {}
     mock_io.open_files = {}
     mock_os.executed_commands = {}
@@ -44,6 +58,7 @@ describe("Scraper", function()
     -- Mock dependencies
     json.decode = mock_json.decode
     io.popen = function(cmd)
+      table.insert(mock_io.popen_calls, cmd)
       local result = mock_io.popen_results[cmd] or ""
       -- print("Mock io.popen called: " .. cmd) -- Debugging
       return {
@@ -60,6 +75,12 @@ describe("Scraper", function()
           -- print("  -> Returning mock handle for read") -- Debugging
           return {
             read = function(self, fmt) return content end,
+            seek = function(self, whence)
+              if whence == "end" then
+                return type(content) == "string" and #content or 100
+              end
+              return 0
+            end,
             close = function() end
           }
         end
@@ -112,7 +133,7 @@ describe("Scraper", function()
       assert.are.equal("1990", results[1].year)
       assert.are.equal("Local XML", results[1].source)
       assert.are.equal(1, #mock_os.executed_commands)
-      assert.are.equal("cp '/roms/nes/media/images/game.png' /tmp/scraper_local.png", mock_os.executed_commands[1])
+      assert.are.equal("cp '/roms/nes/media/images/game.png' 'tmp/scraper_local.png'", mock_os.executed_commands[1])
     end)
 
     it("should not scrape online if local data is found", function()
@@ -132,11 +153,12 @@ describe("Scraper", function()
 
     it("should fetch and parse data from TheGamesDB", function()
       local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&platform=Nintendo%20-%20Nintendo%20Entertainment%20System&fields=overview,release_date&include=boxart,screenshot"
-      mock_io.popen_results[ "curl -s -L --max-time 10 '" .. url .. "'" ] = '{ "data": { "games": [ { "id": 1, "overview": "TGDB Desc", "release_date": "1991-01-01" } ] }, "include": { "boxart": { "data": { "1": [ { "side": "front", "filename": "box.jpg" } ] } } } }'
+      mock_io.popen_results[ "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'" ] = '{ "data": { "games": [ { "id": 1, "overview": "TGDB Desc", "release_date": "1991-01-01", "game_title": "Game Title" } ] }, "include": { "boxart": { "data": { "1": [ { "side": "front", "filename": "box.jpg" } ] } } } }'
       
       json.decode = original_json_decode -- Use real json decoder
       -- Simular que el archivo de imagen temporal existe para que el scraper lo añada a los resultados.
-      mock_love_fs.info["/tmp/scraper_tgdb_1.png"] = { type = 'file', size = 12345 }
+      mock_io.open_files["tmp/scraper_tgdb_1_1.png"] = "mock image data"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_1.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'"] = "200"
       
       local results = scraper.getScrapeResults(item, config, log, "nes")
       
@@ -144,7 +166,7 @@ describe("Scraper", function()
       assert.are.equal("TGDB Desc", results[1].description)
       assert.are.equal("1991", results[1].year)
       assert.are.equal("TheGamesDB", results[1].source)
-      assert.are.equal("curl -s -L 'https://cdn.thegamesdb.net/images/original/box.jpg' -o '/tmp/scraper_tgdb_1.png'", mock_os.executed_commands[1])
+      assert.are.equal("curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_1.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'", mock_io.popen_calls[2])
     end)
 
     it("should show error if API key is missing", function()
@@ -157,7 +179,7 @@ describe("Scraper", function()
     it("should handle network errors gracefully for TheGamesDB", function()
       local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&platform=Nintendo%20-%20Nintendo%20Entertainment%20System&fields=overview,release_date&include=boxart,screenshot"
       -- Simulate empty response (network error/timeout)
-      mock_io.popen_results[ "curl -s -L --max-time 10 '" .. url .. "'" ] = "" 
+      mock_io.popen_results[ "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'" ] = "" 
       
       local results = scraper.getScrapeResults(item, config, log, "nes", love.filesystem.getInfo)
       assert.are.equal(1, #results)
@@ -168,7 +190,7 @@ describe("Scraper", function()
     it("should handle invalid JSON response for TheGamesDB", function()
       local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&platform=Nintendo%20-%20Nintendo%20Entertainment%20System&fields=overview,release_date&include=boxart,screenshot"
       -- Simulate invalid JSON
-      mock_io.popen_results[ "curl -s -L --max-time 10 '" .. url .. "'" ] = "NOT JSON DATA" 
+      mock_io.popen_results[ "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'" ] = "NOT JSON DATA" 
       
       local results = scraper.getScrapeResults(item, config, log, "nes", love.filesystem.getInfo)
       assert.are.equal(1, #results)
@@ -182,14 +204,14 @@ describe("Scraper", function()
 
     it("should fetch and parse data from Libretro", function()
       local url = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game.png"
-      mock_io.popen_results[ "curl -s -L -f '" .. url .. "' -o '/tmp/scraper_libretro_Exacto.png'" ] = "HTTP/2 200"
-      mock_io.open_files["/tmp/scraper_libretro_Exacto.png"] = "image data"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_Exacto.png' --write-out '%{http_code}' '" .. url .. "'"] = "200"
+      mock_io.open_files["tmp/scraper_libretro_Exacto.png"] = "image data"
 
       local results = scraper.getScrapeResults(item, config, log, "nes", love.filesystem.getInfo) -- Pass love.filesystem.getInfo
 
       assert.are.equal(1, #results)
       assert.are.equal("Libretro", results[1].source)
-      assert.are.equal("/tmp/scraper_libretro_Exacto.png", results[1].imagePath)
+      assert.are.equal("tmp/scraper_libretro_Exacto.png", results[1].imagePath)
     end)
 
     it("should try fuzzy names if exact match fails", function()
@@ -197,9 +219,9 @@ describe("Scraper", function()
       local url_exact = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game%20(USA).png"
       local url_fuzzy = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game%20(USA,%20Europe).png"
       
-      mock_io.popen_results[ "curl -s -L -f '" .. url_exact .. "' -o '/tmp/scraper_libretro_Exacto.png'" ] = "HTTP/2 404"
-      mock_io.popen_results[ "curl -s -L -f '" .. url_fuzzy .. "' -o '/tmp/scraper_libretro_FuzzyUSAEurope.png'" ] = "HTTP/2 200"
-      mock_io.open_files["/tmp/scraper_libretro_FuzzyUSAEurope.png"] = "image data"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_Exacto.png' --write-out '%{http_code}' '" .. url_exact .. "'"] = "404"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_FuzzyUSAEurope.png' --write-out '%{http_code}' '" .. url_fuzzy .. "'"] = "200"
+      mock_io.open_files["tmp/scraper_libretro_FuzzyUSAEurope.png"] = "image data"
 
       local results = scraper.getScrapeResults(item_fuzzy, config, log, "nes", love.filesystem.getInfo) -- Pass love.filesystem.getInfo
       
