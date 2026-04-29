@@ -614,27 +614,6 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                  global_state.log("Error: forceReindex function not found in global_state")
             end
             global_state.state = "LIST" -- Close menu and return to list (which will show indexing status)
-        elseif optText == L.get("check_update") then
-            table.insert(global_state.menuStack, {
-                 title = global_state.menuTitle,
-                 message = global_state.menuMessage,
-                 options = global_state.menuOptions,
-                 selection = global_state.menuSelection
-            })
-            
-            local latestVer, downloadUrl = utils.checkGitHubUpdate(global_state.APP_VERSION)
-            if latestVer and downloadUrl then
-                global_state.updateUrl = downloadUrl
-                global_state.menuTitle = L.get("update_available")
-                global_state.menuMessage = L.get("update_msg", latestVer)
-                global_state.menuOptions = {L.get("update_now"), L.get("cancel")}
-            else
-                global_state.menuTitle = L.get("no_update")
-                global_state.menuMessage = L.get("no_update_msg")
-                global_state.menuOptions = {L.get("cancel")}
-            end
-            global_state.menuSelection = 1
-            global_state.menuAnim = 0
         elseif optText == L.get("update_now") then
             local f = io.open("/tmp/filebernic_update", "w")
             if f then f:write(global_state.updateUrl); f:close() end
@@ -1533,7 +1512,6 @@ local function keypressed(key, global_state)
             table.insert(global_state.menuOptions, {text = global_state.L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
             table.insert(global_state.menuOptions, {text = global_state.L.get("reindex"), icon = global_state.iconReload})
             table.insert(global_state.menuOptions, {text = global_state.L.get("cleanup"), icon = global_state.iconTrash})
-            table.insert(global_state.menuOptions, {text = global_state.L.get("check_update"), icon = global_state.iconNetwork})
             global_state.inputCooldown = 0.2
             return
         end

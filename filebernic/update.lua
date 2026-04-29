@@ -278,6 +278,18 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
             elseif msg.type == "update_available" then
                 global_state.updateAvailable = { version = msg.version, url = msg.url }
                 log_func("OTA Update found in background: " .. msg.version)
+                
+                -- Auto-mostrar el prompt si estamos navegando la lista
+                if global_state.state == "LIST" then
+                    global_state.updateUrl = msg.url
+                    global_state.state = "OPTIONS_MENU"
+                    global_state.menuTitle = global_state.L.get("update_available")
+                    global_state.menuMessage = global_state.L.get("update_msg", msg.version)
+                    global_state.menuOptions = {global_state.L.get("update_now"), global_state.L.get("cancel")}
+                    global_state.menuSelection = 1
+                    global_state.menuAnim = 0
+                    global_state.menuStack = {}
+                end
             end
         end
     end
