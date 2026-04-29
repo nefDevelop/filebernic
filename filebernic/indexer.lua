@@ -19,7 +19,7 @@ local function scanRoot(rootPath, validExtensions, newIndex, fileMap, romDirs)
     table.insert(romDirs, rootPath)
     channel_out:push({type="progress", message="Escaneando: " .. rootPath})
 
-    local h = io.popen('find "'..rootPath..'" -type f')
+    local h = io.popen('find "'..rootPath..'" -type f 2>/dev/null')
     if h then
         for fLine in h:lines() do
             local filename = fLine:match("([^/]+)$")

@@ -1001,9 +1001,16 @@ local function drawScraperEditor(global_state, x, y, w, h)
     local topH = (h - imgSpacing) * 0.55 -- Front box height
     local botH = h - topH - imgSpacing -- Screen box height
     
+    local hasFronts = false
+    local hasScreens = false
+    for _, r in ipairs(results) do
+        if r.imagePath then hasFronts = true end
+        if r.screenshotPath then hasScreens = true end
+    end
+
     -- Front Box (Top Left)
     local frontRes = results[global_state.scraperFrontIndex]
-    drawScraperSelector(x, y, leftW, topH, global_state.scraperFocus == "FRONT", global_state.scraperFrontIndex, total, function(bx, by, bw, bh)
+    drawScraperSelector(x, y, leftW, topH, global_state.scraperFocus == "FRONT", global_state.scraperFrontIndex, hasFronts and total or 1, function(bx, by, bw, bh)
         if frontRes and frontRes.image then
             love.graphics.setColor(1, 1, 1)
             local scale = math.min(bw / frontRes.image:getWidth(), bh / frontRes.image:getHeight())
@@ -1019,7 +1026,7 @@ local function drawScraperEditor(global_state, x, y, w, h)
     
     -- Screen Box (Bottom Left)
     local screenRes = results[global_state.scraperScreenIndex]
-    drawScraperSelector(x, y + topH + imgSpacing, leftW, botH, global_state.scraperFocus == "SCREEN", global_state.scraperScreenIndex, total, function(bx, by, bw, bh)
+    drawScraperSelector(x, y + topH + imgSpacing, leftW, botH, global_state.scraperFocus == "SCREEN", global_state.scraperScreenIndex, hasScreens and total or 1, function(bx, by, bw, bh)
         if screenRes and screenRes.screenshot then
             love.graphics.setColor(1, 1, 1)
             local scale = math.min(bw / screenRes.screenshot:getWidth(), bh / screenRes.screenshot:getHeight())
@@ -1984,6 +1991,9 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     if not iconToDraw then
                         iconToDraw = utils.getSystemIcon(item.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
                     end
+                end
+                if not iconToDraw and item.isDir then
+                    iconToDraw = utils.getSystemIcon(item.name, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
                 end
                 if not iconToDraw then
                     iconToDraw = (item.isDir and global_state.iconFolder) or (global_state.currentSystemContentIcon or global_state.iconRom)

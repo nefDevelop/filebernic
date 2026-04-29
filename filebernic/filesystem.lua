@@ -39,7 +39,7 @@ function M.getArtPathForSystem(systemName)
 end
 
 function M.hasRoms(path, validExtensions)
-    local handle = io.popen('ls -p "'..path..'"')
+    local handle = io.popen('ls -p "'..path..'" 2>/dev/null')
     if handle then
         for line in handle:lines() do
             if line:sub(-1) ~= "/" then
@@ -885,13 +885,13 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
         local function scanAndAdd(scanPath, label)
             if log then log("Scanning root: " .. scanPath) end
 
-            local handle = io.popen('ls -p "'..scanPath..'"')
+            local handle = io.popen('ls -p "'..scanPath..'" 2>/dev/null')
             if handle then
                 local foundCount = 0
                 for line in handle:lines() do
                     if line:sub(-1) == "/" then
                         local dirName = line:sub(1, -2)
-                        if dirName ~= "BIOS" and dirName ~= "Saves" then
+                    if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
                             if not hideEmpty or M.hasRoms(scanPath .. line, validExtensions) then
                                 if dirMap[dirName] then
                                     files[dirMap[dirName]].sourceLabel = "SD½"
@@ -918,7 +918,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                     for line in f:lines() do
                         if line:sub(-1) == "/" then
                             local dirName = line:sub(1, -2)
-                            if dirName ~= "BIOS" and dirName ~= "Saves" then
+                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
                                 if not hideEmpty or M.hasRoms(scanPath .. line, validExtensions) then
                                     if dirMap[dirName] then
                                         files[dirMap[dirName]].sourceLabel = "SD½"
@@ -945,7 +945,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                         local fullPath = scanPath .. item
                         if love.filesystem.isDirectory(fullPath) then
                             local dirName = item
-                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName:sub(1,1) ~= "." then
+                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" and dirName:sub(1,1) ~= "." then
                                 if not hideEmpty or M.hasRoms(fullPath .. "/", validExtensions) then
                                     if dirMap[dirName] then
                                         files[dirMap[dirName]].sourceLabel = "SD½"
@@ -974,10 +974,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simPath = cwd .. "/../Simulador_SD/"
-            local h = io.popen('ls -d "'..simPath..'"')
-            if h and h:read("*a") ~= "" then
-                table.insert(files, {name = "Simulador_SD", isDir = true, fullPath = simPath, sourceLabel = "SIM"})
-            end
+            local h = io.popen('ls -d "'..simPath..'" 2>/dev/null')
             scanAndAdd(simPath, "SIM")
         end
     end
@@ -1179,11 +1176,11 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
         
         if launchMode == "Juego Unico" then
             -- Búsqueda recursiva solo de archivos
-            handle = io.popen('find "'..path..'" -type f')
+            handle = io.popen('find "'..path..'" -type f 2>/dev/null')
             isFind = true
         else
             -- Listado estándar de directorio actual
-            handle = io.popen('ls -p "'..path..'"')
+            handle = io.popen('ls -p "'..path..'" 2>/dev/null')
             if log then log("Scanning dir: " .. path) end
         end
 

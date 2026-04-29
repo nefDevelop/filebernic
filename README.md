@@ -1,15 +1,13 @@
-# FileBernic 🎮
+# ![FileBernic](glyph/filebernic.png) FileBernic
 
-**FileBernic** es un gestor de ROMs avanzado, eficiente y con una interfaz cuidada, diseñado específicamente para dispositivos portátiles con **muOS** (como la familia Anbernic RG35XX y similares).
-
-![FileBernic](glyph/filebernic.png)
+**FileBernic** es un gestor de ROMs con una interfaz cuidada, diseñado específicamente para dispositivos portátiles con **muOS** (testado y usado en Anbernic RG35XX-H).
 
 ## ✨ Características
 
 - **Diseño Nativo**: Interfaz fluida y minimalista integrada con la estética de muOS.
 - **Doble SD**: Gestión completa entre `/mnt/mmc` (SD1) y `/mnt/sdcard` (SD2).
 - **Scraper Multifuente**: Descarga carátulas, capturas y descripciones usando TheGamesDB, ScreenScraper y Libretro.
-- **Gestión de Partidas**: Copia y mueve tus *Save Games* entre tarjetas SD fácilmente.
+- **Gestión de Partidas**: Copia y mueve tus _Save Games_ entre tarjetas SD fácilmente.
 - **Mantenimiento**: Herramientas integradas para limpiar archivos huérfanos e imágenes innecesarias.
 - **Vistas Flexibles**: Elige entre modo **Lista** o modo **Grid**.
 - **Modo "Juego Único"**: Combina versiones de distintas regiones en una sola entrada para una biblioteca más limpia.
@@ -24,10 +22,11 @@
 ## 🛠️ Configuración del Scraper
 
 Para aprovechar al máximo el Scraper de **TheGamesDB**, se recomienda introducir tu propia API Key:
+
 1. Pulsa **Start** para abrir la configuración.
 2. Ve a **Ajustes API**.
 3. Selecciona **TheGamesDB API Key** e introduce tu clave.
-4. *Opcional*: También puedes configurar tus credenciales de **ScreenScraper**.
+4. _Opcional_: También puedes configurar tus credenciales de **ScreenScraper**.
 
 ## 🎮 Controles
 
@@ -42,8 +41,9 @@ Para aprovechar al máximo el Scraper de **TheGamesDB**, se recomienda introduci
 
 ## 🤝 Contribuciones
 
-¿Has encontrado un error o tienes una idea genial? 
-- Abre una [Issue](https://github.com/nef734/filebernic/issues) explicando el problema.
+¿Has encontrado un error o tienes una idea genial?
+
+- Abre una [Issue](https://github.com/nefDevelop/filebernic/issues) explicando el problema.
 - Si eres desarrollador, los Pull Requests son bienvenidos.
 
 ## 📄 Licencia
@@ -51,4 +51,5 @@ Para aprovechar al máximo el Scraper de **TheGamesDB**, se recomienda introduci
 Este proyecto está bajo la **Licencia MIT**. Siéntete libre de usarlo, modificarlo y compartirlo. Consulta el archivo `LICENSE` para más detalles.
 
 ---
+
 Desarrollado con ❤️ para la comunidad de muOS.

@@ -232,6 +232,16 @@ function forceReindex(global_state)
     -- Delete index files
     os.remove(love.filesystem.getSource() .. "/data/rom_index.json")
     os.remove(love.filesystem.getSource() .. "/data/rom_timestamps.json")
+    os.remove(love.filesystem.getSource() .. "/data/view_cache.json")
+    
+    -- Vaciar la lista en memoria para forzar la pantalla de "Indexando..."
+    if global_state.launchMode == "Juego Unico" and global_state.isVirtualRoot then
+        global_state.files = {}
+        global_state.allFiles = {}
+        global_state.selectedIndex = 1
+    else
+        refreshFiles()
+    end
     
     -- Restart indexing
     isIndexing = true
