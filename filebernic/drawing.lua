@@ -287,7 +287,7 @@ local function drawMenuContent(global_state, title, message, options, selection,
             coverH = global_state.currentImage:getHeight() * coverScale
             
             -- Centrar imagen en su slot de 80px
-            love.graphics.draw(currentImage, baseTextX + (maxCoverW - coverW)/2, headerY, 0, coverScale, coverScale)
+            love.graphics.draw(global_state.currentImage, baseTextX + (maxCoverW - coverW)/2, headerY, 0, coverScale, coverScale)
         end
         
         -- Dibujar el texto del título
@@ -329,7 +329,7 @@ local function drawMenuContent(global_state, title, message, options, selection,
     else
         -- Header Estándar
         love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
-        love.graphics.setFont(fontTitle)
+        love.graphics.setFont(global_state.fontTitle)
         love.graphics.printf(title, x + 20, 40, w - 40, "left")
 
         if message and message ~= "" then
@@ -364,7 +364,7 @@ local function drawMenuContent(global_state, title, message, options, selection,
             labelColor = theme.colors.text_white
             valueColor = theme.colors.text_white
         else
-            if type(option) == "table" and option.played and markPlayed then
+            if type(option) == "table" and option.played and global_state.markPlayed then
                 local c = theme.colors.list_played_unselected -- Color for unselected played item
                 love.graphics.setColor(c[1], c[2], c[3], (c[4] or 1) * alpha)
                 love.graphics.rectangle("fill", x, rowY, w, rowHeight)
@@ -650,7 +650,7 @@ local function drawMediaDetailContent(global_state, currentItem, x, y, w, h, alp
     love.graphics.print(infoTitle, x + 20, textY)
     love.graphics.setFont(fontSmall)
     love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], alpha)
-    local descText = (currentDescription and currentDescription ~= "") and currentDescription or L.get("no_info")
+    local descText = (global_state.currentDescription and global_state.currentDescription ~= "") and global_state.currentDescription or L.get("no_info")
     love.graphics.printf(descText, x + 20, textY + 25, w - 40, "left")
 
     if not coverImg and not global_state.currentScreenshot and descText == L.get("no_info") then
@@ -1157,13 +1157,13 @@ end
 local function drawScrollbar(global_state)
     local scrollW = 2
     love.graphics.setColor(theme.colors.scrollbar_background)
-    love.graphics.rectangle("fill", layout.scrollbarX, layout.listY, scrollW, layout.scrollbarH) -- Fondo de la barra
-    if #files > 1 then
-        local visibleRows = pageSize + 1 -- Calculate visibleRows here for drawScrollbar's scope
-        local h = layout.scrollbarH / (#files / visibleRows) -- Altura del "handle" de la barra
-        local y = layout.listY + ((animatedSelectionIndex - 1) / (#files - 1)) * (layout.scrollbarH - h) -- Posición animada
+    love.graphics.rectangle("fill", global_state.layout.scrollbarX, global_state.layout.listY, scrollW, global_state.layout.scrollbarH) -- Fondo de la barra
+    if #global_state.files > 1 then
+        local visibleRows = global_state.pageSize + 1 -- Calculate visibleRows here for drawScrollbar's scope
+        local h = global_state.layout.scrollbarH / (#global_state.files / visibleRows) -- Altura del "handle" de la barra
+        local y = global_state.layout.listY + ((global_state.animatedSelectionIndex - 1) / (#global_state.files - 1)) * (global_state.layout.scrollbarH - h) -- Posición animada
         love.graphics.setColor(theme.colors.scrollbar_handle)
-        love.graphics.rectangle("fill", layout.scrollbarX, y, scrollW, math.max(10, h))
+        love.graphics.rectangle("fill", global_state.layout.scrollbarX, y, scrollW, math.max(10, h))
     end
 end
 
@@ -1438,7 +1438,7 @@ local function drawCleanupMenu(global_state)
             
             -- Preview de imagen
             local imgPath = nil
-            if cleanupData.cursor.col == 3 then
+            if global_state.cleanupData.cursor.col == 3 then
                 imgPath = selItem.fullPath
             elseif selItem.system and selItem.name then
                 -- Intentar construir ruta de arte para duplicados
@@ -1730,7 +1730,7 @@ local function drawJumpLetter(global_state)
     local w, h = love.graphics.getDimensions()
     
     -- Animación de deslizamiento (Slide in/out) usando jumpPanelAnim (0 a 1)
-    local t = jumpPanelAnim
+    local t = global_state.jumpPanelAnim
     local ease = 1 - (1 - t)^3 -- Cubic ease out
     local slide = (1 - ease) * 140
     
@@ -1746,11 +1746,11 @@ local function drawJumpLetter(global_state)
     love.graphics.rectangle("line", x, y, panelW + 10, panelH, 10)
     
     -- Letra grande
-    love.graphics.setFont(fontHuge)
+    love.graphics.setFont(global_state.fontHuge)
 
     local scale = 1
-    local textW = fontHuge:getWidth(global_state.jumpLetter)
-    local textH = fontHuge:getHeight()
+    local textW = global_state.fontHuge:getWidth(global_state.jumpLetter)
+    local textH = global_state.fontHuge:getHeight()
     
     local drawX = x + panelW / 2
     local drawY = y + panelH / 2
@@ -1874,7 +1874,7 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
     else
         -- Columna de Vista Previa (Boxart + Screenshot) - DIBUJADO AL FONDO
         if showPreview then
-            local bgImage = currentScreenshot or currentImage
+            local bgImage = global_state.currentScreenshot or global_state.currentImage
             if bgImage then -- If there's a background image
                 local alpha = 1
                 if bgImage == global_state.currentScreenshot then alpha = global_state.currentScreenshotAlpha
@@ -2185,14 +2185,14 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
     drawScrollbar(global_state)
     
     -- Mostrar nombre completo del archivo seleccionado encima de la barra de estado (Overlay)
-    if files[round(animatedSelectionIndex)] then -- Overlay should follow the rounded animated cursor
-        local item = files[selectedIndex]
+    if global_state.files[round(global_state.animatedSelectionIndex)] then -- Overlay should follow the rounded animated cursor
+        local item = global_state.files[global_state.selectedIndex]
         local rawName = item.name
         local nameNoExt = rawName:gsub("%.[^%.]+$", "")
         
         -- Recalcular el ancho disponible para el texto para decidir si mostrar el overlay
         local availableWidth
-        local showSystemIcons = (launchMode == "Juego Unico" and item.versions)
+        local showSystemIcons = (global_state.launchMode == "Juego Unico" and item.versions)
 
         if showSystemIcons then
             local systems = {}
@@ -2217,11 +2217,11 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
             availableWidth = sdColX - (layout.selX + 70) - 10
         end
 
-        local isFav = (favoriteRoms[item.fullPath]) and romPath ~= "@Favorites/"
+        local isFav = (global_state.favoriteRoms[item.fullPath]) and global_state.romPath ~= "@Favorites/"
         if isFav then
             local favH = 16
-            local favScale = favH / iconFavorite:getHeight()
-            local favOffset = (iconFavorite:getWidth() * favScale) + 5 -- Usar favScale precalculado
+            local favScale = favH / global_state.iconFavorite:getHeight()
+            local favOffset = (global_state.iconFavorite:getWidth() * favScale) + 5 -- Usar favScale precalculado
             availableWidth = availableWidth - favOffset
         end
         
@@ -2289,17 +2289,17 @@ local function draw(global_state)
         local availableH = h - layout.listY - 40 -- Espacio vertical disponible
         
         local ar1 = global_state.currentImage and (global_state.currentImage:getWidth() / global_state.currentImage:getHeight()) or 0
-        local ar2 = currentScreenshot and (currentScreenshot:getWidth() / currentScreenshot:getHeight()) or 0
-        local padding = (currentImage and currentScreenshot) and 15 or 0
+        local ar2 = global_state.currentScreenshot and (global_state.currentScreenshot:getWidth() / global_state.currentScreenshot:getHeight()) or 0
+        local padding = (global_state.currentImage and global_state.currentScreenshot) and 15 or 0
         
         local calculatedW = maxPreviewW
         
-        if currentImage and currentScreenshot then
+        if global_state.currentImage and global_state.currentScreenshot then
             local combinedInvAr = (1/ar1) + (1/ar2)
             calculatedW = (availableH - padding) / combinedInvAr -- Calculated width
-        elseif currentImage then
+        elseif global_state.currentImage then
              calculatedW = availableH * ar1 -- Calculated width
-        elseif currentScreenshot then
+        elseif global_state.currentScreenshot then
              calculatedW = availableH * ar2
         end
         
@@ -2417,8 +2417,8 @@ local function draw(global_state)
     drawJumpLetter(global_state)
 
     -- Draw Search UI if active
-    if state == "SEARCH" or state == "EDIT_TEXT" or keyboardAnim > 0 then
-        local t = keyboardAnim
+    if global_state.state == "SEARCH" or global_state.state == "EDIT_TEXT" or global_state.keyboardAnim > 0 then
+        local t = global_state.keyboardAnim
         local ease = 1 - (1 - t)^3
         local panelH = 250 -- Height of keyboard panel
         local currentY = h - (panelH * ease)
@@ -2431,10 +2431,10 @@ local function draw(global_state)
         local r, g, b = unpack(global_state.theme.colors.text_white)
         love.graphics.setColor(r, g, b, ease)
         love.graphics.setFont(fontTitle)
-        if state == "EDIT_TEXT" then
+        if global_state.state == "EDIT_TEXT" then
             love.graphics.printf(global_state.textEditLabel .. ": " .. global_state.textToEdit .. "_", 20, currentY + 10, w - 40, "left")
         else
-            love.graphics.printf(L.get("search_label", searchQuery), 20, currentY + 10, w - 40, "left")
+            love.graphics.printf(L.get("search_label", global_state.searchQuery), 20, currentY + 10, w - 40, "left")
         end
         
         -- Virtual Keyboard
@@ -2449,7 +2449,7 @@ local function draw(global_state)
         local mainBlockStartX = (w - 100 - mainBlockWidth) / 2
         if mainBlockStartX < 10 then mainBlockStartX = 10 end
         
-        for r, row in ipairs(keyboardGrid) do
+        for r, row in ipairs(global_state.keyboardGrid) do
             for c, key in ipairs(row) do
                 local x, y, kW, kH
                 
@@ -2469,7 +2469,7 @@ local function draw(global_state)
                 end
                 
                 local col
-                if r == keyboardRow and c == keyboardCol then
+                if r == global_state.keyboardRow and c == global_state.keyboardCol then
                     col = theme.colors.selection_accent
                 else
                     col = theme.colors.placeholder_background

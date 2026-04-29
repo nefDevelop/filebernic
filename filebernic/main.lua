@@ -8,7 +8,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 input = require "input"
 
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v0.1.0"
 updateUrl = ""
 updateAvailable = nil
 
@@ -230,9 +230,9 @@ function forceReindex(global_state)
     log("Forcing re-index...")
     romIndex = nil
     -- Delete index files
-    os.remove(love.filesystem.getSource() .. "/data/rom_index.json")
-    os.remove(love.filesystem.getSource() .. "/data/rom_timestamps.json")
-    os.remove(love.filesystem.getSource() .. "/data/view_cache.json")
+    filesystem.safeRemove(love.filesystem.getSource() .. "/data/rom_index.json", global_state.log)
+    filesystem.safeRemove(love.filesystem.getSource() .. "/data/rom_timestamps.json", global_state.log)
+    filesystem.safeRemove(love.filesystem.getSource() .. "/data/view_cache.json", global_state.log)
     
     -- Vaciar la lista en memoria para forzar la pantalla de "Indexando..."
     if global_state.launchMode == "Juego Unico" and global_state.isVirtualRoot then
@@ -459,7 +459,7 @@ function love.quit()
     -- Log content of art folders on exit
     if muosArtPath and muosArtPath ~= "" and systemName and systemName ~= "" then
         log("Listing Boxart folder content: " .. muosArtPath)
-        local h = io.popen('ls -1 "'..muosArtPath..'" 2>/dev/null')
+        local h = io.popen('ls -1 ' .. utils.escapeShellArg(muosArtPath) .. ' 2>/dev/null')
         if h then 
             local content = h:read("*a")
             log(content and content ~= "" and content or "[Empty]") 
@@ -469,7 +469,7 @@ function love.quit()
     
     if muosPreviewPath and muosPreviewPath ~= "" and systemName and systemName ~= "" then
         log("Listing Preview folder content: " .. muosPreviewPath)
-        local h = io.popen('ls -1 "'..muosPreviewPath..'" 2>/dev/null')
+        local h = io.popen('ls -1 ' .. utils.escapeShellArg(muosPreviewPath) .. ' 2>/dev/null')
         if h then 
             local content = h:read("*a")
             log(content and content ~= "" and content or "[Empty]") 
@@ -483,8 +483,8 @@ function love.load(arg)
     local cores = love.system.getProcessorCount()
     log("Hardware info: " .. cores .. " cores detected.")
     -- Create data directories
-    os.execute("mkdir -p " .. love.filesystem.getSource() .. "/data/log")
-    os.execute("mkdir -p 'tmp'") -- Create a local tmp directory for downloads
+    os.execute("mkdir -p " .. utils.escapeShellArg(love.filesystem.getSource() .. "/data/log"))
+    os.execute("mkdir -p " .. utils.escapeShellArg("tmp"))
 
     -- Handle screen resolution from launch script
     if arg[1] then
@@ -535,7 +535,7 @@ function love.load(arg)
 
         if isDevice then
             local pathSD1 = "/mnt/mmc/ROMS/" .. relPath
-            local h = io.popen('ls -d "'..pathSD1..'" 2>/dev/null')
+            local h = io.popen('ls -d ' .. utils.escapeShellArg(pathSD1) .. ' 2>/dev/null')
             local res = h:read("*a")
             h:close()
             if res and res ~= "" then return pathSD1 end

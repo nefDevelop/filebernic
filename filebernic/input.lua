@@ -134,11 +134,11 @@ local function startScraping(global_state)
 end
 
 local function performBatchScrape(items)
-    log("Starting batch scrape for " .. #items .. " items")
-    state = "BATCH_SCRAPING"
-    scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
-    os.execute("rm -f /tmp/scraper_*.png")
-    indexerChannelIn:push({ command = "scrape_batch", items = items, config = config, systemName = systemName, romPath = romPath, muosArtPath = muosArtPath, muosTextPath = muosTextPath, muosPreviewPath = muosPreviewPath })
+    global_state.log("Starting batch scrape for " .. #items .. " items")
+    global_state.state = "BATCH_SCRAPING"
+    global_state.scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
+    os.execute("rm -f tmp/scraper_*.png")
+    global_state.indexerChannelIn:push({ command = "scrape_batch", items = items, config = global_state.config, systemName = global_state.systemName, romPath = global_state.romPath, muosArtPath = global_state.muosArtPath, muosTextPath = global_state.muosTextPath, muosPreviewPath = global_state.muosPreviewPath })
 end
 
 local function saveCompositeArt(global_state)
@@ -274,7 +274,7 @@ end
 function stateHandlers.OPTIONS_MENU(key, global_state)
     local L = global_state.L
     if key == "return" or key == "kpenter" or (key == "return" and global_state.love.joystick.getJoystickCount() == 0) then -- Confirm selection
-        if global_state.menuTitle == "Seleccionar Sistema" then
+        if global_state.menuTitle == L.get("select_system") then
              local choice = global_state.menuOptions[global_state.menuSelection]
              local core = nil
              if choice == "Arcade (FBNeo)" then core = "fbneo_libretro.so"
@@ -314,31 +314,13 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
              elseif optText:match(L.get("save_games")) then
                  global_state.state = "SAVE_MANAGER"
              elseif optText == L.get("delete") then
-                 local fullPath = global_state.focusedItem.fullPath
-                 deleteGameMedia(fullPath)
-                 local success, err = os.remove(fullPath)
-                 if not success then
-                     global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
-                 else
-                     global_state.log("Archivo borrado con éxito: " .. fullPath)
-                     filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
-                 end
-                 -- Always update internal state
-                 if global_state.romIndex then removeFromIndex(fullPath, global_state) end
-                 if global_state.playedRoms[fullPath] then global_state.playedRoms[fullPath] = nil; saveHistory(global_state) end
-                 if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                     global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = 
-                        filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, 
-                        global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, 
-                        global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, 
-                        global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                     global_state.preview.load(global_state, global_state.log, global_state.loader)
-                 else -- Not virtual root, refresh files
-                     refreshFiles(global_state)
-                 end
-                 global_state.state = "LIST"
-                 global_state.menuStack = {}
-                 global_state.focusedItem = nil
+                 global_state.itemToDelete = global_state.focusedItem
+                 global_state.menuTitle = L.get("confirm_delete")
+                 global_state.menuMessage = L.get("delete_file_msg", global_state.itemToDelete.name)
+                 global_state.menuOptions = {L.get("delete"), L.get("cancel")}
+                 global_state.menuSelection = 2
+                 global_state.log("Menu opened: " .. global_state.menuTitle)
+                 global_state.state = "DELETE_MENU"
              elseif optText:match(L.get("add_favorite")) or optText:match(L.get("remove_favorite")) then
                  local fullPath = global_state.focusedItem.fullPath
                  if global_state.favoriteRoms[fullPath] then
@@ -381,27 +363,27 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
         local opt = global_state.menuOptions[global_state.menuSelection]
         local optText = type(opt) == "table" and opt.text or opt
 
-        if optText == "Borrar" then
+        if optText == L.get("delete") then
             if global_state.selectedFilesCount > 0 then
-                global_state.menuTitle = "Confirmar Borrado"
-                global_state.menuMessage = "¿Borrar " .. global_state.selectedFilesCount .. " archivos seleccionados?"
-                global_state.menuOptions = {"Borrar", "Cancelar"}
+                global_state.menuTitle = L.get("confirm_delete")
+                global_state.menuMessage = L.get("delete_selected_msg", global_state.selectedFilesCount)
+                global_state.menuOptions = {L.get("delete"), L.get("cancel")}
                 global_state.menuSelection = 2
                 global_state.log("Menu opened: " .. global_state.menuTitle)
                 global_state.state = "DELETE_MENU"
             elseif (not global_state.isVirtualRoot or global_state.launchMode == "Juego Unico") and global_state.files[global_state.selectedIndex] and (not global_state.files[global_state.selectedIndex].isDir or global_state.files[global_state.selectedIndex].name ~= "..") then
                 global_state.itemToDelete = global_state.files[global_state.selectedIndex]
-                global_state.menuTitle = "Confirmar Borrado"
-                global_state.menuMessage = "¿Borrar este archivo?\n" .. global_state.itemToDelete.name
-                global_state.menuOptions = {"Borrar", "Cancelar"}
+                global_state.menuTitle = L.get("confirm_delete")
+                global_state.menuMessage = L.get("delete_file_msg", global_state.itemToDelete.name)
+                global_state.menuOptions = {L.get("delete"), L.get("cancel")}
                 global_state.menuSelection = 2
                 global_state.log("Menu opened: " .. global_state.menuTitle)
                 global_state.state = "DELETE_MENU"
             end
-        elseif optText == "Info" then
+        elseif optText == L.get("info") then
             global_state.state = "INFO_VIEW"
             global_state.inputCooldown = 0.2
-        elseif optText == "Scraper" then
+        elseif optText == L.get("scraper") then
             if global_state.selectedFilesCount > 0 then
                 local items = {}
                 for _, f in ipairs(global_state.files) do
@@ -418,7 +400,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             local item = global_state.files[global_state.selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
-            local success, err = os.remove(pathToDelete)
+            local success, err = filesystem.safeRemove(pathToDelete, global_state.log)
             if not success then
                 global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
@@ -442,7 +424,7 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
             local item = global_state.files[global_state.selectedIndex]
             local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
             deleteGameMedia(pathToDelete)
-            local success, err = os.remove(pathToDelete)
+            local success, err = filesystem.safeRemove(pathToDelete, global_state.log)
             if not success then
                 global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
             else
@@ -631,8 +613,11 @@ function stateHandlers.OPTIONS_MENU(key, global_state)
                 local function processItem(item)
                     local src = global_state.romPath .. item.name
                     local dst = targetDir .. item.name
-                    local cmd = (isMove and 'mv "' or 'cp "') .. src .. '" "' .. dst .. '"'
-                    os.execute(cmd)
+                    if isMove then
+                        filesystem.moveFile(src, dst, global_state.log)
+                    else
+                        filesystem.copyFile(src, dst, global_state.log)
+                    end
                     if isMove and global_state.playedRoms[src] then
                         global_state.playedRoms[src] = nil
                     end
@@ -729,10 +714,10 @@ function stateHandlers.SCRAPER_OPTIONS(key, global_state)
         if text == L.get("clean") then -- If "Clean" option is selected
             local item = global_state.files[global_state.selectedIndex]
             local baseName = item.name:gsub("%..-$", "")
-            os.remove(global_state.muosArtPath .. baseName .. ".png")
-            os.remove(global_state.muosTextPath .. baseName .. ".txt")
-            os.remove(global_state.muosTextPath .. baseName .. ".year")
-            os.remove(global_state.muosPreviewPath .. baseName .. ".png")
+            filesystem.safeRemove(global_state.muosArtPath .. baseName .. ".png", global_state.log)
+            filesystem.safeRemove(global_state.muosTextPath .. baseName .. ".txt", global_state.log)
+            filesystem.safeRemove(global_state.muosTextPath .. baseName .. ".year", global_state.log)
+            filesystem.safeRemove(global_state.muosPreviewPath .. baseName .. ".png", global_state.log)
             preview.load(global_state, global_state.log, global_state.loader)
             global_state.state = "SCRAPER_VIEW"
         elseif opt.value == "tgdb" or opt.value == "libretro" or opt.value == "ss" then
@@ -884,8 +869,8 @@ function stateHandlers.SAVE_MANAGER(key, global_state)
             if relPath then
                 local destPath = targetRoot .. "/" .. relPath
                 local destDir = destPath:match("(.*/)")
-                os.execute('mkdir -p "' .. destDir .. '"')
-                os.execute('cp "' .. item.fullPath .. '" "' .. destPath .. '"')
+                os.execute('mkdir -p ' .. utils.escapeShellArg(destDir))
+                filesystem.copyFile(item.fullPath, destPath, global_state.log)
                 -- Refrescar lista para ver el nuevo archivo
                 findSaveFiles(global_state.files[global_state.selectedIndex], global_state)
             end -- End if relPath
@@ -907,7 +892,7 @@ function stateHandlers.CLEANUP_MENU(key, global_state)
                 if global_state.cleanupData.cursor.row == 1 then
                     -- Borrar TODOS
                     for _, orphan in ipairs(global_state.cleanupData.orphans) do
-                        local success, err = os.remove(orphan.fullPath)
+                        local success, err = filesystem.safeRemove(orphan.fullPath, global_state.log)
                         if success then
                             global_state.log("Cleanup: Borrado " .. orphan.fullPath)
                             filesystem.logDeletion(orphan.fullPath, global_state.json.encode, global_state.json.decode)
@@ -919,7 +904,7 @@ function stateHandlers.CLEANUP_MENU(key, global_state)
                     local idx = global_state.cleanupData.cursor.row - 1
                     local orphan = global_state.cleanupData.orphans[idx]
                     if orphan then
-                        local success, err = os.remove(orphan.fullPath) -- Delete individual orphan
+                        local success, err = filesystem.safeRemove(orphan.fullPath, global_state.log) -- Delete individual orphan
                         if success then 
                             global_state.log("Cleanup: Borrado " .. orphan.fullPath)
                             filesystem.logDeletion(orphan.fullPath, global_state.json.encode, global_state.json.decode)
@@ -935,7 +920,7 @@ function stateHandlers.CLEANUP_MENU(key, global_state)
                 local idx = global_state.cleanupData.cursor.row
                 local item = global_state.cleanupData.orphanedImages[idx]
                 if item then
-                    local success, err = os.remove(item.fullPath) -- Delete orphaned image
+                    local success, err = filesystem.safeRemove(item.fullPath, global_state.log) -- Delete orphaned image
                     if success then 
                         global_state.log("Cleanup: Borrado " .. item.fullPath)
                         filesystem.logDeletion(item.fullPath, global_state.json.encode, global_state.json.decode)
@@ -953,7 +938,7 @@ function stateHandlers.CLEANUP_MENU(key, global_state)
                 local idx = global_state.cleanupData.cursor.row
                 local item = global_state.cleanupData.duplicates[idx]
                 if item then
-                    local success, err = os.remove(item.fullPath) -- Delete duplicate file
+                    local success, err = filesystem.safeRemove(item.fullPath, global_state.log) -- Delete duplicate file
                     if success then
                         global_state.log("Cleanup: Borrado " .. item.fullPath) 
                         filesystem.logDeletion(item.fullPath, global_state.json.encode, global_state.json.decode) -- Log deletion
@@ -1032,7 +1017,7 @@ function stateHandlers.DELETE_MENU(key, global_state)
                     if item.selected then
                         local fullPath = item.fullPath or (global_state.romPath .. item.name)
                         deleteGameMedia(fullPath)
-                        local success, err = os.remove(fullPath)
+                        local success, err = filesystem.safeRemove(fullPath, global_state.log)
                         if not success then
                             global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                         else
@@ -1056,7 +1041,7 @@ function stateHandlers.DELETE_MENU(key, global_state)
             elseif global_state.itemToDelete then
                 local fullPath = global_state.itemToDelete.fullPath or (global_state.romPath .. global_state.itemToDelete.name)
                 deleteGameMedia(fullPath)
-                local success, err = os.remove(fullPath)
+                local success, err = filesystem.safeRemove(fullPath, global_state.log)
                 if not success then
                     global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
                 else
@@ -1093,7 +1078,7 @@ end
 -- Manejador para Post-Juego
 function stateHandlers.POST_GAME(key, global_state)
     if key == "return" or key == "space" or key == "kpenter" then -- 'a' button
-        os.remove(global_state.lastPlayedRom)
+        filesystem.safeRemove(global_state.lastPlayedRom, global_state.log)
         global_state.state = "LIST"
         global_state.inputCooldown = 0.2
         refreshFiles(global_state)
@@ -1289,8 +1274,8 @@ local function handleListInput(key, global_state)
                     
                     if not known then
                         global_state.state = "OPTIONS_MENU"
-                        global_state.menuTitle = "Seleccionar Sistema"
-                        global_state.menuMessage = "Archivo ambiguo detectado.\nSelecciona el sistema:"
+                        global_state.menuTitle = global_state.L.get("select_system")
+                        global_state.menuMessage = global_state.L.get("ambiguous_rom")
                         global_state.menuOptions = {"Arcade (FBNeo)", "Super Nintendo", "Nintendo (NES)", "Sega Genesis/MD", "PlayStation", "GBA", "GBC/GB"}
                         global_state.menuSelection = 1
                         global_state.itemToLaunch = romToLaunch
@@ -1473,8 +1458,8 @@ local function keypressed(key, global_state)
         -- Close with the same help button (f3/R1) or the back button (B)
         if key == "f3" or key == "backspace" or key == "b" then
             global_state.showHelp = false
-            closingHelp = true
-            inputCooldown = 0.2 -- Evita que la pulsación de B también salga del menú subyacente
+            global_state.closingHelp = true
+            global_state.inputCooldown = 0.2 -- Evita que la pulsación de B también salga del menú subyacente
             return -- Salir inmediatamente para que no se procese nada más
         end
         -- Block all other inputs while help is visible
@@ -1512,6 +1497,7 @@ local function keypressed(key, global_state)
             table.insert(global_state.menuOptions, {text = global_state.L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
             table.insert(global_state.menuOptions, {text = global_state.L.get("reindex"), icon = global_state.iconReload})
             table.insert(global_state.menuOptions, {text = global_state.L.get("cleanup"), icon = global_state.iconTrash})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("api_settings"), icon = global_state.iconNetwork})
             global_state.inputCooldown = 0.2
             return
         end

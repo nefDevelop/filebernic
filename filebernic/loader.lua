@@ -36,6 +36,8 @@ function Loader:new(logger, love_modules)
     -- In-memory cache for loaded assets.
     -- cache[path] = 'loading' | 'error' | love.FileData | love.Image | string
     cache = {},
+    accessOrder = {}, -- Fila LRU para evitar llenar la RAM
+    maxCacheSize = 60, -- Máximo de assets simultáneos en memoria
     -- Communication channel with the background thread.
     channelIn = love_modules.thread.newChannel(),
     channelOut = love_modules.thread.newChannel(),
@@ -54,6 +56,30 @@ function Loader:log(msg)
     if self.logger then self.logger("[LOADER] " .. msg) end
 end
 
+function Loader:markUsed(path)
+  if self.accessOrder[1] == path then return end
+  for i, p in ipairs(self.accessOrder) do
+    if p == path then
+      table.remove(self.accessOrder, i)
+      break
+    end
+  end
+  table.insert(self.accessOrder, 1, path)
+  
+  while #self.accessOrder > self.maxCacheSize do
+     local oldest = table.remove(self.accessOrder)
+     if self.cache[oldest] ~= 'loading' then
+        if type(self.cache[oldest]) == "userdata" and self.cache[oldest].release then
+            pcall(self.cache[oldest].release, self.cache[oldest]) -- Liberar VRAM explícitamente
+        end
+        self.cache[oldest] = nil
+     else
+        table.insert(self.accessOrder, oldest)
+        break
+     end
+  end
+end
+
 -- Called in love.update() to process results from the background thread.
 function Loader:update()
   while true do
@@ -65,6 +91,7 @@ function Loader:update()
       -- File content received. Create FileData object in the main thread.
       -- The love.filesystem.newFileData call must happen on the main thread.
       self.cache[msg.path] = self.love_modules.filesystem.newFileData(msg.data, msg.path)
+      self:markUsed(msg.path)
     elseif msg.error then
       self:log("Error loading " .. msg.path .. ": " .. tostring(msg.error))
       -- An error occurred while loading.
@@ -91,6 +118,15 @@ end
 function Loader:invalidate(path)
   if path and self.cache[path] then
     self:log("Invalidating cache for: " .. path)
+    if type(self.cache[path]) == "userdata" and self.cache[path].release then
+        pcall(self.cache[path].release, self.cache[path])
+    end
+    for i, p in ipairs(self.accessOrder) do
+        if p == path then
+            table.remove(self.accessOrder, i)
+            break
+        end
+    end
     self.cache[path] = nil
   else
     self:log("Invalidate skipped (not in cache): " .. tostring(path))
@@ -108,6 +144,7 @@ function Loader:getImage(path)
   end
 
   if (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('Image') then
+    self:markUsed(path)
     return data -- Already a decoded, cached image.
   elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
     -- The FileData is ready. Try to decode it as an Image.
@@ -116,6 +153,7 @@ function Loader:getImage(path)
       local imgSuccess, image = pcall(self.love_modules.graphics.newImage, imageData)
       if imgSuccess then
         self.cache[path] = image -- Cache the final drawable image.
+        self:markUsed(path)
         return image
       end
       self:log("Error creating image from data: " .. path)
@@ -143,11 +181,13 @@ function Loader:getText(path)
   end
 
   if type(data) == 'string' then
+    self:markUsed(path)
     return data -- Already a decoded, cached string.
   elseif (type(data) == 'userdata' or type(data) == 'table') and data.typeOf and data:typeOf('FileData') then
     -- The FileData is ready. Decode it as a string.
     local content = data:getString()
     self.cache[path] = content -- Cache the final string.
+    self:markUsed(path)
     return content
   end
   -- Return nil if it's still loading or not convertible.

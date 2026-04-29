@@ -116,6 +116,8 @@ locale.data = {
         update_now = "Actualizar Ahora",
         no_update = "Sin Actualizaciones",
         no_update_msg = "Ya tienes la última versión o no hay conexión.",
+        select_system = "Seleccionar Sistema",
+        ambiguous_rom = "Archivo ambiguo detectado.\nSelecciona el sistema:",
     },
     en = {
         -- Actions / Buttons
@@ -227,6 +229,8 @@ locale.data = {
         update_now = "Update Now",
         no_update = "No Updates",
         no_update_msg = "You already have the latest version or no network connection.",
+        select_system = "Select System",
+        ambiguous_rom = "Ambiguous file detected.\nSelect the system:",
     }
 }
 

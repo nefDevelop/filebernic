@@ -19,7 +19,7 @@ local function scanRoot(rootPath, validExtensions, newIndex, fileMap, romDirs)
     table.insert(romDirs, rootPath)
     channel_out:push({type="progress", message="Escaneando: " .. rootPath})
 
-    local h = io.popen('find "'..rootPath..'" -type f 2>/dev/null')
+    local h = io.popen('find ' .. utils.escapeShellArg(rootPath) .. ' -type f 2>/dev/null')
     if h then
         for fLine in h:lines() do
             local filename = fLine:match("([^/]+)$")
@@ -107,7 +107,7 @@ local function performIndexing(validExtensions, sourceDir, priorityPath)
     
     -- Guardar índice
     local dataDir = sourceDir .. "/data"
-    os.execute("mkdir -p " .. dataDir)
+    os.execute("mkdir -p " .. utils.escapeShellArg(dataDir))
     local f = io.open(dataDir .. "/rom_index.json", "w")
     if f then
         f:write(indexJson)
@@ -117,7 +117,7 @@ local function performIndexing(validExtensions, sourceDir, priorityPath)
     -- Guardar timestamps
     local timestamps = {}
     for _, dir in ipairs(romDirs) do
-        local h = io.popen('date -r "'..dir..'" +%s 2>/dev/null')
+        local h = io.popen('date -r ' .. utils.escapeShellArg(dir) .. ' +%s 2>/dev/null')
         if h then timestamps[dir] = h:read("*a"):gsub("%s+", "") h:close() end
     end
     local tsJson = json.encode(timestamps)

@@ -1,10 +1,11 @@
 ---@diagnostic disable: undefined-global
 local json = require "libs.dkjson"
 local State = {}
+local utils = require "utils"
 
 function State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love_filesystem)
     local dataDir = love_filesystem.getSource() .. "/data"
-    os.execute("mkdir -p '" .. dataDir .. "'")
+    os.execute("mkdir -p " .. utils.escapeShellArg(dataDir))
     local f = io.open(dataDir .. "/app_state.json", "w")
     if f then
         -- Normalizar ruta para guardar (convertir a virtual ROMS/...)

@@ -109,7 +109,7 @@ while true; do
         # Extraer extensión y carpeta para mejor detección
         FILENAME=$(basename "$LAST_ROM")
         EXT="${FILENAME##*.}"
-        EXT="${EXT,,}" # Convertir a minúsculas
+    EXT="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')" # Convertir a minúsculas (Compatible POSIX / BusyBox)
         
         # Intentar detectar el sistema desde la ruta base (ej: .../ROMS/GBA/Sub/Juego.zip -> GBA)
         SYSTEM_FOLDER=$(echo "$LAST_ROM" | sed -n 's|.*/ROMS/\([^/]*\)/.*|\1|p')

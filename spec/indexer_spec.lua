@@ -83,7 +83,7 @@ describe("Indexer", function()
         "/test/roms/image.png" -- should be ignored
       }
       indexer_env.io.popen = function(cmd)
-        assert.are.equal('find "/test/roms/" -type f', cmd)
+        assert.are.equal("find '/test/roms/' -type f 2>/dev/null", cmd)
         return {
           lines = function()
             local i = 0

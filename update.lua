@@ -191,8 +191,9 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     if global_state.cleanupData.scanning and global_state.cleanupCoroutine then
         local status = coroutine.status(global_state.cleanupCoroutine)
         if status == "suspended" then
-            local ok = coroutine.resume(global_state.cleanupCoroutine)
+            local ok, err = coroutine.resume(global_state.cleanupCoroutine)
             if not ok then
+                log_func("CRITICAL ERROR in Cleanup Scan Coroutine: " .. tostring(err))
                 global_state.cleanupData.scanning = false
             end
         elseif status == "dead" then

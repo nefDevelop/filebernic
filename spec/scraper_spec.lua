@@ -31,10 +31,12 @@ describe("Scraper", function()
   local mock_io = {}
   local mock_os = {}
   local mock_love_fs = {}
+  local copied_files = {}
 
   -- Keep original functions to restore them
   local original_utils_urlencode = utils.urlencode
   local original_filesystem_findInGamelist = filesystem.findInGamelist
+  local original_filesystem_copyFile = filesystem.copyFile
   local original_json_decode = json.decode
   local original_io_popen = io.popen
   local original_io_open = io.open
@@ -47,8 +49,14 @@ describe("Scraper", function()
     utils.urlencode = function(s) return s:gsub(" ", "%%20") end
     mock_filesystem.findInGamelist = function() return nil end
     filesystem.findInGamelist = function(...) return mock_filesystem.findInGamelist(...) end
+    copied_files = {}
+    filesystem.copyFile = function(src, dest)
+      table.insert(copied_files, {src = src, dest = dest})
+      return true
+    end
     mock_json.decode = function(s) return {} end
     mock_io.popen_calls = {}
+    mock_io.written_files = {} -- Initialize written_files
     mock_io.popen_results = {}
     mock_io.open_files = {}
     mock_os.executed_commands = {}
@@ -74,7 +82,11 @@ describe("Scraper", function()
           if content == true then content = "" end -- If just marked as existing, return empty string
           -- print("  -> Returning mock handle for read") -- Debugging
           return {
-            read = function(self, fmt) return content end,
+            read = function(self, fmt) 
+              if self.read_done then return nil end
+              self.read_done = true
+              return content 
+            end,
             seek = function(self, whence)
               if whence == "end" then
                 return type(content) == "string" and #content or 100
@@ -103,6 +115,7 @@ describe("Scraper", function()
     -- Restore original functions
     utils.urlencode = original_utils_urlencode
     filesystem.findInGamelist = original_filesystem_findInGamelist
+    filesystem.copyFile = original_filesystem_copyFile
     json.decode = original_json_decode
     io.popen = original_io_popen
     io.open = original_io_open
@@ -132,8 +145,9 @@ describe("Scraper", function()
       assert.are.equal("Local Description", results[1].description)
       assert.are.equal("1990", results[1].year)
       assert.are.equal("Local XML", results[1].source)
-      assert.are.equal(1, #mock_os.executed_commands)
-      assert.are.equal("cp '/roms/nes/media/images/game.png' 'tmp/scraper_local.png'", mock_os.executed_commands[1])
+      assert.are.equal(1, #copied_files)
+      assert.are.equal("/roms/nes/media/images/game.png", copied_files[1].src)
+      assert.are.equal("tmp/scraper_local.png", copied_files[1].dest)
     end)
 
     it("should not scrape online if local data is found", function()
@@ -145,6 +159,7 @@ describe("Scraper", function()
       assert.are.equal("Local XML", results[1].source)
       -- No curl commands should have been executed
       assert.are.equal(0, #mock_os.executed_commands)
+      assert.are.equal(0, #copied_files)
     end)
   end)
 
@@ -157,8 +172,8 @@ describe("Scraper", function()
       
       json.decode = original_json_decode -- Use real json decoder
       -- Simular que el archivo de imagen temporal existe para que el scraper lo añada a los resultados.
-      mock_io.open_files["tmp/scraper_tgdb_1_1.png"] = "mock image data"
-      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_1.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'"] = "200"
+      mock_io.open_files["tmp/scraper_tgdb_1_front_0.png"] = "mock image data"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_front_0.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'"] = "200"
       
       local results = scraper.getScrapeResults(item, config, log, "nes")
       
@@ -166,7 +181,7 @@ describe("Scraper", function()
       assert.are.equal("TGDB Desc", results[1].description)
       assert.are.equal("1991", results[1].year)
       assert.are.equal("TheGamesDB", results[1].source)
-      assert.are.equal("curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_1.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'", mock_io.popen_calls[2])
+      assert.are.equal("curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_front_0.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'", mock_io.popen_calls[2])
     end)
 
     it("should show error if API key is missing", function()

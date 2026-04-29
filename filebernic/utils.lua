@@ -202,6 +202,12 @@ function M.split(s, delimiter)
     return result;
 end
 
+-- Escapa de forma segura un argumento para Bash/sh
+function M.escapeShellArg(str)
+    if not str then return "''" end
+    return "'" .. tostring(str):gsub("'", "'\"'\"'") .. "'"
+end
+
 -- Helper para codificar URL
 local function urlencode(str)
     if (str) then

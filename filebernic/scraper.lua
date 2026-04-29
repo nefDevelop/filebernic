@@ -20,7 +20,7 @@ local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
         -- We want to capture HTTP code from stdout, and any curl errors from stderr.
         -- Add a user-agent to look more like a browser and avoid being blocked by CDNs.
         -- Add -k to ignore SSL certificate verification, which often fails on embedded devices.
-        local curl_cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output '" .. tempPath .. "' --write-out '%{http_code}' '" .. imageUrl .. "'"
+        local curl_cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg(tempPath) .. " --write-out '%{http_code}' " .. utils.escapeShellArg(imageUrl)
         local curl_handle = io.popen(curl_cmd)
         local http_code = nil
         if curl_handle then
@@ -95,12 +95,12 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
     local localData = filesystem.findInGamelist(item.fullPath, item.name)
     if localData then
         local tempImgPath = nil
-        if localData.imagePath and fs_getInfo(localData.imagePath) then
+        if localData.imagePath then
             local f = io.open(localData.imagePath, "r")
             if f then
                 f:close()
                 tempImgPath = "tmp/scraper_local.png"
-                os.execute("cp '" .. localData.imagePath .. "' '" .. tempImgPath .. "'")
+                filesystem.copyFile(localData.imagePath, tempImgPath, log)
             end
         end
         
@@ -138,7 +138,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
             
             log("TGDB Request: " .. (url:sub(1, 60)) .. "...")
 
-            local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'")
+            local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url))
             local response = nil
             if handle then
                 response = handle:read("*a")
@@ -330,7 +330,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
             
             log("ScreenScraper Request: " .. (url:sub(1, 80)) .. "...")
             
-            local handle = io.popen("curl -s -L -k --max-time 15 -A 'Mozilla/5.0' '" .. url .. "'")
+            local handle = io.popen("curl -s -L -k --max-time 15 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url))
             local response = nil
             if handle then
                 response = handle:read("*a")
@@ -401,7 +401,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
         local mockSrc = love.filesystem.getSource() .. "/assets/roms.png"
         local mockTemp = "tmp/scraper_mock.png" -- Temporary file path
 
-        os.execute("cp '" .. mockSrc .. "' '" .. mockTemp .. "'")
+        filesystem.copyFile(mockSrc, mockTemp, log)
         
         local f = io.open(mockTemp, "r")
         if f then
