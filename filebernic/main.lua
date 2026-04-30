@@ -9,7 +9,7 @@ require "locale" -- Cargar sistema de traducción
 input = require "input"
 
 APP_VERSION = "v0.1.0"
-updateUrl = ""
+updateUrl = ""y 
 updateAvailable = nil
 
 -- Variables de configuración y estado
