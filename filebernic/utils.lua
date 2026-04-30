@@ -18,19 +18,19 @@ local systemVariants = {
     {"SATELLAVIEW", "bs", "satellaview", "Nintendo - Satellaview"},
     {"SUFAMI", "sufami", "Nintendo - Sufami Turbo"},
     -- Sega
-    {"MD", "md", "gen", "Genesis", "Mega Drive", "Sega - Mega Drive - Genesis", "Mega"},
+    {"MD", "md", "gen", "Genesis", "Mega Drive", "Mega", "Sega - Mega Drive - Genesis"},
     {"SMS", "sms", "Master System", "Sega - Master System - Mark III"},
     {"GG", "gg", "Game Gear", "Sega - Game Gear"},
     {"SEGACD", "cd", "Mega CD", "Sega CD", "Sega - Mega-CD - Sega CD"},
     {"32X", "32x", "Sega 32X", "Sega - 32X"},
     {"DC", "dc", "Dreamcast", "Sega - Dreamcast"},
-    {"ATOMISWAVE", "atomiswave", "Atomiswave"},
-    {"NAOMI", "naomi", "Naomi"},
+    {"ATOMISWAVE", "atomiswave", "Naomi", "Atomiswave"},
+    {"NAOMI", "naomi", "Atomiswave", "Naomi"},
     {"PICO", "pico", "Sega Pico"},
     {"SG1000", "sg1000", "Sega SG-1000"},
     {"SATURN", "saturn", "Sega - Saturn"},
     -- Sony
-    {"PS", "ps", "ps1", "psx", "PlayStation", "Sony - PlayStation", "Sony"},
+    {"PS", "ps", "ps1", "psx", "PlayStation", "Sony", "Sony - PlayStation"},
     {"PSP", "psp", "PlayStation Portable", "Sony - PlayStation Portable"},
     -- Arcade / SNK
     {"MAME", "mame", "arcade", "fbneo", "Arcade", "FB Alpha - Arcade Games"},
@@ -39,7 +39,7 @@ local systemVariants = {
     {"NGP", "ngp", "Neo Geo Pocket", "SNK - Neo Geo Pocket"},
     {"NGPC", "ngpc", "Neo Geo Pocket Color", "SNK - Neo Geo Pocket Color"},
     -- NEC
-    {"PCE", "pce", "PC Engine", "TurboGrafx-16", "NEC - PC Engine - TurboGrafx 16", "Turbo"},
+    {"PCE", "pce", "PC Engine", "TurboGrafx-16", "Turbo", "NEC - PC Engine - TurboGrafx 16"},
     {"PCECD", "pcecd", "PC Engine CD", "NEC - PC Engine CD - TurboGrafx-CD"},
     {"SGX", "sgx", "SuperGrafx", "NEC - PC Engine SuperGrafx"},
     {"PC88", "pc88", "NEC PC-8800"},

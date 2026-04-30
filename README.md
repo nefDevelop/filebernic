@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/filebernic-banner.png" alt="Banner">
+</p>
+
 # ![FileBernic](glyph/filebernic.png) FileBernic
 
 **FileBernic** es un gestor de ROMs con una interfaz cuidada, diseñado específicamente para dispositivos portátiles con **muOS** (testado y usado en Anbernic RG35XX-H).

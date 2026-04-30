@@ -168,12 +168,12 @@ describe("Scraper", function()
 
     it("should fetch and parse data from TheGamesDB", function()
       local url = "https://api.thegamesdb.net/v1/Games/ByGameName?apikey=testkey&name=game&platform=Nintendo%20-%20Nintendo%20Entertainment%20System&fields=overview,release_date&include=boxart,screenshot"
-      mock_io.popen_results[ "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'" ] = '{ "data": { "games": [ { "id": 1, "overview": "TGDB Desc", "release_date": "1991-01-01", "game_title": "Game Title" } ] }, "include": { "boxart": { "data": { "1": [ { "side": "front", "filename": "box.jpg" } ] } } } }'
+      mock_io.popen_results[ "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url) ] = '{ "data": { "games": [ { "id": 1, "overview": "TGDB Desc", "release_date": "1991-01-01", "game_title": "Game Title" } ] }, "include": { "boxart": { "data": { "1": [ { "side": "front", "filename": "box.jpg" } ] } } } }'
       
       json.decode = original_json_decode -- Use real json decoder
       -- Simular que el archivo de imagen temporal existe para que el scraper lo añada a los resultados.
-      mock_io.open_files["tmp/scraper_tgdb_1_front_0.png"] = "mock image data"
-      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_front_0.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'"] = "200"
+      mock_io.open_files["tmp/scraper_tgdb_1_front_0.jpg"] = "mock image data"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg("tmp/scraper_tgdb_1_front_0.jpg") .. " --write-out '%{http_code}' " .. utils.escapeShellArg("https://cdn.thegamesdb.net/images/original/box.jpg")] = "200"
       
       local results = scraper.getScrapeResults(item, config, log, "nes")
       
@@ -181,7 +181,7 @@ describe("Scraper", function()
       assert.are.equal("TGDB Desc", results[1].description)
       assert.are.equal("1991", results[1].year)
       assert.are.equal("TheGamesDB", results[1].source)
-      assert.are.equal("curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_tgdb_1_front_0.png' --write-out '%{http_code}' 'https://cdn.thegamesdb.net/images/original/box.jpg'", mock_io.popen_calls[2])
+      assert.are.equal("curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg("tmp/scraper_tgdb_1_front_0.jpg") .. " --write-out '%{http_code}' " .. utils.escapeShellArg("https://cdn.thegamesdb.net/images/original/box.jpg"), mock_io.popen_calls[2])
     end)
 
     it("should show error if API key is missing", function()
@@ -219,7 +219,7 @@ describe("Scraper", function()
 
     it("should fetch and parse data from Libretro", function()
       local url = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game.png"
-      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_Exacto.png' --write-out '%{http_code}' '" .. url .. "'"] = "200"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg("tmp/scraper_libretro_Exacto.png") .. " --write-out '%{http_code}' " .. utils.escapeShellArg(url)] = "200"
       mock_io.open_files["tmp/scraper_libretro_Exacto.png"] = "image data"
 
       local results = scraper.getScrapeResults(item, config, log, "nes", love.filesystem.getInfo) -- Pass love.filesystem.getInfo
@@ -234,8 +234,8 @@ describe("Scraper", function()
       local url_exact = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game%20(USA).png"
       local url_fuzzy = "http://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/game%20(USA,%20Europe).png"
       
-      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_Exacto.png' --write-out '%{http_code}' '" .. url_exact .. "'"] = "404"
-      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output 'tmp/scraper_libretro_FuzzyUSAEurope.png' --write-out '%{http_code}' '" .. url_fuzzy .. "'"] = "200"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg("tmp/scraper_libretro_Exacto.png") .. " --write-out '%{http_code}' " .. utils.escapeShellArg(url_exact)] = "404"
+      mock_io.popen_results["curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg("tmp/scraper_libretro_FuzzyUSAEurope.png") .. " --write-out '%{http_code}' " .. utils.escapeShellArg(url_fuzzy)] = "200"
       mock_io.open_files["tmp/scraper_libretro_FuzzyUSAEurope.png"] = "image data"
 
       local results = scraper.getScrapeResults(item_fuzzy, config, log, "nes", love.filesystem.getInfo) -- Pass love.filesystem.getInfo

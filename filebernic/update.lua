@@ -233,8 +233,12 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                             f:close()
                             if data then
                                 local success, img = pcall(global_state.love.graphics.newImage,
-                                                           global_state.love.filesystem.newFileData(data, "temp.png"))
-                                if success then res.image = img end
+                                                           global_state.love.filesystem.newFileData(data, res.imagePath))
+                                if success then 
+                                    res.image = img 
+                                else
+                                    log_func("Error creating LÖVE image from " .. res.imagePath .. ": " .. tostring(img))
+                                end
                             end
                         end
                     end
@@ -245,8 +249,12 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                             f:close()
                             if data then
                                 local success, img = pcall(global_state.love.graphics.newImage,
-                                                           global_state.love.filesystem.newFileData(data, "temp_scr.png"))
-                                if success then res.screenshot = img end
+                                                           global_state.love.filesystem.newFileData(data, res.screenshotPath))
+                                if success then 
+                                    res.screenshot = img 
+                                else
+                                    log_func("Error creating LÖVE screenshot from " .. res.screenshotPath .. ": " .. tostring(img))
+                                end
                             end
                         end
                     end

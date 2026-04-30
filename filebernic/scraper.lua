@@ -25,8 +25,9 @@ local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
         local http_code = nil
         if curl_handle then
             local output = curl_handle:read("*a")
-            -- The HTTP code is the last 3 digits of the output
-            http_code = output:match("(%d%d%d)$")
+            -- The HTTP code is usually the last 3 digits of the output.
+            -- Using %s* to handle potential newlines.
+            http_code = output:match("(%d%d%d)%s*$")
             curl_handle:close()
         end
 
@@ -168,7 +169,8 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
                                 if art.side == "front" and #downloadedFronts < 4 then
                                     local boxartBaseUrl = (data.include.boxart.base_url and data.include.boxart.base_url.original) or "https://cdn.thegamesdb.net/images/original/"
                                     local imageUrl = boxartBaseUrl .. art.filename
-                                    local tempImgPath = "tmp/scraper_tgdb_" .. gameId .. "_front_" .. #downloadedFronts .. ".png"
+                                    local ext = imageUrl:match("%.([^%.]+)$") or "png"
+                                    local tempImgPath = "tmp/scraper_tgdb_" .. gameId .. "_front_" .. #downloadedFronts .. "." .. ext
                                     if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "TheGamesDB")}) end
                                     if downloadImage(imageUrl, tempImgPath, log, progress_callback) then
                                         table.insert(downloadedFronts, tempImgPath)
@@ -184,7 +186,8 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
                                 if #downloadedScreens < 4 then
                                     local screenshotBaseUrl = (data.include.screenshot.base_url and data.include.screenshot.base_url.original) or "https://cdn.thegamesdb.net/images/original/"
                                     local screenUrl = screenshotBaseUrl .. scr.filename
-                                    local tempScreenPath = "tmp/scraper_tgdb_scr_" .. gameId .. "_" .. #downloadedScreens .. ".png"
+                                    local ext = screenUrl:match("%.([^%.]+)$") or "png"
+                                    local tempScreenPath = "tmp/scraper_tgdb_scr_" .. gameId .. "_" .. #downloadedScreens .. "." .. ext
                                     if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "TheGamesDB")}) end
                                     if downloadImage(screenUrl, tempScreenPath, log, progress_callback) then
                                         table.insert(downloadedScreens, tempScreenPath)
@@ -349,13 +352,15 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
                         for _, media in ipairs(game.medias) do
                             local mType = media.type and media.type:lower() or ""
                             if (mType == "box-2d" or mType == "box-3d") and #downloadedFronts < 4 then
-                                local tempImgPath = "tmp/scraper_ss_" .. game.id .. "_front_" .. #downloadedFronts .. ".png"
+                                local ext = media.url:match("%.([^%.]+)$") or "png"
+                                local tempImgPath = "tmp/scraper_ss_" .. game.id .. "_front_" .. #downloadedFronts .. "." .. ext
                                 if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "ScreenScraper")}) end
                                 if downloadImage(media.url, tempImgPath, log, progress_callback) then
                                     table.insert(downloadedFronts, tempImgPath)
                                 end
                             elseif (mType == "screenjeu" or mType == "screentitre" or mType == "ss" or mType == "screenshot") and #downloadedScreens < 4 then
-                                local tempScreenPath = "tmp/scraper_ss_" .. game.id .. "_scr_" .. #downloadedScreens .. ".png"
+                                local ext = media.url:match("%.([^%.]+)$") or "png"
+                                local tempScreenPath = "tmp/scraper_ss_" .. game.id .. "_scr_" .. #downloadedScreens .. "." .. ext
                                 if progress_callback then progress_callback({type="scraper_progress", message=L.get("downloading_images", "ScreenScraper")}) end
                                 if downloadImage(media.url, tempScreenPath, log, progress_callback) then
                                     table.insert(downloadedScreens, tempScreenPath)
