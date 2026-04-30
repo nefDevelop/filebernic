@@ -10,18 +10,13 @@
     - **Screenshots**: Capturas limpias de la interfaz (Lista, Grid, Detalles).
     - **Logo**: Versión vectorial o alta resolución del logo de FileBernic.
 
-## 4. Mejoras Técnicas Sugeridas (Quick Wins)
 
-
-1.  **Validación de Actualizaciones**:
-    - ¿Cómo actualizarán los usuarios? Si no hay OTA (Over-The-Air), dejar claro en la App que deben bajar la nueva versión manualmente.
 
 ## 5. Plan de Acción (Checklist)
 
 ### Fase 1: Limpieza de Código
 - [ ] Cambiar `DEBUG = 0` en `main.lua`.
 - [ ] Verificar que `thegamesdb_apikey` se maneje con gracia si está vacía (mostrar mensaje al usuario).
-- [ ] Crear archivo `LICENSE`.
 
 
 - [ ] Tomar 3-4 screenshots finales.
