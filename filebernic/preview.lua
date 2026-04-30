@@ -47,7 +47,7 @@ function M.load(global_state, log_func, loader_obj)
                                        global_state.love.filesystem.getInfo, global_state.love.graphics.newImage,
                                        log_func)
 
-    local baseName = targetItem.name:gsub("%..-$", "")
+    local baseName = targetItem.name:gsub("%.[^%.]+$", "")
     local itemSystemName = utils.getSystemNameForItem(targetItem, global_state.systemName, global_state.isVirtualRoot)
 
     if itemSystemName then

@@ -169,7 +169,7 @@ local function updateGamelistXML(romPath, metadata, action)
     end
     
     if action == "add" and metadata then
-        local name = metadata.name or filename:gsub("%..-$", "")
+        local name = metadata.name or filename:gsub("%.[^%.]+$", "")
         local entry = "  <game>\n"
         entry = entry .. "    <path>" .. relPath .. "</path>\n"
         entry = entry .. "    <name>" .. escapeXML(name) .. "</name>\n"
@@ -339,7 +339,7 @@ function M.deleteGameMedia(romPath)
     if not system then return end
     
     local filename = romPath:match("([^/]+)$")
-    local baseName = filename:gsub("%..-$", "")
+    local baseName = filename:gsub("%.[^%.]+$", "")
     
     -- Base path for catalogue (usually on SD1 in muOS)
     local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
@@ -488,7 +488,7 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         return
     end
     if result and result.tempPath then
-        local baseName = item.name:gsub("%..-$", "")
+        local baseName = item.name:gsub("%.[^%.]+$", "")
         
         -- Asegurar directorio de destino para boxart
         os.execute("mkdir -p " .. utils.escapeShellArg(muosArtPath))
@@ -617,7 +617,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
                     if ext then
                         local extLower = ext:lower()
                         if not excluded_extensions[extLower] and validExtensions[extLower] and extLower ~= "state" then
-                            local stem = filename:gsub("%..-$", "")
+                            local stem = filename:gsub("%.[^%.]+$", "")
                             romNames[stem] = true
                             
                             if not romsByStem[stem] then romsByStem[stem] = {} end
@@ -732,7 +732,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
             for full_item_path in h:lines() do
                 local item_name = full_item_path:match("([^/]+)$")
                 if item_name then
-                    local stem = item_name:gsub("%..-$", "")
+                    local stem = item_name:gsub("%.[^%.]+$", "")
                     if not romsBySystem[systemName] or not romsBySystem[systemName][stem] then
                         table_insert(cleanupData.orphanedImages, {
                             name = item_name,
@@ -769,7 +769,7 @@ end
 function M.findSaveFiles(item)
     local saveFiles = {}
     local saveManagerSelection = 1
-    local baseName = item.name:gsub("%..-$", "")
+    local baseName = item.name:gsub("%.[^%.]+$", "")
     
     -- Escapar caracteres especiales para el comando find (ej: corchetes)
     local escapedName = baseName:gsub("([%[%]%*%?])", "\\%1")

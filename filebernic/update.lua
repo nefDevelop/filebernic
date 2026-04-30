@@ -58,7 +58,7 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     end
 
     if item and not item.isDir then -- Only process if it's a file
-        local baseName = item.name:gsub("%..-$", "")
+        local baseName = item.name:gsub("%.[^%.]+$", "")
         local itemSystemName = utils.getSystemNameForItem(item, nil, global_state.isVirtualRoot)
         
         if itemSystemName then

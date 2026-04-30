@@ -89,7 +89,7 @@ local screenScraperSystems = {
 function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_callback)
     local results = {}
     
-    local cleanName = item.name:gsub("%..-$", "") -- Quitar extensión
+    local cleanName = item.name:gsub("%.[^%.]+$", "") -- Quitar extensión
     local encodedName = utils.urlencode(cleanName)
 
     -- 1. Local Gamelist.xml (Prioridad Máxima - Offline)

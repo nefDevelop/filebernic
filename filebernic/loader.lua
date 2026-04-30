@@ -69,9 +69,6 @@ function Loader:markUsed(path)
   while #self.accessOrder > self.maxCacheSize do
      local oldest = table.remove(self.accessOrder)
      if self.cache[oldest] ~= 'loading' then
-        if type(self.cache[oldest]) == "userdata" and self.cache[oldest].release then
-            pcall(self.cache[oldest].release, self.cache[oldest]) -- Liberar VRAM explícitamente
-        end
         self.cache[oldest] = nil
      else
         table.insert(self.accessOrder, oldest)
