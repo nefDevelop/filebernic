@@ -23,7 +23,13 @@ describe("Indexer", function()
     end
     content = content .. "\nreturn { scanRoot = scanRoot }"
 
-    local f = assert(load(content, "indexer.lua", "t", indexer_env))
+    local f
+    if _VERSION == "Lua 5.1" then
+        f = assert(loadstring(content, "indexer.lua"))
+        setfenv(f, indexer_env)
+    else
+        f = assert(load(content, "indexer.lua", "t", indexer_env))
+    end
     -- Mock channels before running the script
     indexer_env.love = { thread = { getChannel = function()
       return { push = function() end, demand = function() return { command = "quit" } end }
