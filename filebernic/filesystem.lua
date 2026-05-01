@@ -649,7 +649,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
         if scannedFiles == 0 then
             local cwd = love_filesystem_getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            scanAndRegisterInDir(cwd .. "/../Simulador_SD/", "SIM")
+            scanAndRegisterInDir(cwd .. "/../Simulador_SD/", "SD1")
         end
 
         -- 2. Buscar Save States Huérfanos
@@ -669,7 +669,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
                         table_insert(cleanupData.orphans, {
                             name = name,
                             fullPath = full_item_path,
-                            location = full_item_path:find("/mnt/mmc") and "SD1" or (full_item_path:find("/mnt/sdcard") and "SD2" or "SIM")
+                            location = full_item_path:find("/mnt/mmc") and "SD1" or (full_item_path:find("/mnt/sdcard") and "SD2" or "SD1")
                         })
                     end
                 end
@@ -811,7 +811,8 @@ function M.findSaveFiles(item)
                         foundMap[line] = true
                         local location = "UNK"
                         if line:find("/mnt/mmc") then location = "SD1"
-                        elseif line:find("/mnt/sdcard") then location = "SD2" end
+                        elseif line:find("/mnt/sdcard") then location = "SD2"
+                        elseif line:find("Simulador_SD") then location = "SD1" end
                         
                         table.insert(saveFiles, {
                             name = line:match("([^/]+)$"),
@@ -1060,7 +1061,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simPath = cwd .. "/../Simulador_SD/"
             local h = io.popen('ls -d ' .. utils.escapeShellArg(simPath) .. ' 2>/dev/null')
-            scanAndAdd(simPath, "SIM")
+            scanAndAdd(simPath, "SD1")
         end
     end
     
@@ -1340,9 +1341,9 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
         end
     end
 
-    scan(romPath, romPath:find("/mnt/mmc") and "SD1" or (romPath:find("/mnt/sdcard") and "SD2" or ""))
+    scan(romPath, romPath:find("/mnt/mmc") and "SD1" or (romPath:find("/mnt/sdcard") and "SD2" or "SD1"))
     if secondaryPath then
-        scan(secondaryPath, secondaryPath:find("/mnt/mmc") and "SD1" or (secondaryPath:find("/mnt/sdcard") and "SD2" or ""))
+        scan(secondaryPath, secondaryPath:find("/mnt/mmc") and "SD1" or (secondaryPath:find("/mnt/sdcard") and "SD2" or "SD1"))
     end
     
     -- Sort files alphabetically

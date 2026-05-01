@@ -16,6 +16,16 @@
 - **Vistas Flexibles**: Elige entre modo **Lista** o modo **Grid**.
 - **Modo "Juego Único"**: Combina versiones de distintas regiones en una sola entrada para una biblioteca más limpia.
 
+## Capturas de Pantalla
+
+<p align="center">
+  <img src="docs/assets/filebernic-systemlist.png" width="48%" alt="Lista de Sistemas">
+  <img src="docs/assets/filebernic-romlist.png" width="48%" alt="Lista de ROMs">
+  <img src="docs/assets/filebernic-gridview.png" width="48%" alt="Vista en Grid">
+  <img src="docs/assets/filebernic-menusystem.png" width="48%" alt="Menú de Configuración">
+  <img src="docs/assets/filebarnic-scraper.png" width="48%" alt="Herramienta de Scraper">
+</p>
+
 ## Instalación en muOS
 
 1. Ve a la sección de [Releases](https://github.com/nef734/filebernic/releases) y descarga el archivo `filebernic.muxapp` más reciente.

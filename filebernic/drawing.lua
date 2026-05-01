@@ -2155,7 +2155,8 @@ local function drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, pre
                     local label = item.sourceLabel
                     if not label then
                         if global_state.romPath:find("/mnt/mmc") then label = "SD1"
-                        elseif global_state.romPath:find("/mnt/sdcard") then label = "SD2" end
+                        elseif global_state.romPath:find("/mnt/sdcard") then label = "SD2"
+                        elseif global_state.romPath:find("Simulador_SD") then label = "SD1" end
                     end
                     if label and label ~= "Fav" then -- If label exists and is not "Fav"
                     -- Colores distintivos para SD
