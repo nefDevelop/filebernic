@@ -421,12 +421,14 @@ end)
 describe("filesystem copyFile and moveFile", function()
   local filesystem = require("filebernic.filesystem")
   local original_io_open = io.open
+  local original_os_remove = os.remove
   local mock_io = {}
   local deleted_paths = {}
 
   before_each(function()
+    _G.love = { filesystem = { getSource = function() return "/src" end, getInfo = function() end } }
     deleted_paths = {}
-    filesystem.safeRemove = function(path) table.insert(deleted_paths, path); return true end
+    os.remove = function(path) table.insert(deleted_paths, path); return true end
     mock_io = { writes = {} }
     io.open = function(path, mode)
       if mode == "rb" then
@@ -449,18 +451,19 @@ describe("filesystem copyFile and moveFile", function()
 
   after_each(function()
     io.open = original_io_open
+    os.remove = original_os_remove
   end)
 
   it("should successfully copy data from source to destination", function()
-    local success, err = filesystem.copyFile("/src/game.zip", "/dest/game.zip")
+    local success, err = filesystem.copyFile("/mnt/mmc/ROMS/game.zip", "/mnt/sdcard/ROMS/game.zip")
     assert.is_true(success)
-    assert.are.equal("DUMMY_DATA", mock_io.writes["/dest/game.zip"])
+    assert.are.equal("DUMMY_DATA", mock_io.writes["/mnt/sdcard/ROMS/game.zip"])
   end)
 
   it("should successfully move data and delete original file", function()
-    local success, err = filesystem.moveFile("/src/game.zip", "/dest/game.zip")
+    local success, err = filesystem.moveFile("/mnt/mmc/ROMS/game.zip", "/mnt/sdcard/ROMS/game.zip")
     assert.is_true(success)
-    assert.are.equal("DUMMY_DATA", mock_io.writes["/dest/game.zip"])
-    assert.are.equal("/src/game.zip", deleted_paths[1])
+    assert.are.equal("DUMMY_DATA", mock_io.writes["/mnt/sdcard/ROMS/game.zip"])
+    assert.are.equal("/mnt/mmc/ROMS/game.zip", deleted_paths[1])
   end)
 end)

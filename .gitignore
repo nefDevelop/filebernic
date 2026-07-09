@@ -17,6 +17,10 @@ Simulador_SD/
 .DS_Store
 Thumbs.db
 
+# Archivos duplicados (versiones antiguas en raíz)
+/input.lua
+/update.lua
+
 # Editores
 .vscode/
 .idea/

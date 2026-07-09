@@ -20,7 +20,7 @@ local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
         -- We want to capture HTTP code from stdout, and any curl errors from stderr.
         -- Add a user-agent to look more like a browser and avoid being blocked by CDNs.
         -- Add -k to ignore SSL certificate verification, which often fails on embedded devices.
-        local curl_cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg(tempPath) .. " --write-out '%{http_code}' " .. utils.escapeShellArg(imageUrl)
+        local curl_cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg(tempPath) .. " --write-out '%{http_code}' " .. utils.escapeShellArg(imageUrl) .. " 2>/dev/null"
         local curl_handle = io.popen(curl_cmd)
         local http_code = nil
         if curl_handle then
@@ -139,7 +139,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
             
             log("TGDB Request: " .. (url:sub(1, 60)) .. "...")
 
-            local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url))
+            local handle = io.popen("curl -s -L -k --max-time 10 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url) .. " 2>/dev/null")
             local response = nil
             if handle then
                 response = handle:read("*a")
@@ -250,27 +250,28 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
                  if progress_callback then progress_callback({type="scraper_progress", message=L.get("querying_api_libretro", label)}) end
                  love.timer.sleep(0.05) -- Pausa para que la UI se actualice
                  
-                 local tempImgPath = "tmp/scraper_libretro_" .. label:gsub(" ", "_") .. (suffix and suffix:gsub("[^%w]", "") or "") .. ".png"
-                 local imageDownloaded = downloadImage(url, tempImgPath, log, progress_callback)
+                  local tempImgPath = "tmp/scraper_libretro_" .. label:gsub(" ", "_") .. (suffix and suffix:gsub("[^%w]", "") or "") .. ".png"
+                  local tempScreenPath
+                  local imageDownloaded = downloadImage(url, tempImgPath, log, progress_callback)
 
-                 if imageDownloaded then
-                     if progress_callback then progress_callback({type="scraper_progress", message=L.get("libretro_found", label)}) end
-                     love.timer.sleep(0.5)
-                     local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
-                     local tempScreenPath = "tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png" -- Construct path
+                  if imageDownloaded then
+                      if progress_callback then progress_callback({type="scraper_progress", message=L.get("libretro_found", label)}) end
+                      love.timer.sleep(0.5)
+                      local snapUrl = "http://thumbnails.libretro.com/" .. sysEncoded .. "/Named_Snaps/" .. nameEnc .. ".png"
+                      tempScreenPath = "tmp/scraper_libretro_snap_" .. label:gsub(" ", "_") .. ".png" -- Construct path
 
-                     -- Download screenshot, using the same helper
-                     if not downloadImage(snapUrl, tempScreenPath, log, progress_callback) then
-                         tempScreenPath = nil -- Clear path if download failed
-                     end
-                 end
-                 
-                 if imageDownloaded then
-                     table.insert(results, {
-                         imagePath = tempImgPath,
-                         screenshotPath = tempScreenPath,
-                         tempScreenPath = tempScreenPath,
-                         description = "Libretro no proporciona descripciones.",
+                      -- Download screenshot, using the same helper
+                      if not downloadImage(snapUrl, tempScreenPath, log, progress_callback) then
+                          tempScreenPath = nil -- Clear path if download failed
+                      end
+                  end
+
+                  if imageDownloaded then
+                      table.insert(results, {
+                          imagePath = tempImgPath,
+                          screenshotPath = tempScreenPath,
+                          tempScreenPath = tempScreenPath,
+                          description = "Libretro no proporciona descripciones.",
                          region = "Libretro (" .. label .. "): " .. fullName,
                          tempPath = tempImgPath,
                          source = "Libretro"
@@ -333,7 +334,7 @@ function M.getScrapeResults(item, config, log, systemName, fs_getInfo, progress_
             
             log("ScreenScraper Request: " .. (url:sub(1, 80)) .. "...")
             
-            local handle = io.popen("curl -s -L -k --max-time 15 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url))
+            local handle = io.popen("curl -s -L -k --max-time 15 -A 'Mozilla/5.0' " .. utils.escapeShellArg(url) .. " 2>/dev/null")
             local response = nil
             if handle then
                 response = handle:read("*a")

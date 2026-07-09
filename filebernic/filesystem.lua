@@ -1,5 +1,22 @@
 local M = {}
 local utils = require "utils"
+local core = require "fs_core"
+local data = require "fs_data"
+
+M.isSafePath = core.isSafePath
+M.safeRemove = core.safeRemove
+M.copyFile = core.copyFile
+M.moveFile = core.moveFile
+M.saveFavorites = data.saveFavorites
+M.loadFavorites = data.loadFavorites
+M.addToHistory = data.addToHistory
+M.saveLastPlayed = data.saveLastPlayed
+M.savePendingHistory = data.savePendingHistory
+M.checkPendingHistory = data.checkPendingHistory
+M.saveHistory = data.saveHistory
+M.logDeletion = data.logDeletion
+M.saveViewCache = data.saveViewCache
+M.loadViewCache = data.loadViewCache
 
 local artPathCache = {}
 function M.getArtPathForSystem(systemName)
@@ -147,7 +164,7 @@ local function updateGamelistXML(romPath, metadata, action)
     local filename = romPath:match("([^/]+)$")
     local xmlPath = dir .. "gamelist.xml"
     
-    local content = ""
+    local content
     local f = io.open(xmlPath, "r")
     if f then
         content = f:read("*all")
@@ -180,7 +197,7 @@ local function updateGamelistXML(romPath, metadata, action)
         table.insert(games, entry)
     end
     
-    local f = io.open(xmlPath, "w")
+    f = io.open(xmlPath, "w")
     if f then
         f:write("<?xml version=\"1.0\"?>\n<gameList>\n")
         for _, g in ipairs(games) do f:write(g .. "\n") end
@@ -189,25 +206,7 @@ local function updateGamelistXML(romPath, metadata, action)
     end
 end
 
-function M.saveFavorites(favoriteRoms, json_encode)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/favorites.json", "w")
-    if f then
-        f:write(json_encode(favoriteRoms))
-        f:close()
-    end
-end
 
-function M.loadFavorites(json_decode)
-    local path = love.filesystem.getSource() .. "/data/favorites.json"
-    local f = io.open(path, "r")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        return json_decode(content) or {}
-    end
-    return {}
-end
 
 function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
     local currentPath = item.fullPath or (romPath .. item.name)
@@ -218,7 +217,7 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
         
         -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
         -- Recalcular rutas de arte
-        local baseMuosPath = ""
+        local baseMuosPath
         local f = io.open("/mnt/mmc", "r")
         if f then
              f:close()
@@ -237,102 +236,9 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
     return systemName, muosArtPath, muosTextPath, muosPreviewPath
 end
 
-function M.isSafePath(path)
-    if not path or type(path) ~= "string" then return false end
-    
-    -- Normalizar ruta resolviendo saltos de directorio válidos (ej: /proyecto/simulador/../ROMS -> /proyecto/ROMS)
-    local normPath = path
-    while normPath:find("/[^/]+/%.%./") do
-        normPath = normPath:gsub("/[^/]+/%.%./", "/")
-    end
-    
-    -- 1. Bloquear verdaderos intentos de Path Traversal
-    if normPath:find("%.%.") then return false end
-    
-    -- 2. Rutas autorizadas estrictas para borrado
-    local allowed_prefixes = {
-        "/mnt/mmc/ROMS/",
-        "/mnt/sdcard/ROMS/",
-        "/mnt/mmc/MUOS/save/",
-        "/mnt/sdcard/MUOS/save/",
-        "/mnt/mmc/MUOS/info/catalogue/",
-        "/mnt/sdcard/MUOS/info/catalogue/",
-        "Simulador_SD/ROMS/",
-        "Simulador_SD/MUOS/save/",
-        "Simulador_SD/MUOS/info/catalogue/"
-    }
 
-    -- Permitir limpiar carpetas internas de datos y temporales
-    table.insert(allowed_prefixes, "/tmp/")
-    table.insert(allowed_prefixes, "tmp/")
-    if love and love.filesystem then
-        local app_dir = love.filesystem.getSource()
-        while app_dir:find("/[^/]+/%.%./") do
-            app_dir = app_dir:gsub("/[^/]+/%.%./", "/")
-        end
-        
-        table.insert(allowed_prefixes, app_dir .. "/data/")
-        table.insert(allowed_prefixes, app_dir .. "/tmp/")
-        
-        local cwd = app_dir
-        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-        local sim_dir = cwd .. "/../Simulador_SD/"
-        while sim_dir:find("/[^/]+/%.%./") do
-            sim_dir = sim_dir:gsub("/[^/]+/%.%./", "/")
-        end
-        table.insert(allowed_prefixes, sim_dir .. "ROMS/")
-        table.insert(allowed_prefixes, sim_dir .. "MUOS/save/")
-        table.insert(allowed_prefixes, sim_dir .. "MUOS/info/catalogue/")
-    end
-    
-    for _, prefix in ipairs(allowed_prefixes) do
-        if normPath:find("^" .. prefix:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")) then
-            return true
-        end
-    end
-    
-    return false
-end
 
-function M.safeRemove(path, log_func)
-    if not M.isSafePath(path) then
-        if log_func then log_func("SECURITY BLOCK: Intento de borrado no autorizado -> " .. tostring(path)) end
-        return false, "Ruta no autorizada por seguridad"
-    end
-    return os.remove(path)
-end
 
-function M.copyFile(src, dest, log_func)
-    if not src or not dest then return false, "Rutas inválidas" end
-    local infile, err = io.open(src, "rb")
-    if not infile then return false, "Error leyendo origen: " .. tostring(err) end
-    local outfile, err2 = io.open(dest, "wb")
-    if not outfile then
-        infile:close()
-        return false, "Error escribiendo destino: " .. tostring(err2)
-    end
-    
-    local chunkSize = 1024 * 1024 -- 1MB por bloque para no saturar memoria RAM (importante para ISOs/CHDs)
-    while true do
-        local block = infile:read(chunkSize)
-        if not block then break end
-        outfile:write(block)
-    end
-    
-    infile:close()
-    outfile:close()
-    if log_func then log_func("Copiado nativo exitoso: " .. src .. " -> " .. dest) end
-    return true
-end
-
-function M.moveFile(src, dest, log_func)
-    local success, err = M.copyFile(src, dest, log_func)
-    if success then
-        M.safeRemove(src, log_func)
-        return true
-    end
-    return false, err
-end
 
 function M.deleteGameMedia(romPath)
     local system = romPath:match("ROMS/([^/]+)/")
@@ -367,45 +273,7 @@ function M.deleteGameMedia(romPath)
     updateGamelistXML(romPath, nil, "delete")
 end
 
-function M.addToHistory(path, playedRoms)
-    playedRoms[path] = true
-    M.saveHistory(playedRoms)
-    return playedRoms
-end
 
-function M.saveLastPlayed(path)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/last_played.txt", "w")
-    if f then
-        f:write(path)
-        f:close()
-    end
-end
-
-function M.savePendingHistory(path)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/pending_played.txt", "w")
-    if f then
-        f:write(path)
-        f:close()
-    end
-end
-
-function M.checkPendingHistory(playedRoms, saveHistoryFunc)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local path = dataDir .. "/pending_played.txt"
-    local f = io.open(path, "r")
-    if f then
-        local romPath = f:read("*all")
-        f:close()
-        if romPath and romPath ~= "" then
-            playedRoms[romPath] = true
-            saveHistoryFunc(playedRoms)
-        end
-        M.safeRemove(path)
-    end
-    return playedRoms
-end
 
 function M.resolveSecondary(item)
     -- Permitir input de tipo string (ruta de carpeta)
@@ -427,7 +295,7 @@ function M.resolveSecondary(item)
     if not item or not item.fullPath then return nil end
     if item.secondaryPath then return item.secondaryPath end
     
-    local otherSD = ""
+    local otherSD
     if item.fullPath:find("/mnt/mmc") then
         otherSD = "/mnt/sdcard"
     elseif item.fullPath:find("/mnt/sdcard") then
@@ -471,16 +339,7 @@ function M.getTargetSDPath(item, config)
     return "/mnt/" .. targetSD, targetLabel
 end
 
-function M.saveHistory(playedRoms)
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/played_roms.txt", "w")
-    if f then
-        for path, _ in pairs(playedRoms) do
-            f:write(path .. "\n")
-        end
-        f:close()
-    end
-end
+
 
 function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
     if not muosArtPath or muosArtPath == "" then
@@ -491,7 +350,8 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         local baseName = item.name:gsub("%.[^%.]+$", "")
         
         -- Asegurar directorio de destino para boxart
-        os.execute("mkdir -p " .. utils.escapeShellArg(muosArtPath))
+        local ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosArtPath))
+        if not ok then log("Error: Failed to create boxart directory: " .. muosArtPath) end
         
         -- Mover archivo temporal a destino final para boxart
         local destPath = muosArtPath .. baseName .. ".png"
@@ -515,7 +375,8 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         
         -- Guardar descripción
         if result.description then
-            os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            if not ok then log("Error: Failed to create text directory: " .. muosTextPath) end
             local txtPath = muosTextPath .. baseName .. ".txt"
             log("Saving description to: " .. txtPath)
             local f = io.open(txtPath, "w")
@@ -524,7 +385,8 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         
         -- Guardar año
         if result.year then
-            os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            if not ok then log("Error: Failed to create year directory: " .. muosTextPath) end
             local yearPath = muosTextPath .. baseName .. ".year"
             log("Saving year to: " .. yearPath)
             local f = io.open(yearPath, "w")
@@ -533,11 +395,12 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         
         -- Guardar screenshot (si existe carpeta preview)
         if result.tempScreenPath and muosPreviewPath ~= "" then
-            os.execute("mkdir -p " .. utils.escapeShellArg(muosPreviewPath))
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosPreviewPath))
+            if not ok then log("Error: Failed to create preview directory: " .. muosPreviewPath) end
             local destScreen = muosPreviewPath .. baseName .. ".png"
             log("Saving preview to: " .. destScreen)
 
-            local inp = io.open(result.tempScreenPath, "rb")
+            inp = io.open(result.tempScreenPath, "rb")
             if inp then
                 local content = inp:read("*a")
                 inp:close()
@@ -697,7 +560,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
         -- 3. Procesar Duplicados
         cleanupData.currentFile = "Analizando duplicados..."
         coroutine_yield()
-        for stem, list in pairs(romsByStem) do
+        for _, list in pairs(romsByStem) do
             if #list > 1 then
                 for _, item in ipairs(list) do
                     table_insert(cleanupData.duplicates, item)
@@ -746,7 +609,7 @@ function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getS
             h:close()
         end
 
-        for system, stems in pairs(romsBySystem) do
+        for system in pairs(romsBySystem) do
             local boxPath = catalogueBase .. system .. "/box"
             local h = io.popen('ls -d ' .. utils.escapeShellArg(boxPath) .. ' 2>/dev/null')
             if h then
@@ -874,7 +737,7 @@ function M.checkIndex(romIndex, json_decode, love_filesystem_getSource, io_open,
         log("Index is up to date. Loading from file.")
         local indexContent = indexFile:read("*a")
         indexFile:close()
-        local decoded, pos, err = json_decode(indexContent)
+        local decoded, _, err = json_decode(indexContent)
         if decoded then
             romIndex = decoded
             log("Index loaded successfully. Items: " .. #romIndex)
@@ -1061,7 +924,13 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
             local simPath = cwd .. "/../Simulador_SD/"
             local h = io.popen('ls -d ' .. utils.escapeShellArg(simPath) .. ' 2>/dev/null')
-            scanAndAdd(simPath, "SD1")
+            if h then
+                local result = h:read("*a")
+                h:close()
+                if result and result ~= "" then
+                    scanAndAdd(simPath, "SD1")
+                end
+            end
         end
     end
     
@@ -1070,7 +939,7 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
 
     -- Insert Favorites folder if there are favorites
     local hasFavorites = false
-    if favoriteRoms then for k,v in pairs(favoriteRoms) do hasFavorites = true break end end
+    if favoriteRoms and next(favoriteRoms) ~= nil then hasFavorites = true end
     
     if hasFavorites then
         table.insert(files, 1, {
@@ -1148,7 +1017,7 @@ function M.updateSystemPaths(systemName, romPath, log, fs_getInfo, gfx_newImage)
         systemName = detectedSystem
         log("System detected: " .. systemName)
         
-        local baseMuosPath = ""
+        local baseMuosPath
         local f = io.open("/mnt/mmc", "r")
         if f then
              f:close()
@@ -1359,92 +1228,6 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
     end
 
     return files, selectedFilesCount, selectedIndex, allFiles
-end
-
-function M.logDeletion(path, json_encode, json_decode) -- Log deleted files for debugging/recovery
-    local dataDir = love.filesystem.getSource() .. "/data"
-    local logPath = dataDir .. "/deleted_roms.json"
-    
-    local logData = {}
-    local f = io.open(logPath, "r")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        if content and content ~= "" then
-            logData = json_decode(content) or {}
-        end
-    end
-    
-    table.insert(logData, {
-        date = os.date("%Y-%m-%d %H:%M:%S"),
-        path = path
-    })
-    
-    local f = io.open(logPath, "w")
-    if f then
-        f:write(json_encode(logData, {indent = true}))
-        f:close()
-    end
-end
-
-function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_encode, love_filesystem_getSource, io_open) -- Save current view state to cache
-    -- Crear una copia limpia de los archivos sin Userdata (imágenes) para el JSON
-    
-    -- Optimización: En modo Virtual Root (Juego Unico), guardar solo una ventana alrededor del cursor
-    local startIdx = 1
-    local endIdx = #files
-    local savedIndex = selectedIndex
-
-    if isVirtualRoot and #files > 100 then
-        startIdx = math.max(1, selectedIndex - 25)
-        endIdx = math.min(#files, selectedIndex + 25)
-        savedIndex = selectedIndex - startIdx + 1
-    end
-
-    local cache = {
-        romPath = romPath,
-        selectedIndex = savedIndex,
-        isVirtualRoot = isVirtualRoot,
-        files = {}
-    }
-    
-    for i = startIdx, endIdx do
-        local item = files[i]
-        local cleanItem = {}
-        for k, v in pairs(item) do
-            -- Excluir iconos y cualquier otro userdata
-            if type(v) ~= "userdata" then
-                cleanItem[k] = v
-            end
-        end
-        table.insert(cache.files, cleanItem)
-    end
-    
-    local dataDir = love_filesystem_getSource() .. "/data"
-    local f = io_open(dataDir .. "/view_cache.json", "w")
-    if f then
-        f:write(json_encode(cache))
-        f:close()
-    end
-end
-
-function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSystemIcon_func, getSystemContentIcon_func, fs_getInfo, gfx_newImage) -- Load cached view state
-    local path = love_filesystem_getSource() .. "/data/view_cache.json"
-    local f = io_open(path, "r")
-    if not f then return nil, nil, nil end
-    
-    local content = f:read("*a")
-    f:close()
-    
-    local cache = json_decode(content)
-    if not cache or not cache.files then return nil, nil, nil end
-    
-    -- Restaurar iconos básicos
-    for _, item in ipairs(cache.files) do
-        if item.isDir and getSystemIcon_func then item.icon = getSystemIcon_func(item.name, fs_getInfo, gfx_newImage) end
-    end
-    
-    return cache.files, cache.selectedIndex, cache.romPath, cache.isVirtualRoot
 end
 
 return M

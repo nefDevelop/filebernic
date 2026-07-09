@@ -295,7 +295,7 @@ end
 function M.checkGitHubUpdate(currentVersion)
     local json = require "libs.dkjson"
     local url = "https://api.github.com/repos/nef734/filebernic/releases/latest"
-    local cmd = "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "'"
+    local cmd = "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "' 2>/dev/null"
     
     local handle = io.popen(cmd)
     local response = handle and handle:read("*a") or ""

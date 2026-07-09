@@ -327,7 +327,7 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
 
     -- Remover lógica de pendingLoad y timer
 
-    if showHelp then return end
+    if global_state.showHelp then return end
 
     -- Control de repetición de tecla manual para el scroll
     local is_down_pressed = global_state.love.keyboard.isDown('down') or

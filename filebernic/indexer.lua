@@ -2,7 +2,7 @@
 require "love.filesystem"
 require "love.timer"
 
-local locale = require "locale" -- Ensure locale is loaded in the thread's environment
+require "locale" -- Ensure locale is loaded in the thread's environment
 local json = require "libs.dkjson"
 local scraper = require "scraper"
 local filesystem = require "filesystem"
