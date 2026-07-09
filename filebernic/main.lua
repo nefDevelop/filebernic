@@ -8,7 +8,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 input = require "input"
 
-APP_VERSION = "v0.1.1"
+APP_VERSION = "v0.1.2"
 updateUrl = "" 
 updateAvailable = nil
 
@@ -308,7 +308,7 @@ function updateFileList(newIndex)
     
     -- Map new files for quick lookup
     local newMap = {}
-    for i, item in ipairs(newFiles) do
+    for _, item in ipairs(newFiles) do
         newMap[item.name] = item
     end
     
@@ -439,7 +439,7 @@ function love.errorhandler(msg)
 
     return function()
         love.event.pump()
-        for e, a, b, c in love.event.poll() do
+        for e, a in love.event.poll() do
             if e == "quit" or (e == "keypressed" and a == "escape") then
                 return 1
             end
@@ -483,7 +483,8 @@ function love.load(arg)
     local cores = love.system.getProcessorCount()
     log("Hardware info: " .. cores .. " cores detected.")
     -- Create data directories
-    os.execute("mkdir -p " .. utils.escapeShellArg(love.filesystem.getSource() .. "/data/log"))
+    local ok, _, _ = os.execute("mkdir -p " .. utils.escapeShellArg(love.filesystem.getSource() .. "/data/log"))
+    if not ok then log("Failed to create log directory") end
     os.execute("mkdir -p " .. utils.escapeShellArg("tmp"))
 
     -- Handle screen resolution from launch script
@@ -536,8 +537,11 @@ function love.load(arg)
         if isDevice then
             local pathSD1 = "/mnt/mmc/ROMS/" .. relPath
             local h = io.popen('ls -d ' .. utils.escapeShellArg(pathSD1) .. ' 2>/dev/null')
-            local res = h:read("*a")
-            h:close()
+            local res = ""
+            if h then
+                res = h:read("*a")
+                h:close()
+            end
             if res and res ~= "" then return pathSD1 end
             return "/mnt/sdcard/ROMS/" .. relPath
         else
@@ -547,7 +551,7 @@ function love.load(arg)
         end
     end
 
-    local baseMuosPath = ""
+    local baseMuosPath
     if isDevice then
         if arg and arg[4] then systemName = arg[4] end
         baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
@@ -779,7 +783,6 @@ function love.load(arg)
 
     -- Intentar cargar el índice ANTES de crear la vista inicial.
     -- Esto evita que la lista aparezca vacía (Files count: 0) si el índice ya existe y es válido.
-    local needsIndexing = false
     
     -- 1. Intentar cargar Caché de Vista para arranque instantáneo
     local cachedFiles, cachedIndex, cachedPath, cachedVirtual =
