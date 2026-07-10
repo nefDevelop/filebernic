@@ -31,7 +31,14 @@ jobs:
         run: timeout 120 busted spec/filesystem_spec.lua spec/scraper_spec.lua spec/state_spec.lua spec/theme_spec.lua spec/utils_spec.lua spec/loader_spec.lua spec/indexer_spec.lua
 
       - name: Test fs_core
-        run: busted spec/fs_core_spec.lua
+        run: |
+          echo "=== Lua version ==="
+          lua5.1 -v
+          echo "=== Checking busted ==="
+          which busted
+          head -5 /usr/local/bin/busted 2>/dev/null || head -5 /usr/bin/busted 2>/dev/null
+          echo "=== Running test ==="
+          time timeout 60 busted spec/fs_core_spec.lua
       - name: Test fs_data
         run: busted spec/fs_data_spec.lua
       - name: Test input_helpers
