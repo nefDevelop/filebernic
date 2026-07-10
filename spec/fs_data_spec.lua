@@ -52,13 +52,14 @@ describe("fs_data history", function()
   end)
 
   it("saveHistory writes each ROM on separate line", function()
-    local lines = {}
+    local written = ""
     io.open = function(p, m)
-      if m == "w" then return { write = function(_, d) table.insert(lines, d) end, close = function() end } end
+      if m == "w" then return { write = function(_, d) written = d end, close = function() end } end
       return nil
     end
     data.saveHistory({ ["/a.zip"] = true, ["/b.zip"] = true })
-    assert.is_true(#lines >= 2)
+    assert.is_true(written:find("/a.zip") ~= nil)
+    assert.is_true(written:find("/b.zip") ~= nil)
   end)
 end)
 
