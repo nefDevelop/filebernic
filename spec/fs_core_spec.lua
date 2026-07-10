@@ -1,4 +1,5 @@
 package.path = "./filebernic/?.lua;" .. package.path
+for i = #package.searchers, 1, -1 do if tostring(package.searchers[i]):find("luarocks") then table.remove(package.searchers, i) end end
 
 _G.love = { filesystem = { getSource = function() return "/app/filebernic" end, getInfo = function() end } }
 local core = require("fs_core")

@@ -1,4 +1,5 @@
 package.path = "./filebernic/?.lua;" .. package.path
+for i = #package.searchers, 1, -1 do if tostring(package.searchers[i]):find("luarocks") then table.remove(package.searchers, i) end end
 
 _G.love = {
   keyboard = { setTextInput = function() end, isDown = function() return false end },
