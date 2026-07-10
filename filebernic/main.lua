@@ -8,7 +8,7 @@ preview = require "preview"
 require "locale" -- Cargar sistema de traducción
 input = require "input"
 
-APP_VERSION = "v0.1.2"
+APP_VERSION = "v0.2.0"
 updateUrl = "" 
 updateAvailable = nil
 
