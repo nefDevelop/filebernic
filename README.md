@@ -28,7 +28,7 @@
 
 ## Instalación en muOS
 
-1. Ve a la sección de [Releases](https://github.com/nef734/filebernic/releases) y descarga el archivo `filebernic.muxapp` más reciente.
+1. Ve a la sección de [Releases](https://github.com/nefDevelop/filebernic/releases) y descarga el archivo `filebernic.muxapp` más reciente.
 2. Conecta tu tarjeta SD al PC o usa el explorador de archivos de muOS.
 3. Copia el archivo `filebernic.muxapp` en la carpeta `MUOS/application/` de tu tarjeta SD principal.
 4. En tu dispositivo, abre el menú de **Applications** y selecciona **FileBernic**.
@@ -76,7 +76,7 @@ Si el teclado virtual no aparece o prefieres editar los archivos directamente, p
 
 ¿Has encontrado un error o tienes una idea genial?
 
-- Abre una [Issue](https://github.com/nef734/filebernic/issues) explicando el problema.
+- Abre una [Issue](https://github.com/nefDevelop/filebernic/issues) explicando el problema.
 
 
 ## Licencia

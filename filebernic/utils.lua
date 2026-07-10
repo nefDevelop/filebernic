@@ -340,7 +340,7 @@ end
 
 function M.checkGitHubUpdate(currentVersion, customRepo)
     local json = require "libs.dkjson"
-    local repo = customRepo or "nef734/filebernic"
+    local repo = customRepo or "nefDevelop/filebernic"
     local url = "https://api.github.com/repos/" .. repo .. "/releases/latest"
     local cmd = "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "' 2>/dev/null"
 
