@@ -31,14 +31,7 @@ jobs:
         run: busted spec/filesystem_spec.lua spec/scraper_spec.lua spec/state_spec.lua spec/theme_spec.lua spec/utils_spec.lua spec/loader_spec.lua spec/indexer_spec.lua
 
       - name: Run tests (busted) — new modules
-        run: |
-          busted spec/fs_core_spec.lua
-          busted spec/fs_data_spec.lua
-          busted spec/input_helpers_spec.lua
-          busted spec/update_spec.lua
-          busted spec/input_list_spec.lua
-          busted spec/input_menus_spec.lua
-          busted spec/preview_spec.lua
+        run: busted spec/fs_core_spec.lua spec/fs_data_spec.lua spec/input_helpers_spec.lua spec/update_spec.lua spec/input_list_spec.lua spec/input_menus_spec.lua spec/preview_spec.lua
 
       - name: Extract version from main.lua
         id: get_version
