@@ -7,57 +7,6 @@ local M = {}
 local L = _G.L or { get = function(key, ...) return string.format(key, ...) end } -- Acceso a la función de localización, con fallback para tests
 
 -- Helper function to download an image with curl and check its success
-local function downloadImagesConcurrent(urls, log_func)
-    if #urls == 0 then return {} end
-    local results = {}
-    local cmds = {}
-    for i, u in ipairs(urls) do
-        local cmd = "curl -s -L -f -k --max-time 15 -A 'Mozilla/5.0' --output " .. utils.escapeShellArg(u.tempPath) .. " --write-out '%{http_code}' " .. utils.escapeShellArg(u.url) .. " 2>/dev/null"
-        cmds[i] = cmd
-    end
-
-    if #cmds == 1 then
-        local h = io.popen(cmds[1])
-        if h then
-            local output = h:read("*a")
-            h:close()
-            results[1] = output:match("(%d%d%d)%s*$")
-        end
-        return results
-    end
-
-    local timestamp = tostring(love.timer.getTime()):gsub("%.", "")
-    local scriptPath = "/tmp/curl_batch_" .. timestamp .. ".sh"
-    local script = io.open(scriptPath, "w")
-    if not script then
-        for i = 1, #cmds do results[i] = io.popen(cmds[i]) and io.popen(cmds[i]):read("*a"):match("(%d%d%d)%s*$") or "" end
-        return results
-    end
-
-    script:write("#!/bin/sh\n")
-    for _, cmd in ipairs(cmds) do
-        script:write(cmd .. " &\n")
-    end
-    script:write("wait\n")
-    script:close()
-    os.execute("chmod +x " .. utils.escapeShellArg(scriptPath))
-
-    local h = io.popen(scriptPath)
-    if h then
-        local output = h:read("*a")
-        h:close()
-        for i = 1, #cmds do
-            local f = io.open(urls[i].tempPath, "rb")
-            if f then
-                results[i] = f:read("*a") and "200" or ""
-                f:close()
-            end
-        end
-    end
-    os.remove(scriptPath)
-    return results
-end
-
 local function downloadImage(imageUrl, tempPath, log_func, progress_callback)
     local shortUrl = imageUrl
     if #shortUrl > 50 then shortUrl = shortUrl:sub(1, 47) .. "..." end
