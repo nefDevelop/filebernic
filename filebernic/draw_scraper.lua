@@ -210,16 +210,24 @@ local function drawScraperEditor(global_state, x, y, w, h)
         local tw = bw - padding * 2
 
         if textRes then
-            love.graphics.setFont(fontSmall)
-            love.graphics.setColor(theme.colors.selection_accent)
-            local sourceText = (textRes.region or "") .. (textRes.source and (" [" .. textRes.source .. "]") or "")
-            love.graphics.printf(sourceText, tx, ty, tw, "left")
-            ty = ty + fontSmall:getHeight() + 5
+            if textRes.error then
+                love.graphics.setColor(0.8, 0.15, 0.15)
+                love.graphics.rectangle("fill", bx, by, bw, bh, 8)
+                love.graphics.setFont(fontMedium)
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.printf(textRes.text or L.get("error"), tx, ty, tw, "center")
+            else
+                love.graphics.setFont(fontSmall)
+                love.graphics.setColor(theme.colors.selection_accent)
+                local sourceText = (textRes.region or "") .. (textRes.source and (" [" .. textRes.source .. "]") or "")
+                love.graphics.printf(sourceText, tx, ty, tw, "left")
+                ty = ty + fontSmall:getHeight() + 5
 
-            love.graphics.setFont(fontMedium)
-            love.graphics.setColor(theme.colors.text_medium)
-            local desc = textRes.description or L.get("no_desc")
-            love.graphics.printf(desc, tx, ty, tw, "left")
+                love.graphics.setFont(fontMedium)
+                love.graphics.setColor(theme.colors.text_medium)
+                local desc = textRes.description or L.get("no_desc")
+                love.graphics.printf(desc, tx, ty, tw, "left")
+            end
         else
             love.graphics.setFont(fontMedium)
             love.graphics.setColor(theme.colors.text_dim)

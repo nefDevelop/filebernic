@@ -41,7 +41,7 @@ describe("Theme", function()
 
     assert.are.equal(5, #mock_love_gfx.font_calls) -- huge, list, medium, small, title
     for _, call in ipairs(mock_love_gfx.font_calls) do
-      assert.are.equal("assets/JetBrainsMono-Regular.ttf", call.path)
+      assert.are.equal("assets/fonts/JetBrainsMono-Regular.ttf", call.path)
     end
   end)
 

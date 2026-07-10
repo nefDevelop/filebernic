@@ -72,27 +72,21 @@ Guardado periódico, escritura atómica. **Pendiente**
 ### 4.2 OTA update system
 Checksum, rollback, reintentos, semver. **Pendiente**
 
-### 4.3 Input remapeable
-`data/controls.json`, Swap A/B. **Pendiente**
-
+### [-] 4.3 Input remapeable (pospuesto)
 ### 4.4 CI y build
 Consolidar workflows, tests faltantes. **Pendiente**
 
 ### 4.5 Internacionalización (i18n)
 Traducciones externas, completar locale `en`. **Pendiente**
 
-### 4.6 Temas personalizables
-Temas desde `data/themes/`. **Pendiente**
-
+### [-] 4.6 Temas personalizables (pospuesto)
 ### 4.7 Documentación
 DOCUMENTATION.md, ARCHITECTURE.md. **Pendiente**
 
 ### 4.8 GitHub project structure
 Issue/PR templates, CONTRIBUTING.md. **Pendiente**
 
-### 4.9 Accesibilidad
-Alto contraste, iconos + color. **Pendiente**
-
+### [-] 4.9 Accesibilidad (pospuesto)
 ### 4.10 Centralizar paths de dispositivo
 Usar `utils.isDevice()` en todos lados. **Pendiente**
 
@@ -112,8 +106,7 @@ Azul `selection_accent` 25% + barra lateral 3px.
 ### 5.3 Confirmación con undo al borrar
 Toast "Deleted. [Undo]" por 3s. **Pendiente**
 
-### 5.4 Onboarding en primer inicio
-Tour de 3 pantallas. **Pendiente**
+### [-] 5.4 Onboarding en primer inicio (pospuesto)
 
 ### 5.5 Botón B consistente
 Campo `parentState`. **Pendiente**

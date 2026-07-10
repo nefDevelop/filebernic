@@ -104,12 +104,19 @@ locale.data = {
         no_results = "No se encontraron resultados.",
         no_results_for = "Sin resultados para '%s'.",
         press_f2_clear = "Presiona F2 para limpiar la búsqueda.",
+        recent_searches = "Búsquedas recientes:",
         front = "Frontal",
         screen = "Screen",
         no_screen = "No Screen",
         no_desc = "Sin descripción",
+        deleted_file = "Borrado:",
+        launching = "Lanzando...",
         random_game = "Juego Aleatorio",
         switch_system = "Cambiar Sistema",
+        api_settings = "Ajustes de API",
+        api_help = "¿? Ayuda",
+        api_help_text = "TheGamesDB: https://thegamesdb.net/api/\nScreenScraper: https://screenscraper.fr",
+        missing_api_key_warn = "Configura una API Key para usar TheGamesDB.\nConsigue una en https://thegamesdb.net/api/",
         add_to_collection = "Añadir a Colección",
         remove_from_collection = "Quitar de Colección",
         new_collection = "Nueva Colección",
@@ -228,10 +235,13 @@ locale.data = {
         no_results = "No results found.",
         no_results_for = "No results for '%s'.",
         press_f2_clear = "Press F2 to clear search.",
+        recent_searches = "Recent searches:",
         front = "Front",
         screen = "Screen",
         no_screen = "No Screen",
         no_desc = "No description",
+        deleted_file = "Deleted:",
+        launching = "Launching...",
         random_game = "Random Game",
         switch_system = "Switch System",
         add_to_collection = "Add to Collection",
@@ -251,15 +261,20 @@ locale.data = {
         update_now = "Update Now",
         no_update = "No Updates",
         no_update_msg = "You already have the latest version or no network connection.",
+        api_settings = "API Settings",
+        api_help = "¿? Help",
+        api_help_text = "TheGamesDB: https://thegamesdb.net/api/\nScreenScraper: https://screenscraper.fr",
+        missing_api_key_warn = "Set an API key in the configuration to use TheGamesDB.\nGet one at https://thegamesdb.net/api/",
         select_system = "Select System",
         ambiguous_rom = "Ambiguous file detected.\nSelect the system:",
     }
 }
 
--- Función para obtener texto traducido
 function locale.get(key, ...)
-    local langData = locale.data[locale.current] or locale.data["es"]
-    local text = langData[key] or key -- Si no existe la clave, devuelve la clave misma
+    local text = locale.data[locale.current] and locale.data[locale.current][key]
+    if not text then text = locale.data["en"] and locale.data["en"][key] end
+    if not text then text = locale.data["es"] and locale.data["es"][key] end
+    if not text then text = key end
     if ... then
         return string.format(text, ...)
     end

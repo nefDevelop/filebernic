@@ -1,3 +1,4 @@
+-- dkjson 2.7 — https://github.com/LuaDist/dkjson
 -- Module options:
 local always_use_lpeg = false
 local register_global_module_table = false

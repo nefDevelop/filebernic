@@ -22,6 +22,8 @@ M.saveViewCache = data.saveViewCache
 M.loadViewCache = data.loadViewCache
 M.addRecent = data.addRecent
 M.loadRecent = data.loadRecent
+M.addSearch = data.addSearch
+M.loadSearch = data.loadSearch
 M.saveCollections = data.saveCollections
 M.loadCollections = data.loadCollections
 M.addToCollection = data.addToCollection
@@ -316,9 +318,7 @@ function M.findSaveFiles(item)
     -- Rutas comunes de guardado en muOS / RetroArch
     local searchPaths = {}
     
-    local f = io.open("/mnt/mmc", "r")
-    if f then
-        f:close()
+    if utils.isDevice() then
         table.insert(searchPaths, "/mnt/mmc/MUOS/save")
         table.insert(searchPaths, "/mnt/sdcard/MUOS/save")
         table.insert(searchPaths, "/mnt/mmc/MUOS/save/state")
@@ -504,16 +504,44 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
     else
         -- MODO CARPETA: Listar Sistemas (Comportamiento original)
         local dirMap = {} 
-        local function scanAndAdd(scanPath, label)
-            if log then log("Scanning root: " .. scanPath) end
+        local function scanOnePath(scanPath, label, foundRef)
+            local added = 0
+            local walker = require "fs_walker"
+            local entries = walker.listDir(scanPath)
+            if not entries then return 0 end
 
+            for _, entry in ipairs(entries) do
+                if walker.isDir(scanPath .. "/" .. entry) then
+                    local dirName = entry
+                    if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
+                        if not hideEmpty or M.hasRoms(scanPath .. entry .. "/", validExtensions) then
+                            if dirMap[dirName] then
+                                files[dirMap[dirName]].sourceLabel = "SD½"
+                                files[dirMap[dirName]].secondaryPath = scanPath .. entry .. "/"
+                            else
+                                local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
+                                table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. entry .. "/", sourceLabel = label, icon = icon})
+                                dirMap[dirName] = #files
+                                added = added + 1
+                            end
+                        end
+                    end
+                end
+            end
+            return added
+        end
+
+        local function scanWithFallback(scanPath, label)
+            local added = scanOnePath(scanPath, label)
+            if added > 0 then return added end
+
+            -- Fallback: si love.filesystem falla, intentar io.popen
             local handle = io.popen('ls -p ' .. utils.escapeShellArg(scanPath) .. ' 2>/dev/null')
             if handle then
-                local foundCount = 0
                 for line in handle:lines() do
                     if line:sub(-1) == "/" then
                         local dirName = line:sub(1, -2)
-                    if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
+                        if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
                             if not hideEmpty or M.hasRoms(scanPath .. line, validExtensions) then
                                 if dirMap[dirName] then
                                     files[dirMap[dirName]].sourceLabel = "SD½"
@@ -522,87 +550,28 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
                                     local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
                                     table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
                                     dirMap[dirName] = #files
-                                    foundCount = foundCount + 1
+                                    added = added + 1
                                 end
                             end
                         end
                     end
                 end
                 handle:close()
-                if log then log("Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
-            else
-                if log then log("Error: Failed to open pipe for " .. scanPath .. ". Trying os.execute fallback.") end
-                local tmpFile = "/tmp/filebernic_scan.txt"
-                os.execute('ls -p ' .. utils.escapeShellArg(scanPath) .. ' > ' .. utils.escapeShellArg(tmpFile) .. ' 2>/dev/null')
-                local f = io.open(tmpFile, "r")
-                if f then
-                    local foundCount = 0
-                    for line in f:lines() do
-                        if line:sub(-1) == "/" then
-                            local dirName = line:sub(1, -2)
-                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" then
-                                if not hideEmpty or M.hasRoms(scanPath .. line, validExtensions) then
-                                    if dirMap[dirName] then
-                                        files[dirMap[dirName]].sourceLabel = "SD½"
-                                        files[dirMap[dirName]].secondaryPath = scanPath .. line
-                                    else
-                                        local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
-                                        table.insert(files, {name = dirName, isDir = true, fullPath = scanPath .. line, sourceLabel = label, icon = icon})
-                                        dirMap[dirName] = #files
-                                        foundCount = foundCount + 1
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    f:close()
-                    if log then log("os.execute Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
-                else
-                if log then log("Error: Failed to open pipe for " .. scanPath) end
-                -- Fallback: Intentar usar love.filesystem si io.popen falla
-                local items = love.filesystem.getDirectoryItems(scanPath)
-                if items then
-                    local foundCount = 0
-                    for _, item in ipairs(items) do
-                        local fullPath = scanPath .. item
-                        if love.filesystem.isDirectory(fullPath) then
-                            local dirName = item
-                            if dirName ~= "BIOS" and dirName ~= "Saves" and dirName ~= "MUOS" and dirName ~= "System Volume Information" and dirName:sub(1,1) ~= "." then
-                                if not hideEmpty or M.hasRoms(fullPath .. "/", validExtensions) then
-                                    if dirMap[dirName] then
-                                        files[dirMap[dirName]].sourceLabel = "SD½"
-                                        files[dirMap[dirName]].secondaryPath = fullPath
-                                    else
-                                        local icon = getSystemIcon_func and getSystemIcon_func(dirName, fs_getInfo, gfx_newImage) or nil
-                                        table.insert(files, {name = dirName, isDir = true, fullPath = fullPath, sourceLabel = label, icon = icon})
-                                        dirMap[dirName] = #files
-                                        foundCount = foundCount + 1
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    if log then log("Fallback Scan complete for " .. scanPath .. ". Added: " .. foundCount) end
-                end
             end
-            end
+            return added
         end
 
-        scanAndAdd("/mnt/mmc/ROMS/", "SD1")
-        scanAndAdd("/mnt/sdcard/ROMS/", "SD2")
+        scanWithFallback("/mnt/mmc/ROMS/", "SD1")
+        scanWithFallback("/mnt/sdcard/ROMS/", "SD2")
 
         -- Fallback Simulador
         if #files == 0 then
+            local walker = require "fs_walker"
             local cwd = love.filesystem.getSource()
             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-            local simPath = cwd .. "/../Simulador_SD/"
-            local h = io.popen('ls -d ' .. utils.escapeShellArg(simPath) .. ' 2>/dev/null')
-            if h then
-                local result = h:read("*a")
-                h:close()
-                if result and result ~= "" then
-                    scanAndAdd(simPath, "SD1")
-                end
+            local simPath = cwd .. "/../"
+            if walker.isDir(simPath .. "Simulador_SD") then
+                scanWithFallback(simPath .. "Simulador_SD/", "SD1")
             end
         end
     end
@@ -715,17 +684,7 @@ function M.updateSystemPaths(systemName, romPath, log, fs_getInfo, gfx_newImage)
         systemName = detectedSystem
         log("System detected: " .. systemName)
         
-        local baseMuosPath
-        local f = io.open("/mnt/mmc", "r")
-        if f then
-             f:close()
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
+        local baseMuosPath = utils.getBaseMuosPath()
         muosArtPath = baseMuosPath .. systemName .. "/box/"
         muosTextPath = baseMuosPath .. systemName .. "/text/"
         muosPreviewPath = baseMuosPath .. systemName .. "/preview/"

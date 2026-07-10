@@ -90,6 +90,7 @@ function M.loadScrapeResults(gs, msg, log_func)
     gs.scraperScreenIndex = 1
     gs.scraperTextIndex = 1
     gs.scraperFocus = "FRONT"
+    gs.parentState = gs.state
     gs.state = "SCRAPER_RESULTS"
 end
 

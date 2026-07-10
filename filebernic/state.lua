@@ -6,30 +6,20 @@ local utils = require "utils"
 function State.saveAppState(romPath, selectedIndex, hideEmpty, markPlayed, viewMode, launchMode, hideFavorites, love_filesystem)
     local dataDir = love_filesystem.getSource() .. "/data"
     os.execute("mkdir -p " .. utils.escapeShellArg(dataDir))
-    local f = io.open(dataDir .. "/app_state.json", "w")
-    if f then
-        -- Normalizar ruta para guardar (convertir a virtual ROMS/...)
-        local savedPath = romPath
-        if savedPath:find("/mnt/mmc/ROMS/") then
-            savedPath = savedPath:gsub("/mnt/mmc/ROMS/", "ROMS/")
-        elseif savedPath:find("/mnt/sdcard/ROMS/") then
-            savedPath = savedPath:gsub("/mnt/sdcard/ROMS/", "ROMS/")
-        elseif savedPath:find("Simulador_SD") then
-            savedPath = savedPath:gsub(".*Simulador_SD/", "ROMS/")
-        end
-
-        local stateToSave = {
-            romPath = savedPath,
-            selectedIndex = selectedIndex,
-            hideEmpty = hideEmpty,
-            markPlayed = markPlayed,
-            viewMode = viewMode,
-            launchMode = launchMode,
-            hideFavorites = hideFavorites
-        }
-        f:write(json.encode(stateToSave))
-        f:close()
+    local savedPath = romPath
+    if savedPath:find("/mnt/mmc/ROMS/") then
+        savedPath = savedPath:gsub("/mnt/mmc/ROMS/", "ROMS/")
+    elseif savedPath:find("/mnt/sdcard/ROMS/") then
+        savedPath = savedPath:gsub("/mnt/sdcard/ROMS/", "ROMS/")
+    elseif savedPath:find("Simulador_SD") then
+        savedPath = savedPath:gsub(".*Simulador_SD/", "ROMS/")
     end
+    local stateToSave = {
+        romPath = savedPath, selectedIndex = selectedIndex,
+        hideEmpty = hideEmpty, markPlayed = markPlayed,
+        viewMode = viewMode, launchMode = launchMode, hideFavorites = hideFavorites
+    }
+    utils.atomicWrite(dataDir .. "/app_state.json", json.encode(stateToSave))
 end
 
 function State.loadConfig(defaultConfig, love_filesystem)

@@ -254,12 +254,7 @@ function M.drawCleanupMenu(global_state)
             if global_state.cleanupData.cursor.col == 3 then
                 imgPath = selItem.fullPath
             elseif selItem.system and selItem.name then
-                local baseMuos = "/mnt/mmc/MUOS/info/catalogue/"
-                if not io.open("/mnt/mmc", "r") then
-                    local cwd = love.filesystem.getSource()
-                    if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-                    baseMuos = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
-                end
+                local baseMuos = utils.getBaseMuosPath()
                 imgPath = baseMuos .. selItem.system .. "/box/" .. selItem.name:gsub("%..-$", "") .. ".png"
             end
 
@@ -385,7 +380,8 @@ function M.drawGrid(global_state, w, h)
             local cellRow = math.ceil(i / cols)
             local cellCol = (i - 1) % cols + 1
             local dist = math.abs(cellRow - focusRow) + math.abs(cellCol - focusCol)
-            local nearFocus = (dist <= 2)
+            local radius = global_state.layout.gridLazyRadius or 2
+            local nearFocus = (dist <= radius)
 
             if nearFocus then
                 local base = item.name:gsub("%..-$", "")

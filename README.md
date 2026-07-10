@@ -76,7 +76,7 @@ Si el teclado virtual no aparece o prefieres editar los archivos directamente, p
 
 ¿Has encontrado un error o tienes una idea genial?
 
-- Abre una [Issue](https://github.com/nefDevelop/filebernic/issues) explicando el problema.
+- Abre una [Issue](https://github.com/nef734/filebernic/issues) explicando el problema.
 
 
 ## Licencia

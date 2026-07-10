@@ -78,8 +78,8 @@ describe("State", function()
 
     it("should save the state to app_state.json", function()
       State.saveAppState("/path", 1, false, true, "list", "auto", false, love.filesystem)
-      assert.is_not_nil(mock_io.written_files["/mock/source/data/app_state.json"])
-      assert.are.equal("json_string", mock_io.written_files["/mock/source/data/app_state.json"])
+      assert.is_not_nil(mock_io.written_files["/mock/source/data/app_state.json.tmp"])
+      assert.are.equal("json_string", mock_io.written_files["/mock/source/data/app_state.json.tmp"])
     end)
 
     it("should normalize /mnt/mmc/ROMS/ paths", function()

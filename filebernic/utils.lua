@@ -244,6 +244,15 @@ local function urlencode(str)
 end
 M.urlencode = urlencode
 
+function M.atomicWrite(path, content)
+    local tmpPath = path .. ".tmp"
+    local f = io.open(tmpPath, "w")
+    if not f then return false end
+    f:write(content)
+    f:close()
+    return os.rename(tmpPath, path)
+end
+
 -- Function to create vertices for a gradient mesh (type "strip")
 -- direction: "top", "bottom", "left", "right"
 -- opaque_percentage: 0-100 (percentage of length that is fully opaque before fading)
@@ -315,12 +324,26 @@ function M.createGradientVertices(direction, opaque_percentage, length, width, r
     return vertices
 end
 
--- Comprueba si hay una nueva versión en el repositorio de GitHub
-function M.checkGitHubUpdate(currentVersion)
+function M.semverCompare(v1, v2)
+    local function split(v)
+        local parts = {}
+        for p in v:gmatch("%d+") do table.insert(parts, tonumber(p)) end
+        return parts
+    end
+    local a, b = split(v1), split(v2)
+    for i = 1, math.max(#a, #b) do
+        local na, nb = a[i] or 0, b[i] or 0
+        if na ~= nb then return na > nb end
+    end
+    return false
+end
+
+function M.checkGitHubUpdate(currentVersion, customRepo)
     local json = require "libs.dkjson"
-    local url = "https://api.github.com/repos/nef734/filebernic/releases/latest"
+    local repo = customRepo or "nef734/filebernic"
+    local url = "https://api.github.com/repos/" .. repo .. "/releases/latest"
     local cmd = "curl -s -L -k --max-time 10 -A 'Mozilla/5.0' '" .. url .. "' 2>/dev/null"
-    
+
     local handle = io.popen(cmd)
     local response = handle and handle:read("*a") or ""
     if handle then handle:close() end
@@ -329,8 +352,7 @@ function M.checkGitHubUpdate(currentVersion)
         local data = json.decode(response)
         if data and data.tag_name then
             local latestVersion = data.tag_name
-            -- Si la versión obtenida de GitHub es diferente a la actual
-            if latestVersion ~= currentVersion then
+            if M.semverCompare(latestVersion, currentVersion) then
                 local downloadUrl = nil
                 if data.assets then
                     for _, asset in ipairs(data.assets) do

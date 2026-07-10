@@ -67,10 +67,12 @@ function M.OPTIONS_MENU(key, global_state)
 
              if optText == L.get("info") then
                  global_state.preview.load(global_state, global_state.log, global_state.loader)
+                 global_state.parentState = global_state.state
                  global_state.state = "INFO_VIEW"
              elseif optText == L.get("scraper") then
                  global_state.state = "SCRAPER_VIEW"
              elseif optText:match(L.get("save_games")) then
+                 global_state.parentState = global_state.state
                  global_state.state = "SAVE_MANAGER"
              elseif optText == L.get("delete") then
                  global_state.itemToDelete = global_state.focusedItem
@@ -205,6 +207,7 @@ function M.OPTIONS_MENU(key, global_state)
                 global_state.state = "DELETE_MENU"
             end
         elseif optText == L.get("info") then
+            global_state.parentState = global_state.state
             global_state.state = "INFO_VIEW"
             global_state.inputCooldown = 0.2
         elseif optText == L.get("scraper") then
@@ -297,8 +300,11 @@ function M.OPTIONS_MENU(key, global_state)
             }
             table.insert(global_state.menuOptions, L.get("ss_user") .. ": " .. (global_state.config.screenscraper_user ~= "" and global_state.config.screenscraper_user or "Empty"))
             table.insert(global_state.menuOptions, L.get("ss_password") .. ": " .. (global_state.config.screenscraper_password ~= "" and "******" or "Empty"))
+            table.insert(global_state.menuOptions, { text = L.get("api_help"), isHelp = true })
             global_state.menuSelection = 1
             global_state.menuAnim = 0
+        elseif type(opt) == "table" and opt.isHelp then
+            global_state.menuMessage = L.get("api_help_text")
         elseif optText:match(L.get("scraper_api")) then
             local current = global_state.config.scraperApi or "all"
             local nextApi = "all"
@@ -455,6 +461,7 @@ function M.OPTIONS_MENU(key, global_state)
                 global_state.state = "LIST"
             end
         elseif optText:match(L.get("save_games")) then
+            global_state.parentState = global_state.state
             global_state.state = "SAVE_MANAGER"
         end
         global_state.inputCooldown = 0.2
@@ -532,7 +539,7 @@ function M.DELETE_MENU(key, global_state)
                 end
                 helpers.saveHistory(global_state)
                 if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                     global_state.preview.load(global_state, global_state.log, global_state.loader)
                 else
                     helpers.refreshFiles(global_state)
@@ -547,6 +554,7 @@ function M.DELETE_MENU(key, global_state)
                 else
                     global_state.log("Archivo borrado con éxito: " .. fullPath)
                     filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
+                    global_state.undoData = { path = fullPath, name = global_state.itemToDelete and global_state.itemToDelete.name or fullPath:match("([^/]+)$"), timer = 3 }
                 end
                 if global_state.romIndex then helpers.removeFromIndex(fullPath, global_state) end
                 if global_state.playedRoms[fullPath] then
@@ -554,7 +562,7 @@ function M.DELETE_MENU(key, global_state)
                     helpers.saveHistory(global_state)
                 end
                 if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
                     global_state.preview.load(global_state, global_state.log, global_state.loader)
                 else
                     helpers.refreshFiles(global_state)

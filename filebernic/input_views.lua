@@ -4,34 +4,56 @@ local filesystem = require "filesystem"
 local utils = require "utils"
 local helpers = require "input_helpers"
 
+local function getGrid(gs)
+    return gs.keyboardNum and gs.keyboardGridNum or gs.keyboardGrid
+end
+
 function M.SEARCH(key, global_state)
+    local grid = getGrid(global_state)
     if key == "up" then
         global_state.keyboardRow = math.max(1, global_state.keyboardRow - 1)
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol)
         global_state.inputCooldown = 0.15
     elseif key == "down" then
-        global_state.keyboardRow = math.min(#global_state.keyboardGrid, global_state.keyboardRow + 1)
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.keyboardRow = math.min(#grid, global_state.keyboardRow + 1)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol)
         global_state.inputCooldown = 0.15
     elseif key == "left" then
         global_state.keyboardCol = math.max(1, global_state.keyboardCol - 1)
         global_state.inputCooldown = 0.15
     elseif key == "right" then
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol + 1)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol + 1)
         global_state.inputCooldown = 0.15
     elseif key == "return" or key == "kpenter" or key == "space" then
-        local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol]
+        local char = grid[global_state.keyboardRow][global_state.keyboardCol]
         if char == "OK" then
             global_state.state = "LIST"
             global_state.love.keyboard.setTextInput(false)
+            if global_state.searchQuery and global_state.searchQuery ~= "" then
+                global_state.filesystem.addSearch(global_state.searchQuery, global_state.json.encode, global_state.json.decode)
+            end
         elseif char == "BACK" then
             global_state.searchQuery = global_state.searchQuery:sub(1, -2)
             helpers.filterFiles(global_state)
         elseif char == "SPACE" then
             global_state.searchQuery = global_state.searchQuery .. " "
             helpers.filterFiles(global_state)
+        elseif char == "SHIFT" then
+            global_state.keyboardShift = not global_state.keyboardShift
+        elseif char == "123" then
+            global_state.keyboardNum = true
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
+        elseif char == "ABC" then
+            global_state.keyboardNum = false
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
         else
-            global_state.searchQuery = global_state.searchQuery .. char
+            local dispChar = char
+            if global_state.keyboardShift and not global_state.keyboardNum then
+                global_state.keyboardShift = false
+            end
+            global_state.searchQuery = global_state.searchQuery .. dispChar
             helpers.filterFiles(global_state)
         end
         global_state.inputCooldown = 0.2
@@ -55,22 +77,23 @@ function M.SEARCH(key, global_state)
 end
 
 function M.EDIT_TEXT(key, global_state)
+    local grid = getGrid(global_state)
     if key == "up" then
         global_state.keyboardRow = math.max(1, global_state.keyboardRow - 1)
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol)
         global_state.inputCooldown = 0.15
     elseif key == "down" then
-        global_state.keyboardRow = math.min(#global_state.keyboardGrid, global_state.keyboardRow + 1)
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol)
+        global_state.keyboardRow = math.min(#grid, global_state.keyboardRow + 1)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol)
         global_state.inputCooldown = 0.15
     elseif key == "left" then
         global_state.keyboardCol = math.max(1, global_state.keyboardCol - 1)
         global_state.inputCooldown = 0.15
     elseif key == "right" then
-        global_state.keyboardCol = math.min(#global_state.keyboardGrid[global_state.keyboardRow], global_state.keyboardCol + 1)
+        global_state.keyboardCol = math.min(#grid[global_state.keyboardRow], global_state.keyboardCol + 1)
         global_state.inputCooldown = 0.15
     elseif key == "return" or key == "kpenter" or key == "space" then
-        local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol]
+        local char = grid[global_state.keyboardRow][global_state.keyboardCol]
         if char == "OK" then
             if global_state.textEditKey == "new_collection_name" and global_state.textToEdit ~= "" then
                 local gamePath = nil
@@ -99,7 +122,20 @@ function M.EDIT_TEXT(key, global_state)
             global_state.textToEdit = global_state.textToEdit:sub(1, -2)
         elseif char == "SPACE" then
             global_state.textToEdit = global_state.textToEdit .. " "
+        elseif char == "SHIFT" then
+            global_state.keyboardShift = not global_state.keyboardShift
+        elseif char == "123" then
+            global_state.keyboardNum = true
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
+        elseif char == "ABC" then
+            global_state.keyboardNum = false
+            global_state.keyboardRow = 1
+            global_state.keyboardCol = 1
         else
+            if global_state.keyboardShift and not global_state.keyboardNum then
+                global_state.keyboardShift = false
+            end
             global_state.textToEdit = global_state.textToEdit .. char
         end
         global_state.inputCooldown = 0.2
@@ -117,11 +153,8 @@ end
 
 function M.INFO_VIEW(key, global_state)
     if key == "backspace" or key == "b" or key == "escape" then
-        if #global_state.menuStack > 0 then
-            global_state.state = "OPTIONS_MENU"
-        else
-            global_state.closingMenu = true
-        end
+        global_state.state = global_state.parentState or "LIST"
+        if global_state.state == "LIST" then global_state.closingMenu = true end
         global_state.showHelp = false
         global_state.inputCooldown = 0.2
     end
@@ -221,12 +254,12 @@ end
 function M.SCRAPER_RESULTS(key, global_state)
     local count = #global_state.scraperResults
     if count == 0 then
-        if key == "backspace" then global_state.state = "SCRAPER_VIEW" end
+        if key == "backspace" then global_state.state = global_state.parentState or "SCRAPER_VIEW" end
         return
     end
 
     if key == "backspace" then
-        global_state.state = "SCRAPER_VIEW"
+        global_state.state = global_state.parentState or "SCRAPER_VIEW"
         global_state.showHelp = false
         global_state.inputCooldown = 0.2
     elseif key == "f" or key == "tab" then
@@ -270,11 +303,7 @@ end
 
 function M.SAVE_MANAGER(key, global_state)
     if key == "backspace" or key == "escape" then
-        if #global_state.menuStack > 0 then
-            global_state.state = "OPTIONS_MENU"
-        else
-            global_state.state = "LIST"
-        end
+        global_state.state = global_state.parentState or "LIST"
         global_state.inputCooldown = 0.2
     elseif key == "return" or key == "kpenter" then
         local item = global_state.saveFiles[global_state.saveManagerSelection]

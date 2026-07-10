@@ -32,12 +32,11 @@ local threadCode = [[ -- This is a string, not a function
 ]] -- End of string
 
 function Loader:new(logger, love_modules)
+  local maxSize = (love_modules.layout and love_modules.layout.maxCacheSize) or 45
   local obj = {
-    -- In-memory cache for loaded assets.
-    -- cache[path] = 'loading' | 'error' | love.FileData | love.Image | string
     cache = {},
-    accessOrder = {}, -- Fila LRU para evitar llenar la RAM
-    maxCacheSize = 60, -- Máximo de assets simultáneos en memoria
+    accessOrder = {},
+    maxCacheSize = maxSize,
     -- Communication channel with the background thread.
     channelIn = love_modules.thread.newChannel(),
     channelOut = love_modules.thread.newChannel(),
@@ -195,6 +194,12 @@ end
 -- Clears the asset cache.
 function Loader:clearCache()
   self.cache = {}
+  self.accessOrder = {}
+end
+
+function Loader:flushCache()
+  self:clearCache()
+  collectgarbage()
 end
 
 -- Safely shuts down the thread.

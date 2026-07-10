@@ -57,8 +57,11 @@ function M.handleListInput(key, global_state)
     if key == "f" then
         global_state.state = "SEARCH"
         global_state.searchQuery = ""
+        global_state.searchHistory = filesystem.loadSearch(global_state.json.decode)
         global_state.keyboardRow = 1
         global_state.keyboardCol = 1
+        global_state.keyboardShift = false
+        global_state.keyboardNum = false
         love.keyboard.setTextInput(true)
         helpers.filterFiles(global_state)
         return

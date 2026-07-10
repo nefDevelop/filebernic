@@ -10,17 +10,7 @@ function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextP
 
     if detectedSystem and (detectedSystem ~= systemName or not muosArtPath or muosArtPath == "") then
         systemName = detectedSystem
-        local baseMuosPath
-        local f = io.open("/mnt/mmc", "r")
-        if f then
-             f:close()
-             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-        else
-             local cwd = love.filesystem.getSource()
-             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-             local simPath = cwd .. "/../Simulador_SD/"
-             baseMuosPath = simPath .. "MUOS/info/catalogue/"
-        end
+        local baseMuosPath = utils.getBaseMuosPath()
         muosArtPath = baseMuosPath .. systemName .. "/box/"
         muosTextPath = baseMuosPath .. systemName .. "/text/"
         muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
@@ -32,16 +22,7 @@ end
 function M.deleteGameMedia(romPath)
     local system = romPath:match("ROMS/([^/]+)/")
     if not system then return end
-    local baseMuosPath
-    local f = io.open("/mnt/mmc", "r")
-    if f then
-        f:close()
-        baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
-    else
-        local cwd = love.filesystem.getSource()
-        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
-        baseMuosPath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
-    end
+    local baseMuosPath = utils.getBaseMuosPath()
     local baseName = romPath:match("([^/]+)$")
     if not baseName then return end
     baseName = baseName:gsub("%..-$", "")

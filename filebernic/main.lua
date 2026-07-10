@@ -111,10 +111,20 @@ indexerChannelIn = nil
 indexerChannelOut = nil
 -- Virtual Keyboard
 keyboardGrid = {
+    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"},
+    {"A", "S", "D", "F", "G", "H", "J", "K", "L"},
+    {"Z", "X", "C", "V", "B", "N", "M"},
+    {"123", "SHIFT", "SPACE", "BACK", "OK"}
+}
+
+keyboardShift = false
+keyboardNum = false
+
+keyboardGridNum = {
     {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
-    {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "SPACE"},
-    {"A", "S", "D", "F", "G", "H", "J", "K", "L", "BACK"},
-    {"Z", "X", "C", "V", "B", "N", "M", ".", "-", "OK"}
+    {"-", "/", ":", ";", "(", ")", "$", "&", "@", "\""},
+    {".", ",", "?", "!", "'", "`", "~", "%", "^", "*"},
+    {"ABC", "SPACE", "BACK", "OK"}
 }
 keyboardRow = 1
 keyboardCol = 1 -- Current column in the virtual keyboard
@@ -211,6 +221,9 @@ layout = {
     fastScrollDelay = 2,
     jumpPanelThreshold = 0.75,
     scrollAccelDelay = 0.5,
+    totalRamMB = 512,
+    maxCacheSize = 45,
+    gridLazyRadius = 2,
 }
 
 -- Variables para el control de scroll
@@ -446,10 +459,36 @@ function love.load(arg)
     log("Loading application...")
     local cores = love.system.getProcessorCount()
     log("Hardware info: " .. cores .. " cores detected.")
+
+    -- Detectar RAM para ajustar cachés
+    local f = io.open("/proc/meminfo", "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        local memKb = content:match("MemTotal:%s*(%d+)")
+        if memKb then
+            layout.totalRamMB = math.floor(tonumber(memKb) / 1024)
+            if layout.totalRamMB <= 256 then
+                layout.maxCacheSize = 30
+                layout.gridLazyRadius = 1
+            elseif layout.totalRamMB <= 512 then
+                layout.maxCacheSize = 45
+                layout.gridLazyRadius = 2
+            else
+                layout.maxCacheSize = 60
+                layout.gridLazyRadius = 3
+            end
+            log("Detected RAM: " .. layout.totalRamMB .. "MB — cache: " .. layout.maxCacheSize)
+        end
+    end
+
     -- Create data directories
     local ok, _, _ = os.execute("mkdir -p " .. utils.escapeShellArg(love.filesystem.getSource() .. "/data/log"))
     if not ok then log("Failed to create log directory") end
     os.execute("mkdir -p " .. utils.escapeShellArg("tmp"))
+
+    -- Cleanup temp scraper files from previous session
+    os.execute("rm -f tmp/scraper_*.png 2>/dev/null")
 
     -- Handle screen resolution from launch script
     if arg[1] then
@@ -460,15 +499,28 @@ function love.load(arg)
             love.window.setMode(w, h)
         end
     end
-    
+
+    -- Recalcular layout proporcional a la resolución real
+    local sw, sh = love.graphics.getDimensions()
+    local baseW, baseH = 640, 480
+    local scaleX = sw / baseW
+    local scaleY = sh / baseH
+    layout.listY = math.floor(64 * scaleY)
+    layout.rowHeight = math.floor(54 * scaleY)
+    layout.selWidth = math.floor(320 * scaleX)
+    layout.selHeight = math.floor(44 * scaleY)
+    layout.scrollbarX = sw - 2
+    layout.scrollbarH = sh - layout.listY - 30
+
     love.keyboard.setKeyRepeat(false) -- Desactivado para control manual
     scraperApi = config.scraperApi -- Initialize scraperApi after config is loaded
 
     loader = Loader:new(log, {
-        thread = love.thread, -- Pass love.thread module
+        thread = love.thread,
         filesystem = love.filesystem,
         image = love.image,
-        graphics = love.graphics
+        graphics = love.graphics,
+        layout = layout,
     })
     
     -- Inicializar hilo de indexado
@@ -478,12 +530,7 @@ function love.load(arg)
     indexerThread:start()
 
     -- Detectar entorno (Dispositivo vs Simulador)
-    local isDevice = false
-    local f = io.open("/mnt/mmc", "r")
-    if f then
-        f:close()
-        isDevice = true
-    end
+    local isDevice = utils.isDevice()
 
     local function normalizePath(path)
         if not path or path == "" then return "" end
@@ -570,14 +617,19 @@ function love.load(arg)
     local topBarFontPath = "assets/fonts/JetBrainsMono-Regular.ttf"
     local clockFontPath = "assets/fonts/JetBrainsMono-Bold.ttf"
 
-    fontSmall = love.graphics.newFont(mainFontPath, 16)    -- Textos pequeños, ayudas
-    fontMedium = love.graphics.newFont(mainFontPath, 20)   -- Textos generales
-    fontList = love.graphics.newFont(mainFontPath, 24)   -- Lista de juegos (importante que sea legible)
-    fontTitle = love.graphics.newFont(mainFontPath, 30)    -- Títulos de menús
-    fontHuge = love.graphics.newFont(mainFontPath, 80)     -- Letra grande de salto rápido
-    fontTopBar = love.graphics.newFont(topBarFontPath, 24) -- Fuente para la barra de título
-    fontClock = love.graphics.newFont(clockFontPath, 20)  -- Fuente para el reloj
-    fontSelected = love.graphics.newFont(selectedFontPath, 20) -- Fuente para elemento seleccionado (900)
+    local baseH = 480
+    local _, sh = love.graphics.getDimensions()
+    local fontScale = sh / baseH
+    local function sf(size) return math.max(10, math.floor(size * fontScale)) end
+
+    fontSmall = love.graphics.newFont(mainFontPath, sf(16))
+    fontMedium = love.graphics.newFont(mainFontPath, sf(20))
+    fontList = love.graphics.newFont(mainFontPath, sf(24))
+    fontTitle = love.graphics.newFont(mainFontPath, sf(30))
+    fontHuge = love.graphics.newFont(mainFontPath, sf(80))
+    fontTopBar = love.graphics.newFont(topBarFontPath, sf(24))
+    fontClock = love.graphics.newFont(clockFontPath, sf(20))
+    fontSelected = love.graphics.newFont(selectedFontPath, sf(20))
 
     -- Define Help Data
     helpData = {
@@ -633,7 +685,7 @@ function love.load(arg)
             end
         end
     end
-    L.current = config.language or "es" -- Establecer idioma actual (fallback a español)
+    L.current = config.language or "en" -- Fallback a inglés si no hay idioma configurado
     
     -- Load saved application state
     local f = io.open(love.filesystem.getSource() .. "/data/app_state.json", "r")

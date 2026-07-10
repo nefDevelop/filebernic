@@ -176,7 +176,7 @@ local function draw(global_state)
     if global_state.state == "SEARCH" or global_state.state == "EDIT_TEXT" or global_state.keyboardAnim > 0 then
         local t = global_state.keyboardAnim
         local ease = 1 - (1 - t)^3
-        local panelH = 250
+        local panelH = global_state.state == "SEARCH" and (global_state.searchQuery == "" and global_state.searchHistory and #global_state.searchHistory > 0) and 300 or 250
         local currentY = h - (panelH * ease)
 
         love.graphics.setColor(0, 0, 0, 0.9 * ease)
@@ -191,48 +191,77 @@ local function draw(global_state)
             love.graphics.printf(L.get("search_label", global_state.searchQuery), 20, currentY + 10, w - 40, "left")
         end
 
-        love.graphics.setFont(fontMedium)
-        local keySize = 40
-        local spacing = 5
-        local startY = currentY + 50
+        -- Search history: mostrar cuando no hay query
+        if global_state.state == "SEARCH" and global_state.searchQuery == "" and global_state.searchHistory and #global_state.searchHistory > 0 then
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], ease * 0.8)
+            love.graphics.printf(L.get("recent_searches"), 20, currentY + 45, w - 40, "left")
+            love.graphics.setFont(fontMedium)
+            local historyY = currentY + 65
+            for i, q in ipairs(global_state.searchHistory) do
+                if i > 5 then break end
+                local col = (i == 1) and theme.colors.text_bright or theme.colors.text_medium
+                love.graphics.setColor(col[1], col[2], col[3], ease)
+                love.graphics.printf(q, 20, historyY + (i-1) * 24, w - 60, "left")
+            end
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(theme.colors.text_dim[1], theme.colors.text_dim[2], theme.colors.text_dim[3], ease * 0.6)
+            love.graphics.printf(L.get("press_f_for_history"), 20, historyY + 5 * 24 + 5, w - 40, "left")
+        end
 
-        local mainBlockWidth = 10 * (keySize + spacing) - spacing
-        local mainBlockStartX = (w - 100 - mainBlockWidth) / 2
-        if mainBlockStartX < 10 then mainBlockStartX = 10 end
+        local function drawKeyboard()
+            love.graphics.setFont(fontMedium)
+            local keySize = 40
+            local spacing = 5
+            local startY = currentY + 50
 
-        for rowIdx, row in ipairs(global_state.keyboardGrid) do
-            for colIdx, key in ipairs(row) do
-                local x, y, kW, kH
-
-                if key == "SPACE" or key == "BACK" or key == "OK" then
-                    kW = 80
-                    kH = keySize
-                    x = w - kW - 20
-                    y = startY + (rowIdx-1) * (keySize + spacing)
-                else
-                    kW = keySize
-                    kH = keySize
-                    x = mainBlockStartX + (colIdx-1) * (keySize + spacing)
-                y = startY + (rowIdx-1) * (keySize + spacing)
-                    if rowIdx == 3 then x = x + (keySize/2) end
-                    if rowIdx == 4 then x = x + (keySize/2) end
+            local rows = (global_state.keyboardNum and global_state.keyboardGridNum) or global_state.keyboardGrid
+            local rowWidths = {}
+            local maxRowW = 0
+            for _, row in ipairs(rows) do
+                local w2 = 0
+                for _, k in ipairs(row) do
+                    local kw = (k == "SPACE") and 120 or (k == "BACK" or k == "OK" or k == "SHIFT" or k == "123" or k == "ABC") and 60 or keySize
+                    w2 = w2 + kw + spacing
                 end
+                w2 = w2 - spacing
+                rowWidths[#rowWidths + 1] = w2
+                if w2 > maxRowW then maxRowW = w2 end
+            end
 
-                local col
-                if rowIdx == global_state.keyboardRow and colIdx == global_state.keyboardCol then
-                    col = theme.colors.selection_accent
-                else
-                    col = theme.colors.placeholder_background
+            for rowIdx, row in ipairs(rows) do
+                local rowW = rowWidths[rowIdx]
+                local rowStartX = (love.graphics.getWidth() - rowW) / 2
+                for colIdx, key in ipairs(row) do
+                    local kW = (key == "SPACE") and 120 or (key == "BACK" or key == "OK" or key == "SHIFT" or key == "123" or key == "ABC") and 60 or keySize
+                    local kH = keySize
+                    local x = rowStartX
+                    for c = 1, colIdx - 1 do
+                        local pw = (row[c] == "SPACE") and 120 or (row[c] == "BACK" or row[c] == "OK" or row[c] == "SHIFT" or row[c] == "123" or row[c] == "ABC") and 60 or keySize
+                        x = x + pw + spacing
+                    end
+                    local y = startY + (rowIdx - 1) * (keySize + spacing)
+
+                    local col
+                    if rowIdx == global_state.keyboardRow and colIdx == global_state.keyboardCol then
+                        col = theme.colors.selection_accent
+                    else
+                        col = theme.colors.placeholder_background
+                    end
+                    local cr, cg, cb = unpack(col)
+                    love.graphics.setColor(cr, cg, cb, ease)
+                    love.graphics.rectangle("fill", x, y, kW, kH, 5)
+
+                    local tr, tg, tb = unpack(theme.colors.text_white)
+                    love.graphics.setColor(tr, tg, tb, ease)
+                    local displayKey = key
+                    if key == "SHIFT" and global_state.keyboardShift then displayKey = "⇧"
+                    elseif key == "123" and global_state.keyboardNum then displayKey = "ABC" end
+                    love.graphics.printf(displayKey, x, y + 10, kW, "center")
                 end
-                local cr, cg, cb = unpack(col)
-                love.graphics.setColor(cr, cg, cb, ease)
-                love.graphics.rectangle("fill", x, y, kW, kH, 5)
-
-                local tr, tg, tb = unpack(theme.colors.text_white)
-                love.graphics.setColor(tr, tg, tb, ease)
-                love.graphics.printf(key, x, y + 10, kW, "center")
             end
         end
+        drawKeyboard()
     end
 
     if global_state.isIndexing then
@@ -258,6 +287,32 @@ local function draw(global_state)
         love.graphics.setColor(theme.colors.text_dim)
         local msg = global_state.indexStateMessage or L.get("loading_index")
         love.graphics.printf(msg, 0, barY + 8, w, "center")
+    end
+
+    -- Undo toast
+    if global_state.undoData and global_state.undoData.timer > 0 then
+        local alpha = math.min(1, global_state.undoData.timer)
+        local toastY = h - 70
+        love.graphics.setColor(0.15, 0.15, 0.17, 0.95 * alpha)
+        love.graphics.rectangle("fill", w/2 - 200, toastY, 400, 36, 8)
+        love.graphics.setFont(fontSmall)
+        love.graphics.setColor(theme.colors.text_white[1], theme.colors.text_white[2], theme.colors.text_white[3], alpha)
+        local msg = L.get("deleted_file") .. " " .. (global_state.undoData.name or "")
+        love.graphics.printf(msg, w/2 - 190, toastY + 9, 380, "center")
+    end
+
+    -- Launch overlay
+    if global_state.launching then
+        love.graphics.setColor(0, 0, 0, 0.8)
+        love.graphics.rectangle("fill", 0, 0, w, h)
+
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.printf(L.get("launching"), 0, h/2 - 40, w, "center")
+
+        love.graphics.setFont(fontMedium)
+        love.graphics.setColor(theme.colors.text_white)
+        love.graphics.printf(global_state.lastPlayedRom or "", 0, h/2 + 10, w, "center")
     end
 end
 

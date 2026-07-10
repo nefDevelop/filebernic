@@ -515,11 +515,15 @@ function M.drawOverlayMenus(global_state)
     end
 
     if #menusToDraw > 0 then
-        local r, g, b, base_a = unpack(theme.colors.overlay_dark)
-        for _, m in ipairs(menusToDraw) do
-            love.graphics.setColor(r, g, b, base_a * m.alpha)
-            love.graphics.draw(helpers.getGradientMesh(), 0, 0, 0, w, h)
+        local isDelete = (global_state.state == "DELETE_MENU")
+        local r, g, b
+        if isDelete then
+            r, g, b = 0.3, 0.05, 0.05
+        else
+            r, g, b = unpack(theme.colors.overlay_dark)
         end
+        love.graphics.setColor(r, g, b, 0.6 * ease)
+        love.graphics.draw(helpers.getGradientMesh(), 0, 0, 0, w, h)
 
         for i, m in ipairs(menusToDraw) do
             m.isFocused = (i == #menusToDraw)

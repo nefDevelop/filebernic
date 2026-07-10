@@ -2,7 +2,7 @@
 local theme = {}
 
 -- Path to the new font
-local font_path = "assets/JetBrainsMono-Regular.ttf"
+local font_path = "assets/fonts/JetBrainsMono-Regular.ttf"
 
 --[[
   To change the theme, modify the color values below.

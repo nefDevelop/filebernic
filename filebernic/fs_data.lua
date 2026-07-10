@@ -1,14 +1,11 @@
 ---@diagnostic disable: undefined-global
 local M = {}
 local core = require "fs_core"
+local utils = require "utils"
 
 function M.saveFavorites(favoriteRoms, json_encode)
     local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/favorites.json", "w")
-    if f then
-        f:write(json_encode(favoriteRoms))
-        f:close()
-    end
+    utils.atomicWrite(dataDir .. "/favorites.json", json_encode(favoriteRoms))
 end
 
 function M.loadFavorites(json_decode)
@@ -30,20 +27,12 @@ end
 
 function M.saveLastPlayed(path)
     local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/last_played.txt", "w")
-    if f then
-        f:write(path)
-        f:close()
-    end
+    utils.atomicWrite(dataDir .. "/last_played.txt", path)
 end
 
 function M.savePendingHistory(path)
     local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/pending_played.txt", "w")
-    if f then
-        f:write(path)
-        f:close()
-    end
+    utils.atomicWrite(dataDir .. "/pending_played.txt", path)
 end
 
 function M.checkPendingHistory(playedRoms, saveHistoryFunc)
@@ -64,13 +53,13 @@ end
 
 function M.saveHistory(playedRoms)
     local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/played_roms.txt", "w")
-    if f then
-        for path, _ in pairs(playedRoms) do
-            f:write(path .. "\n")
-        end
-        f:close()
+    local lines = {}
+    local count = 0
+    for path, _ in pairs(playedRoms) do
+        count = count + 1
+        if count <= 500 then table.insert(lines, path .. "\n") end
     end
+    utils.atomicWrite(dataDir .. "/played_roms.txt", table.concat(lines))
 end
 
 function M.logDeletion(path, json_encode, json_decode)
@@ -92,11 +81,7 @@ function M.logDeletion(path, json_encode, json_decode)
         path = path
     })
 
-    f = io.open(logPath, "w")
-    if f then
-        f:write(json_encode(logData))
-        f:close()
-    end
+    utils.atomicWrite(logPath, json_encode(logData))
 end
 
 function M.saveViewCache(files, romPath, selectedIndex, isVirtualRoot, json_encode, love_filesystem_getSource, io_open)
@@ -181,11 +166,7 @@ function M.addRecent(path, json_encode, json_decode)
     -- Trim
     while #recent > RECENT_MAX do table.remove(recent) end
 
-    f = io.open(recentPath, "w")
-    if f then
-        f:write(json_encode(recent))
-        f:close()
-    end
+    utils.atomicWrite(recentPath, json_encode(recent))
 end
 
 function M.loadRecent(json_decode)
@@ -205,11 +186,7 @@ end
 
 function M.saveCollections(collections, json_encode)
     local dataDir = love.filesystem.getSource() .. "/data"
-    local f = io.open(dataDir .. "/collections.json", "w")
-    if f then
-        f:write(json_encode(collections))
-        f:close()
-    end
+    utils.atomicWrite(dataDir .. "/collections.json", json_encode(collections))
 end
 
 function M.loadCollections(json_decode)
@@ -259,6 +236,35 @@ function M.deleteCollection(name, json_encode, json_decode)
     local cols = M.loadCollections(json_decode)
     cols[name] = nil
     M.saveCollections(cols, json_encode)
+end
+
+-- Search history
+
+function M.addSearch(query, json_encode, json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/search_history.json", "r")
+    local history = {}
+    if f then
+        local c = f:read("*a")
+        f:close()
+        if c and c ~= "" then history = json_decode(c) or {} end
+    end
+    for i = #history, 1, -1 do
+        if history[i] == query then table.remove(history, i) end
+    end
+    table.insert(history, 1, query)
+    while #history > 10 do table.remove(history) end
+    utils.atomicWrite(dataDir .. "/search_history.json", json_encode(history))
+end
+
+function M.loadSearch(json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/search_history.json", "r")
+    if not f then return {} end
+    local c = f:read("*a")
+    f:close()
+    if c and c ~= "" then return json_decode(c) or {} end
+    return {}
 end
 
 return M

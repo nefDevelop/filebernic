@@ -124,9 +124,9 @@ local function gamepadpressed(joystick, button, global_state)
     elseif button == "dpright" then
         keypressed("right", global_state)
     elseif button == "back" then
-        keypressed("escape", global_state)
-    elseif button == "start" then
         keypressed("f1", global_state)
+    elseif button == "start" then
+        keypressed("escape", global_state)
     elseif button == "leftshoulder" then
         keypressed("f", global_state)
     elseif button == "triggerleft" then

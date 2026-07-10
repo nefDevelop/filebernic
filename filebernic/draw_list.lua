@@ -55,10 +55,8 @@ function M.drawMainList(global_state, w, h, sdColX, sdColW, _, _, showPreview)
         local animatedSelectionWidth = helpers.lerp(width1, width2, interpolationFactor)
 
         local selColor = theme.colors.selection_accent
-        love.graphics.setColor(selColor[1], selColor[2], selColor[3], 0.25)
+        love.graphics.setColor(selColor[1], selColor[2], selColor[3], 0.15)
         love.graphics.rectangle("fill", global_state.layout.selX, visualSelY, animatedSelectionWidth, global_state.layout.selHeight, 22)
-        love.graphics.setColor(selColor[1], selColor[2], selColor[3], 0.4)
-        love.graphics.rectangle("fill", global_state.layout.selX, visualSelY, 3, global_state.layout.selHeight, 2)
 
         love.graphics.setFont(global_state.fontList)
         local firstVisibleItemIndex = math.max(1, math.floor(1 + listScrollOffset / layout.rowHeight))

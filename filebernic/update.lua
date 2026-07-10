@@ -14,7 +14,31 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     local inputCooldown = global_state.inputCooldown
     local previewItem = global_state.previewItem
 
+    -- Periodic state save (cada 30s si hubo navegación)
+    global_state._autoSaveTimer = (global_state._autoSaveTimer or 0) + dt
+    if global_state._autoSaveTimer >= 30 and global_state.state == "LIST" then
+        global_state._autoSaveTimer = 0
+        global_state.State.saveAppState(global_state.romPath, global_state.selectedIndex,
+            global_state.hideEmpty, global_state.markPlayed, global_state.viewMode,
+            global_state.launchMode, global_state.hideFavorites, global_state.love.filesystem)
+    end
+
     loader_obj:update()
+
+    -- Memory pressure monitor (cada ~1s)
+    if global_state.layout.totalRamMB then
+        global_state._memTimer = (global_state._memTimer or 0) + dt
+        if global_state._memTimer >= 1 then
+            global_state._memTimer = 0
+            local memMB = collectgarbage("count") / 1024
+            local threshold = global_state.layout.totalRamMB * 0.75
+            if memMB > threshold then
+                loader_obj:flushCache()
+                log_func("Mem: " .. string.format("%.0f", memMB) .. "/" .. global_state.layout.totalRamMB .. "MB — cache flushed")
+            end
+        end
+    end
+
     anim.updateFavAnim(dt, global_state)
 
     if inputCooldown > 0 then global_state.inputCooldown = inputCooldown - dt end
@@ -22,6 +46,11 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     if global_state.scraperWarningTimer > 0 then
         global_state.scraperWarningTimer = global_state.scraperWarningTimer - dt
         if global_state.scraperWarningTimer <= 0 then global_state.scraperWarningMessage = "" end
+    end
+
+    if global_state.undoData and global_state.undoData.timer > 0 then
+        global_state.undoData.timer = global_state.undoData.timer - dt
+        if global_state.undoData.timer <= 0 then global_state.undoData = nil end
     end
 
     -- Preview loading from async loader

@@ -42,8 +42,8 @@ env >>"$LOGFILE"
 # Generar configuración de controles específica para evitar conflictos
 cat > "$APP_DIR/filebernic.gptk" << EOF
 back = "escape"
-select = "escape"
-start = "f1"
+select = "f1"
+start = "escape"
 a = "kp_enter"
 b = "backspace"
 x = ""
@@ -83,17 +83,43 @@ while true; do
         DOWNLOAD_URL=$(cat /tmp/filebernic_update)
         echo "[OTA] Descargando actualización desde: $DOWNLOAD_URL" >>"$LOGFILE"
         
-        # Descargar el nuevo empaquetado (.zip o .muxapp)
-        curl -L -k -o /tmp/filebernic_new.zip "$DOWNLOAD_URL" >>"$LOGFILE" 2>&1
+        # Backup de la versión actual
+        if [ -d "$APP_DIR.bak" ]; then rm -rf "$APP_DIR.bak"; fi
+        cp -r "$APP_DIR" "$APP_DIR.bak" >>"$LOGFILE" 2>&1
+        echo "[OTA] Backup creado en $APP_DIR.bak" >>"$LOGFILE"
+        
+        # Descargar con reintentos y resume
+        SHA_URL="${DOWNLOAD_URL%.*}.sha256"
+        curl -L -k -C - --retry 3 --retry-delay 2 -o /tmp/filebernic_new.zip "$DOWNLOAD_URL" >>"$LOGFILE" 2>&1
+        curl -L -k -s -o /tmp/filebernic_new.zip.sha256 "$SHA_URL" 2>/dev/null
         
         if [ -f /tmp/filebernic_new.zip ]; then
+            # Verificar checksum si se descargó
+            if [ -f /tmp/filebernic_new.zip.sha256 ]; then
+                EXPECTED=$(cat /tmp/filebernic_new.zip.sha256 | cut -d' ' -f1)
+                COMPUTED=$(sha256sum /tmp/filebernic_new.zip | cut -d' ' -f1)
+                if [ "$EXPECTED" != "$COMPUTED" ]; then
+                    echo "[OTA] ERROR: Checksum mismatch. Restaurando backup." >>"$LOGFILE"
+                    rm -rf "$APP_DIR"
+                    mv "$APP_DIR.bak" "$APP_DIR"
+                    rm -f /tmp/filebernic_update
+                    continue
+                fi
+                echo "[OTA] Checksum OK" >>"$LOGFILE"
+            fi
             echo "[OTA] Descomprimiendo actualización..." >>"$LOGFILE"
-            # Extraer sobrescribiendo los archivos antiguos en la carpeta actual
             unzip -o /tmp/filebernic_new.zip -d "$APP_DIR" >>"$LOGFILE" 2>&1
-            rm /tmp/filebernic_new.zip
+            if [ $? -ne 0 ]; then
+                echo "[OTA] ERROR: Fallo al descomprimir. Restaurando backup." >>"$LOGFILE"
+                rm -rf "$APP_DIR"
+                mv "$APP_DIR.bak" "$APP_DIR"
+                rm -f /tmp/filebernic_update
+                continue
+            fi
+            rm -f /tmp/filebernic_new.zip /tmp/filebernic_new.zip.sha256
+            rm -rf "$APP_DIR.bak"
         fi
         rm -f /tmp/filebernic_update
-        # El bucle continue, por lo que LÖVE se volverá a abrir inmediatamente con la nueva versión
         continue
     fi
 
