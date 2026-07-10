@@ -1,52 +1,32 @@
 ---@diagnostic disable: undefined-global
-local input = require "input"
-
 local filesystem = require "filesystem"
 local utils = require "utils"
 local json = require "libs.dkjson"
-
--- Fallback lerp function if love.math.lerp is not available
-local lerp_fallback = function(a, b, t)
-    return a + (b - a) * t
-end
+local anim = require "upd_animations"
+local scroll = require "upd_scroll"
+local messages = require "upd_messages"
 
 local function update(dt, global_state, log_func, loader_obj, updateFileList_func)
     if dt > 0.05 then
         log_func("Lag spike in update: " .. string.format("%.4f", dt) .. "s")
     end
 
-    -- Access global state variables via the passed global_state table
     local inputCooldown = global_state.inputCooldown
     local previewItem = global_state.previewItem
 
     loader_obj:update()
-    -- Favorite animation
-    if global_state.favAnim ~= global_state.favAnimTarget then
-        local speed = 12 -- Animation speed for the star (increased from 7)
-        if math.abs(global_state.favAnim - global_state.favAnimTarget) < 0.01 then
-            global_state.favAnim = global_state.favAnimTarget
-        elseif global_state.favAnim < global_state.favAnimTarget then
-            global_state.favAnim = math.min(global_state.favAnimTarget, global_state.favAnim + dt * speed)
-        else
-            global_state.favAnim = math.max(global_state.favAnimTarget, global_state.favAnim - dt * speed)
-        end
-    end
+    anim.updateFavAnim(dt, global_state)
 
     if inputCooldown > 0 then global_state.inputCooldown = inputCooldown - dt end
 
-    -- Update scraper warning timer
     if global_state.scraperWarningTimer > 0 then
         global_state.scraperWarningTimer = global_state.scraperWarningTimer - dt
         if global_state.scraperWarningTimer <= 0 then global_state.scraperWarningMessage = "" end
     end
-    
-    -- Lógica para actualizar las variables de previsualización de forma asíncrona
-    -- Use previewItem as the source of truth for what to display
-    local item = previewItem
 
+    -- Preview loading from async loader
+    local item = previewItem
     if not item then
-        -- If there's no specific preview item, we're in a directory or empty list.
-        -- The fade out logic below will handle clearing the images. (global_state.files)
         if #global_state.files == 0 then
             global_state.currentImage = nil
             global_state.currentScreenshot = nil
@@ -57,19 +37,16 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
         end
     end
 
-    if item and not item.isDir then -- Only process if it's a file
+    if item and not item.isDir then
         local baseName = item.name:gsub("%.[^%.]+$", "")
         local itemSystemName = utils.getSystemNameForItem(item, nil, global_state.isVirtualRoot)
-        
         if itemSystemName then
-            local artPathForSystem = filesystem.getArtPathForSystem(itemSystemName)
-            if artPathForSystem then
-                local textPathForSystem = artPathForSystem:gsub("/box/", "/text/")
-                local previewPathForSystem = artPathForSystem:gsub("/box/", "/preview/")
+            local artPath = filesystem.getArtPathForSystem(itemSystemName)
+            if artPath then
+                local textPath = artPath:gsub("/box/", "/text/")
+                local previewPath = artPath:gsub("/box/", "/preview/")
 
-                -- Actualizar currentImage (Boxart)
-                local imgFile = artPathForSystem .. baseName .. ".png" -- Construct image file path
-                local loadedImage = loader_obj:getImage(imgFile) -- Get image from loader
+                local loadedImage = loader_obj:getImage(artPath .. baseName .. ".png")
                 if loadedImage then
                     if global_state.currentImage ~= loadedImage then
                         global_state.currentImage = loadedImage
@@ -78,9 +55,7 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                     global_state.imageInvalid = false
                 end
 
-                -- Actualizar currentScreenshot
-                local scrFile = previewPathForSystem .. baseName .. ".png" -- Construct screenshot file path
-                local loadedScreenshot = loader_obj:getImage(scrFile) -- Get screenshot from loader
+                local loadedScreenshot = loader_obj:getImage(previewPath .. baseName .. ".png")
                 if loadedScreenshot then
                     if global_state.currentScreenshot ~= loadedScreenshot then
                         global_state.currentScreenshot = loadedScreenshot
@@ -89,227 +64,49 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
                     global_state.screenshotInvalid = false
                 end
 
-                -- Actualizar currentDescription
-                local txtFile = textPathForSystem .. baseName .. ".txt" -- Construct text file path
-                local loadedDescription = loader_obj:getText(txtFile) -- Get text from loader
-                if loadedDescription then
-                    global_state.currentDescription = loadedDescription
-                end
+                local loadedDesc = loader_obj:getText(textPath .. baseName .. ".txt")
+                if loadedDesc then global_state.currentDescription = loadedDesc end
 
-                -- Actualizar currentYear
-                local yearFile = textPathForSystem .. baseName .. ".year" -- Construct year file path
-                local loadedYear = loader_obj:getText(yearFile) -- Get year from loader
-                if loadedYear then
-                    global_state.currentYear = loadedYear
-                end
+                local loadedYear = loader_obj:getText(textPath .. baseName .. ".year")
+                if loadedYear then global_state.currentYear = loadedYear end
             end
         end
     end
 
-    if global_state.imageInvalid then
-        if global_state.currentImageAlpha > 0 then
-            global_state.currentImageAlpha = math.max(0, global_state.currentImageAlpha - dt * 5)
-            if global_state.currentImageAlpha == 0 then global_state.currentImage = nil end
-        end
-    elseif global_state.currentImage and global_state.currentImageAlpha < 1 then
-        global_state.currentImageAlpha = math.min(1, global_state.currentImageAlpha + dt * 5)
-    end
+    anim.updateImageFade(dt, global_state)
+    anim.updateMenuAnim(dt, global_state)
+    anim.updateHelpAnim(dt, global_state)
+    anim.updateKeyboardAnim(dt, global_state)
+    anim.handleMenuClose(dt, global_state, log_func, loader_obj)
 
-    if global_state.screenshotInvalid then
-        if global_state.currentScreenshotAlpha > 0 then
-            global_state.currentScreenshotAlpha = math.max(0, global_state.currentScreenshotAlpha - dt * 5)
-            if global_state.currentScreenshotAlpha == 0 then global_state.currentScreenshot = nil end
-        end
-    elseif global_state.currentScreenshot and global_state.currentScreenshotAlpha < 1 then
-        global_state.currentScreenshotAlpha = math.min(1, global_state.currentScreenshotAlpha + dt * 5)
-    end
-
-    local targetMenuAnim = ((global_state.state == "OPTIONS_MENU" or global_state.state == "DELETE_MENU" or
-        global_state.state == "SCRAPER_OPTIONS" or global_state.state == "INFO_VIEW") and
-        not global_state.closingMenu) and 1 or 0
-
-    if global_state.menuAnim ~= targetMenuAnim then
-        if math.abs(global_state.menuAnim - targetMenuAnim) < 0.01 then
-            global_state.menuAnim = targetMenuAnim
-        elseif global_state.menuAnim < targetMenuAnim then
-            global_state.menuAnim = math.min(targetMenuAnim, global_state.menuAnim + dt * 6)
-        else
-            global_state.menuAnim = math.max(targetMenuAnim, global_state.menuAnim - dt * 6)
-        end
-    end
-
-    local targetHelpAnim = global_state.showHelp and 1 or 0
-    if global_state.helpAnim ~= targetHelpAnim then
-        if math.abs(global_state.helpAnim - targetHelpAnim) < 0.01 then
-            global_state.helpAnim = targetHelpAnim
-        elseif global_state.helpAnim < targetHelpAnim then
-            global_state.helpAnim = math.min(targetHelpAnim, global_state.helpAnim + dt * 6)
-        else
-            global_state.helpAnim = math.max(targetHelpAnim, global_state.helpAnim - dt * 6)
-        end
-    end
-
-    if global_state.state == "SEARCH" or global_state.state == "EDIT_TEXT" then
-        global_state.keyboardAnim = math.min(1, global_state.keyboardAnim + dt * 6)
-    else
-        global_state.keyboardAnim = math.max(0, global_state.keyboardAnim - dt * 6)
-    end
-
-    if global_state.menuAnim == 0 and global_state.closingMenu then
-        -- Animation finished.
-        if #global_state.menuStack > 0 and (global_state.state == "OPTIONS_MENU" or
-                                            global_state.state == "DELETE_MENU" or
-                                            global_state.state == "SCRAPER_OPTIONS") then
-            -- This was a submenu closing. Pop it from the stack.
-            local parent = table.remove(global_state.menuStack)
-            global_state.menuTitle = parent.title
-            global_state.menuMessage = parent.message
-            global_state.menuOptions = parent.options
-            global_state.menuSelection = parent.selection
-            global_state.focusedItem = parent.focusedItem
-            log_func("Popped submenu. Parent is now: " .. global_state.menuTitle)
-            global_state.menuAnim = 1 -- Set to final state to prevent re-animation of parent.
-        else
-            -- Root menu closed
-            if global_state.state == "OPTIONS_MENU" or global_state.state == "DELETE_MENU" or
-                global_state.state == "INFO_VIEW" then
-                global_state.state = "LIST"
-                global_state.focusedItem = nil
-                global_state.preview.load(global_state, log_func, loader_obj)
-            elseif global_state.state == "SCRAPER_OPTIONS" then
-                global_state.state = "SCRAPER_VIEW"
-            end
-        end
-        global_state.closingMenu = false
-    elseif global_state.menuAnim == 0 then
-        global_state.closingMenu = false
-    end
-    if global_state.helpAnim == 0 then
-        global_state.closingHelp = false
-    end
-
+    -- Cleanup coroutine
     if global_state.cleanupData.scanning and global_state.cleanupCoroutine then
         local status = coroutine.status(global_state.cleanupCoroutine)
         if status == "suspended" then
             local ok = coroutine.resume(global_state.cleanupCoroutine)
-            if not ok then
-                global_state.cleanupData.scanning = false
-            end
+            if not ok then global_state.cleanupData.scanning = false end
         elseif status == "dead" then
             global_state.cleanupCoroutine = nil
         end
     end
 
-    -- Check for fatal errors in the indexer thread
+    -- Thread error check
     if global_state.indexerThread then
         local err = global_state.indexerThread:getError()
-        if err then
-            log_func("THREAD ERROR (Indexer): " .. err)
-        end
+        if err then log_func("THREAD ERROR (Indexer): " .. err) end
     end
 
-    if global_state.indexerChannelOut then
-        while true do
-            local msg = global_state.indexerChannelOut:pop()
-            if not msg then break end
-            
-            if msg.type == "progress" then
-                global_state.indexStateMessage = msg.message
-            elseif msg.type == "done" then
-                log_func("Indexing finished successfully.")
-                updateFileList_func(msg.index)
-                global_state.isIndexing = false
-                global_state.indexStateMessage = ""
-            elseif msg.type == "log" then
-                log_func(msg.message)
-            elseif msg.type == "scrape_result" then
-                -- Cargar imágenes en el hilo principal
-                global_state.scraperResults = msg.results
-                for _, res in ipairs(global_state.scraperResults) do
-                    if res.imagePath then
-                        local f = io.open(res.imagePath, "rb")
-                        if f then
-                            local data = f:read("*a")
-                            f:close()
-                            if data then
-                                local success, img = pcall(global_state.love.graphics.newImage,
-                                                           global_state.love.filesystem.newFileData(data, res.imagePath))
-                                if success then 
-                                    res.image = img 
-                                else
-                                    log_func("Error creating LÖVE image from " .. res.imagePath .. ": " .. tostring(img))
-                                end
-                            end
-                        end
-                    end
-                    if res.screenshotPath then
-                        local f = io.open(res.screenshotPath, "rb")
-                        if f then
-                            local data = f:read("*a")
-                            f:close()
-                            if data then
-                                local success, img = pcall(global_state.love.graphics.newImage,
-                                                           global_state.love.filesystem.newFileData(data, res.screenshotPath))
-                                if success then 
-                                    res.screenshot = img 
-                                else
-                                    log_func("Error creating LÖVE screenshot from " .. res.screenshotPath .. ": " .. tostring(img))
-                                end
-                            end
-                        end
-                    end
-                end
-                global_state.scraperSelection = 1
-                global_state.scraperFrontIndex = 1
-                global_state.scraperScreenIndex = 1
-                global_state.scraperTextIndex = 1
-                global_state.scraperFocus = "FRONT"
-                global_state.state = "SCRAPER_RESULTS"
-            elseif msg.type == "batch_progress" then
-                global_state.scraperProgress.current = msg.current
-                global_state.scraperProgress.total = msg.total
-                global_state.scraperProgress.currentName = msg.currentName
-                global_state.scraperProgress.successes = msg.successes
-                global_state.scraperProgress.failures = msg.failures
-            elseif msg.type == "scraper_warning" then
-                global_state.scraperWarningMessage = msg.message
-                global_state.scraperWarningTimer = 3 -- Display warning for 3 seconds
-                log_func("Scraper Warning: " .. msg.message)
-            elseif msg.type == "scraper_progress" then
-                global_state.scraperProgressMessage = msg.message
-                log_func("Scraper Progress: " .. msg.message)
-            elseif msg.type == "batch_done" then
-                log_func("Batch scraping finished. Successes: " .. msg.successes ..
-                         " Failures: " .. msg.failures)
-                global_state.state = "LIST"
-                global_state.refreshFiles() -- Assuming refreshFiles is a global function
-            elseif msg.type == "update_available" then
-                global_state.updateAvailable = { version = msg.version, url = msg.url }
-                log_func("OTA Update found in background: " .. msg.version)
-                
-                -- Auto-mostrar el prompt si estamos navegando la lista
-                if global_state.state == "LIST" then
-                    global_state.updateUrl = msg.url
-                    global_state.state = "OPTIONS_MENU"
-                    global_state.menuTitle = global_state.L.get("update_available")
-                    global_state.menuMessage = global_state.L.get("update_msg", msg.version)
-                    global_state.menuOptions = {global_state.L.get("update_now"), global_state.L.get("cancel")}
-                    global_state.menuSelection = 1
-                    global_state.menuAnim = 0
-                    global_state.menuStack = {}
-                end
-            end
-        end
-    end
+    messages.processMessages(global_state, log_func, updateFileList_func)
 
+    -- Launch sequence
     if global_state.launching then
         global_state.launchTimer = global_state.launchTimer + dt
-        if global_state.launchTimer > 0.1 then -- Small wait to see the green color
+        if global_state.launchTimer > 0.1 then
             log_func("Executing launch sequence for: " .. tostring(global_state.lastPlayedRom))
             local f, err = io.open("/tmp/launch_rom", "w")
-            if f then 
+            if f then
                 f:write(global_state.lastPlayedRom)
-                f:close() 
+                f:close()
             else
                 log_func("FATAL: Failed to write launch file: " .. tostring(err))
             end
@@ -325,265 +122,11 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
         return
     end
 
-    -- Remover lógica de pendingLoad y timer
-
     if global_state.showHelp then return end
 
-    -- Control de repetición de tecla manual para el scroll
-    local is_down_pressed = global_state.love.keyboard.isDown('down') or
-                            (global_state.love.joystick.getJoystickCount() > 0 and
-                             global_state.love.joystick.getJoysticks()[1]:isGamepadDown('dpdown'))
-    local is_up_pressed = global_state.love.keyboard.isDown('up') or
-                          (global_state.love.joystick.getJoystickCount() > 0 and
-                           global_state.love.joystick.getJoysticks()[1]:isGamepadDown('dpup'))
-    local is_left_pressed = global_state.love.keyboard.isDown('left') or
-                            (global_state.love.joystick.getJoystickCount() > 0 and
-                             global_state.love.joystick.getJoysticks()[1]:isGamepadDown('dpleft'))
-    local is_right_pressed = global_state.love.keyboard.isDown('right') or
-                             (global_state.love.joystick.getJoystickCount() > 0 and
-                              global_state.love.joystick.getJoysticks()[1]:isGamepadDown('dpright'))
-
-    local moved = false
-    local moveDir = nil
-
-    if is_down_pressed then
-        if global_state.keyHeld ~= 'down' then
-            -- Primera pulsación
-            global_state.keyHeld = 'down'
-            global_state.scrollTimer = global_state.initialScrollDelay
-            moved = true
-            global_state.fastScrollTimer = 0
-            moveDir = 'down'
-        else
-            -- Tecla mantenida
-            global_state.scrollTimer = global_state.scrollTimer - dt
-            global_state.fastScrollTimer = global_state.fastScrollTimer + dt
-            if global_state.scrollTimer <= 0 then
-                if global_state.fastScrollTimer > 2 then
-                    global_state.scrollTimer = 0.5 -- Letter jump speed
-                else
-                    global_state.scrollTimer = global_state.subsequentScrollDelay
-                end
-                moved = true
-                moveDir = 'down'
-            end
-        end
-    elseif is_up_pressed then
-        if global_state.keyHeld ~= 'up' then
-            -- Primera pulsación
-            global_state.keyHeld = 'up'
-            global_state.scrollTimer = global_state.initialScrollDelay
-            moved = true
-            global_state.fastScrollTimer = 0
-            moveDir = 'up'
-        else
-            -- Tecla mantenida
-            global_state.scrollTimer = global_state.scrollTimer - dt
-            global_state.fastScrollTimer = global_state.fastScrollTimer + dt
-            if global_state.scrollTimer <= 0 then
-                if global_state.fastScrollTimer > 2 then
-                    global_state.scrollTimer = 0.5 -- Letter jump speed
-                else
-                    global_state.scrollTimer = global_state.subsequentScrollDelay
-                end
-                moved = true
-                moveDir = 'up'
-            end
-        end
-    elseif is_left_pressed then
-        if global_state.keyHeld ~= 'left' then
-            global_state.keyHeld = 'left'
-            global_state.scrollTimer = global_state.initialScrollDelay
-            moved = true
-            moveDir = 'left'
-        else
-            global_state.scrollTimer = global_state.scrollTimer - dt
-            if global_state.scrollTimer <= 0 then
-                global_state.scrollTimer = global_state.subsequentScrollDelay
-                moved = true
-                moveDir = 'left'
-            end
-        end
-    elseif is_right_pressed then
-        if global_state.keyHeld ~= 'right' then
-            global_state.keyHeld = 'right'
-            global_state.scrollTimer = global_state.initialScrollDelay
-            moved = true
-            moveDir = 'right'
-        else
-            global_state.scrollTimer = global_state.scrollTimer - dt
-            if global_state.scrollTimer <= 0 then
-                global_state.scrollTimer = global_state.subsequentScrollDelay
-                moved = true
-                moveDir = 'right'
-            end
-        end
-    else
-        global_state.keyHeld = nil
-        global_state.fastScrollTimer = 0
-    end
-
-    if global_state.fastScrollTimer > 2 then
-        if global_state.files[global_state.selectedIndex] then
-            local name = global_state.files[global_state.selectedIndex].name
-            if name and name ~= "" then 
-                local l = name:sub(1,1):upper()
-                if l ~= global_state.jumpLetter then
-                    global_state.jumpLetter = l
-                end
-            end
-        end
-        global_state.jumpPanelAnim = math.min(1, global_state.jumpPanelAnim + dt * 6)
-    else
-        global_state.jumpPanelAnim = math.max(0, global_state.jumpPanelAnim - dt * 6)
-        if global_state.jumpPanelAnim == 0 then
-            global_state.jumpLetter = ""
-        end
-    end
-
-    -- Smooth cursor animation
-    local lerp = global_state.love.math.lerp or lerp_fallback
-    local currentAnimSpeed = global_state.selectionAnimationSpeed
-    if global_state.viewMode == "GRID" then
-        currentAnimSpeed = global_state.gridSelectionAnimationSpeed or 20 -- Use faster speed for grid, with fallback
-    end
-    
-    local t_selection = math.min(1.0, dt * currentAnimSpeed)
-    if math.abs(global_state.animatedSelectionIndex - global_state.selectedIndex) < 0.01 then
-        global_state.animatedSelectionIndex = global_state.selectedIndex
-    else
-        global_state.animatedSelectionIndex = lerp(global_state.animatedSelectionIndex,
-                                                                          global_state.selectedIndex,
-                                                                          t_selection)
-        global_state.animatedSelectionIndex = math.max(1, math.min(#global_state.files,
-                                                                   global_state.animatedSelectionIndex))
-    end
-
-    -- Logic for Grid Animation (Row/Col interpolation)
-    if global_state.viewMode == "GRID" then
-        local cols = global_state.gridCols
-        local targetRow = math.ceil(global_state.selectedIndex / cols)
-        local targetCol = (global_state.selectedIndex - 1) % cols + 1
-        
-        -- Initialize if not set (e.g. just switched mode)
-        if not global_state.animGridRow then global_state.animGridRow = targetRow end
-        if not global_state.animGridCol then global_state.animGridCol = targetCol end
-        
-        local gridSpeed = global_state.gridSelectionAnimationSpeed or 20
-        local t_grid = math.min(1.0, dt * gridSpeed)
-        if math.abs(global_state.animGridRow - targetRow) < 0.01 then
-            global_state.animGridRow = targetRow
-        else
-            global_state.animGridRow = lerp(global_state.animGridRow, targetRow, t_grid)
-        end
-        if math.abs(global_state.animGridCol - targetCol) < 0.01 then
-            global_state.animGridCol = targetCol
-        else
-            global_state.animGridCol = lerp(global_state.animGridCol, targetCol, t_grid)
-        end
-    else
-        global_state.animGridRow = nil
-        global_state.animGridCol = nil
-    end
-
-    if moved then
-        if global_state.state == "LIST" then
-            if moveDir == 'down' then
-                if global_state.fastScrollTimer > 2 then
-                    input.jumpToNextLetter(global_state)
-                elseif global_state.viewMode == "GRID" then
-                    if global_state.selectedIndex + global_state.gridCols <= #global_state.files then -- Normal jump
-                        global_state.selectedIndex = global_state.selectedIndex + global_state.gridCols
-                    elseif global_state.selectedIndex < #global_state.files then
-                        -- If not enough items for a full jump, go to the last item
-                        global_state.selectedIndex = #global_state.files
-                    end
-                else
-                    -- If at the end of the list, don't increment selectedIndex
-                    if global_state.selectedIndex == #global_state.files then return end
-                    global_state.selectedIndex = math.min(#global_state.files, global_state.selectedIndex + 1)
-                end
-            elseif moveDir == 'up' then
-                if global_state.fastScrollTimer > 2 then
-                    input.jumpToPrevLetter(global_state)
-                elseif global_state.viewMode == "GRID" then
-                    if global_state.selectedIndex > global_state.gridCols then
-                        global_state.selectedIndex = global_state.selectedIndex - global_state.gridCols -- Normal jump
-                    elseif global_state.selectedIndex > 1 then
-                        -- If not enough items for a full jump, go to the first item
-                        global_state.selectedIndex = 1
-                    end
-                else
-                    -- If at the beginning of the list, don't decrement selectedIndex
-                    if global_state.selectedIndex == 1 then return end
-                    global_state.selectedIndex = math.max(1, global_state.selectedIndex - 1)
-                end
-            elseif moveDir == 'left' then
-                if global_state.viewMode == "GRID" then
-                    global_state.selectedIndex = math.max(1, global_state.selectedIndex - 1)
-                else
-                    global_state.selectedIndex = math.max(1, global_state.selectedIndex - global_state.pageSize)
-                end
-            elseif moveDir == 'right' then
-                if global_state.viewMode == "GRID" then
-                    global_state.selectedIndex = math.min(#global_state.files, global_state.selectedIndex + 1)
-                else
-                    global_state.selectedIndex = math.min(#global_state.files,
-                                                          global_state.selectedIndex + global_state.pageSize)
-                end
-            end
-            -- When selection changes, clear previews and request new ones
-            -- This is handled by preview.load() and the loader.
-            global_state.preview.load(global_state, log_func, loader_obj)
-        elseif global_state.state == "OPTIONS_MENU" or global_state.state == "DELETE_MENU" or
-               global_state.state == "SCRAPER_OPTIONS" then
-            if moveDir == 'down' then
-                global_state.menuSelection = global_state.menuSelection + 1
-                if global_state.menuSelection > #global_state.menuOptions then global_state.menuSelection = 1 end
-            elseif moveDir == 'up' then
-                global_state.menuSelection = global_state.menuSelection - 1
-                if global_state.menuSelection < 1 then
-                    global_state.menuSelection = #global_state.menuOptions
-                end
-            end
-        elseif global_state.state == "SAVE_MANAGER" then
-            if moveDir == 'down' then
-                global_state.saveManagerSelection = global_state.saveManagerSelection + 1
-                if global_state.saveManagerSelection > #global_state.saveFiles then
-                    global_state.saveManagerSelection = 1
-                end
-            elseif moveDir == 'up' then
-                global_state.saveManagerSelection = global_state.saveManagerSelection - 1
-                if global_state.saveManagerSelection < 1 then
-                    global_state.saveManagerSelection = #global_state.saveFiles
-                end
-            end
-        elseif global_state.state == "CLEANUP_MENU" and global_state.cleanupData.scanned and
-               not global_state.cleanupData.confirming then
-            local maxRows = 0
-            if global_state.cleanupData.cursor.col == 1 then
-                maxRows = #global_state.cleanupData.orphans + 1
-            elseif global_state.cleanupData.cursor.col == 2 then
-                maxRows = #global_state.cleanupData.duplicates
-            elseif global_state.cleanupData.cursor.col == 3 then
-                maxRows = #global_state.cleanupData.orphanedImages
-            end
-            
-            if maxRows > 0 then
-                if moveDir == 'down' then
-                    global_state.cleanupData.cursor.row = global_state.cleanupData.cursor.row + 1
-                    if global_state.cleanupData.cursor.row > maxRows then
-                        global_state.cleanupData.cursor.row = 1
-                    end
-                elseif moveDir == 'up' then
-                    global_state.cleanupData.cursor.row = global_state.cleanupData.cursor.row - 1
-                    if global_state.cleanupData.cursor.row < 1 then
-                        global_state.cleanupData.cursor.row = maxRows
-                    end
-                end
-            end
-        end
-    end
+    scroll.updateScroll(dt, global_state, log_func, loader_obj)
+    anim.updateJumpPanelAnim(dt, global_state)
+    anim.updateCursorAnim(dt, global_state)
 end
 
 return update

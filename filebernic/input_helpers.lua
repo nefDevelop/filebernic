@@ -134,6 +134,7 @@ function M.performBatchScrape(global_state, items)
     global_state.log("Starting batch scrape for " .. #items .. " items")
     global_state.state = "BATCH_SCRAPING"
     global_state.scraperProgress = { current = 0, total = #items, currentName = "", successes = 0, failures = 0 }
+    global_state.scraperCancel = false
     os.execute("rm -f tmp/scraper_*.png")
     global_state.indexerChannelIn:push({ command = "scrape_batch", items = items, config = global_state.config, systemName = global_state.systemName, romPath = global_state.romPath, muosArtPath = global_state.muosArtPath, muosTextPath = global_state.muosTextPath, muosPreviewPath = global_state.muosPreviewPath })
 end

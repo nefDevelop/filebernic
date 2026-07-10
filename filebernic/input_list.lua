@@ -17,16 +17,16 @@ function M.handleListInput(key, global_state)
 
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
                global_state.romPath == "/mnt/mmc/ROMS/" or global_state.romPath == "/mnt/sdcard/ROMS/" or global_state.romPath == simRoot or
-               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or global_state.romPath == "@Favorites/" then
-                 global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
-                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
-                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
-                    global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
-                    global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
-                 global_state.preview.load(global_state, global_state.log, global_state.loader)
-                 global_state.inputCooldown = 0.2
-                 return
+               parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or global_state.romPath == "@Favorites/" or global_state.romPath == "@Recent/" or global_state.romPath == "@Collections/" or global_state.romPath:find("^@Collections/") then
+                  global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
+                  global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
+                     filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
+                     global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
+                     global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
+                     global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
+                  global_state.preview.load(global_state, global_state.log, global_state.loader)
+                  global_state.inputCooldown = 0.2
+                  return
             end
             global_state.romPath = parent
             global_state.secondaryPath = filesystem.resolveSecondary(global_state.romPath)
@@ -194,6 +194,7 @@ function M.handleListInput(key, global_state)
                 global_state.lastPlayedRom = romToLaunch
                 helpers.saveLastPlayed(global_state.lastPlayedRom)
                 filesystem.savePendingHistory(global_state.lastPlayedRom)
+                filesystem.addRecent(romToLaunch, global_state.json.encode, global_state.json.decode)
                 global_state.launching = true
                 global_state.launchTimer = 0
             end
@@ -213,15 +214,15 @@ function M.handleListInput(key, global_state)
             if parent == "/mnt/mmc/ROMS/" or parent == "/mnt/sdcard/ROMS/" or parent == simRoot or
                global_state.romPath == "/mnt/mmc/ROMS/" or global_state.romPath == "/mnt/sdcard/ROMS/" or global_state.romPath == simRoot or
                parent == "/" or parent == "/mnt/" or parent == "/mnt/mmc/" or parent == "/mnt/sdcard/" or
-               global_state.romPath == "" or global_state.romPath == "@Favorites/" then
-                 global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
-                 global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
-                    filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
-                    global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
-                    global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
-                    global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
-                 global_state.log("Virtual Root created. Items: " .. #global_state.files)
-                 global_state.preview.load(global_state, global_state.log, global_state.loader)
+               global_state.romPath == "" or global_state.romPath == "@Favorites/" or global_state.romPath == "@Recent/" or global_state.romPath == "@Collections/" or global_state.romPath:find("^@Collections/") then
+                  global_state.log("Límite alcanzado. Volviendo a Ruta Virtual.")
+                  global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
+                     filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
+                     global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
+                     global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
+                     global_state.love.graphics.newImage, global_state.allFiles, global_state.romPath, global_state.favoriteRoms, global_state.hideFavorites)
+                  global_state.log("Virtual Root created. Items: " .. #global_state.files)
+                  global_state.preview.load(global_state, global_state.log, global_state.loader)
                  global_state.inputCooldown = 0.2
                  return
             end
@@ -283,6 +284,12 @@ function M.handleListInput(key, global_state)
                     table.insert(global_state.menuOptions, {text=global_state.L.get("remove_favorite"), icon=global_state.iconFavorite})
                 else
                     table.insert(global_state.menuOptions, {text=global_state.L.get("add_favorite"), icon=global_state.iconFavorite})
+                end
+                local inCollection = global_state.romPath and global_state.romPath:find("^@Collections/")
+                if inCollection then
+                    table.insert(global_state.menuOptions, {text=global_state.L.get("remove_from_collection"), icon=global_state.iconTrash})
+                else
+                    table.insert(global_state.menuOptions, {text=global_state.L.get("add_to_collection"), icon=global_state.iconFolder})
                 end
                 table.insert(global_state.menuOptions, {text=global_state.L.get("scraper"), icon=global_state.iconNetwork})
 

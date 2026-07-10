@@ -111,7 +111,13 @@ local function draw(global_state)
     if #global_state.files == 0 and not global_state.isIndexing then
         love.graphics.setFont(fontMedium)
         love.graphics.setColor(theme.colors.text_dim)
-        love.graphics.printf(L.get("no_items"), 0, h/2, w, "center")
+        if global_state.searchQuery and global_state.searchQuery ~= "" then
+            love.graphics.printf(L.get("no_results_for", global_state.searchQuery), 0, h/2 - 10, w, "center")
+            love.graphics.setFont(fontSmall)
+            love.graphics.printf(L.get("press_f2_clear"), 0, h/2 + 15, w, "center")
+        else
+            love.graphics.printf(L.get("no_items"), 0, h/2, w, "center")
+        end
     end
 
     list.drawMainList(global_state, w, h, sdColX, sdColW, previewBoxW, previewBoxX, showPreview)
@@ -230,14 +236,28 @@ local function draw(global_state)
     end
 
     if global_state.isIndexing then
-        love.graphics.setFont(fontTitle)
+        local barW = 200
+        local barH = 4
+        local barX = (w - barW) / 2
+        local barY = 44
+
+        love.graphics.setColor(0.2, 0.2, 0.2, 0.8)
+        love.graphics.rectangle("fill", barX, barY, barW, barH, 2)
+
+        local progress = global_state.indexStateMessage and global_state.indexStateMessage:match("(%d+)/(%d+)")
+        local frac = 0
+        if progress then
+            local cur = tonumber(progress)
+            local total = tonumber(select(2, global_state.indexStateMessage:match("(%d+)/(%d+)")))
+            if total and total > 0 then frac = math.min(1, cur / total) end
+        end
         love.graphics.setColor(theme.colors.selection_accent)
+        love.graphics.rectangle("fill", barX, barY, barW * math.max(0.05, frac), barH, 2)
 
-        local current_time = love.timer.getTime()
-        local blink = (math.sin(current_time * 8) + 1) / 2
-
-        love.graphics.setColor(theme.colors.selection_accent[1], theme.colors.selection_accent[2], theme.colors.selection_accent[3], blink)
-        love.graphics.print("•", w - 30, 5)
+        love.graphics.setFont(fontSmall)
+        love.graphics.setColor(theme.colors.text_dim)
+        local msg = global_state.indexStateMessage or L.get("loading_index")
+        love.graphics.printf(msg, 0, barY + 8, w, "center")
     end
 end
 

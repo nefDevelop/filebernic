@@ -5,6 +5,32 @@ local utils = require "utils"
 local State = require "state"
 local helpers = require "input_helpers"
 
+local function deleteSDFile(global_state, sdPrefix)
+    local item = global_state.files[global_state.selectedIndex]
+    local pathToDelete = item.fullPath:find(sdPrefix) and item.fullPath or item.secondaryPath
+    helpers.deleteGameMedia(pathToDelete)
+    local success, err = filesystem.safeRemove(pathToDelete, global_state.log)
+    if not success then
+        global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
+    else
+        global_state.log("Archivo borrado con éxito: " .. pathToDelete)
+        filesystem.logDeletion(pathToDelete, global_state.json.encode, global_state.json.decode)
+    end
+    if global_state.romIndex then helpers.removeFromIndex(pathToDelete, global_state) end
+    if global_state.playedRoms[pathToDelete] then global_state.playedRoms[pathToDelete] = nil helpers.saveHistory(global_state) end
+    if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+        global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
+           filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
+           global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
+           global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
+           global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+        global_state.preview.load(global_state, global_state.log, global_state.loader)
+    else
+        helpers.refreshFiles(global_state)
+    end
+    global_state.state = "LIST"
+end
+
 function M.OPTIONS_MENU(key, global_state)
     local L = global_state.L
     if key == "return" or key == "kpenter" or (key == "return" and global_state.love.joystick.getJoystickCount() == 0) then
@@ -73,12 +99,77 @@ function M.OPTIONS_MENU(key, global_state)
                         global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
                         global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
                         global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                     global_state.preview.load(global_state, global_state.log, global_state.loader)
+                    global_state.preview.load(global_state, global_state.log, global_state.loader)
                  end
-             end
-             global_state.inputCooldown = 0.3
-             return
-        end
+              elseif optText == L.get("remove_from_collection") then
+                  local gamePath = global_state.focusedItem and global_state.focusedItem.fullPath
+                  if gamePath and global_state.romPath then
+                      local colName = global_state.romPath:match("^@Collections/(.+)/$")
+                      if colName then
+                          filesystem.removeFromCollection(colName, gamePath, global_state.json.encode, global_state.json.decode)
+                          global_state.log("Removed from collection: " .. colName)
+                          global_state.closingMenu = true
+                          global_state.menuStack = {}
+                          helpers.refreshFiles(global_state)
+                      end
+                  end
+              elseif optText == L.get("add_to_collection") then
+                  local collections = {}
+                  local f = io.open(global_state.love.filesystem.getSource() .. "/data/collections.json", "r")
+                  if f then
+                      local c = f:read("*a")
+                      f:close()
+                      if c and c ~= "" then collections = global_state.json.decode(c) or {} end
+                  end
+                  table.insert(global_state.menuStack, {
+                      title = global_state.menuTitle, message = global_state.menuMessage,
+                      options = global_state.menuOptions, selection = global_state.menuSelection,
+                      focusedItem = global_state.focusedItem
+                  })
+                  global_state.menuTitle = L.get("add_to_collection")
+                  global_state.menuMessage = ""
+                  global_state.menuOptions = {}
+                  for name, _ in pairs(collections) do
+                      table.insert(global_state.menuOptions, { text = name, collectionName = name })
+                  end
+                  table.insert(global_state.menuOptions, { text = L.get("new_collection"), isNew = true })
+                  global_state.menuSelection = 1
+                  global_state.menuAnim = 0
+              elseif type(opt) == "table" and opt.collectionName then
+                  local gamePath = global_state.focusedItem and global_state.focusedItem.fullPath
+                  if gamePath then
+                      filesystem.addToCollection(opt.collectionName, gamePath, global_state.json.encode, global_state.json.decode)
+                      global_state.log("Added to collection: " .. opt.collectionName)
+                      global_state.closingMenu = true
+                      global_state.menuStack = {}
+                  end
+              elseif type(opt) == "table" and opt.isNew then
+                  global_state.menuTitle = L.get("new_collection")
+                  global_state.menuMessage = L.get("enter_name")
+                  global_state.menuOptions = {}
+                  global_state.menuSelection = 1
+                  global_state.menuAnim = 0
+                  global_state.state = "EDIT_TEXT"
+                  global_state.textToEdit = ""
+                  global_state.textEditLabel = L.get("collection_name")
+                  global_state.textEditKey = "new_collection_name"
+                  global_state.keyboardRow = 1
+                  global_state.keyboardCol = 1
+                  global_state.love.keyboard.setTextInput(true)
+              elseif type(opt) == "table" and opt.fullPath then
+                  -- System switcher: navigate to the selected system
+                  global_state.romPath = opt.fullPath
+                  global_state.isVirtualRoot = false
+                  global_state.selectedIndex = 1
+                  global_state.state = "LIST"
+                  global_state.closingMenu = true
+                  global_state.menuStack = {}
+                  global_state.inputCooldown = 0.2
+                  helpers.refreshFiles(global_state)
+              end
+              global_state.inputCooldown = 0.3
+              return
+         end
 
         if global_state.menuTitle == L.get("version") then
              local item = global_state.files[global_state.selectedIndex]
@@ -130,53 +221,9 @@ function M.OPTIONS_MENU(key, global_state)
                 global_state.inputCooldown = 0.2
             end
         elseif optText == L.get("delete_sd1") then
-            local item = global_state.files[global_state.selectedIndex]
-            local pathToDelete = item.fullPath:find("/mnt/mmc") and item.fullPath or item.secondaryPath
-            helpers.deleteGameMedia(pathToDelete)
-            local success, err = filesystem.safeRemove(pathToDelete, global_state.log)
-            if not success then
-                global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
-            else
-                global_state.log("Archivo borrado con éxito: " .. pathToDelete)
-                filesystem.logDeletion(pathToDelete, global_state.json.encode, global_state.json.decode)
-            end
-            if global_state.romIndex then helpers.removeFromIndex(pathToDelete, global_state) end
-            if global_state.playedRoms[pathToDelete] then global_state.playedRoms[pathToDelete] = nil helpers.saveHistory(global_state) end
-            if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
-                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
-                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
-                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
-                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                global_state.preview.load(global_state, global_state.log, global_state.loader)
-            else
-                helpers.refreshFiles(global_state)
-            end
-            global_state.state = "LIST"
+            deleteSDFile(global_state, "/mnt/mmc")
         elseif optText == L.get("delete_sd2") then
-            local item = global_state.files[global_state.selectedIndex]
-            local pathToDelete = item.fullPath:find("/mnt/sdcard") and item.fullPath or item.secondaryPath
-            helpers.deleteGameMedia(pathToDelete)
-            local success, err = filesystem.safeRemove(pathToDelete, global_state.log)
-            if not success then
-                global_state.log("Error al borrar archivo (o ya no existía): " .. pathToDelete .. " - " .. tostring(err))
-            else
-                global_state.log("Archivo borrado con éxito: " .. pathToDelete)
-                filesystem.logDeletion(pathToDelete, global_state.json.encode, global_state.json.decode)
-            end
-            if global_state.romIndex then helpers.removeFromIndex(pathToDelete, global_state) end
-            if global_state.playedRoms[pathToDelete] then global_state.playedRoms[pathToDelete] = nil helpers.saveHistory(global_state) end
-            if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles =
-                   filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath,
-                   global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex,
-                   global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo,
-                   global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                global_state.preview.load(global_state, global_state.log, global_state.loader)
-            else
-                helpers.refreshFiles(global_state)
-            end
-            global_state.state = "LIST"
+            deleteSDFile(global_state, "/mnt/sdcard")
         elseif optText:match(L.get("mode") .. ":") then
             global_state.launchMode = (global_state.launchMode == "Folder") and "Juego Unico" or "Folder"
             local displayMode = (global_state.launchMode == "Folder") and L.get("folder") or L.get("single_game")
@@ -320,6 +367,46 @@ function M.OPTIONS_MENU(key, global_state)
                 global_state.state = "LIST"
                 global_state.closingMenu = true
             end
+        elseif optText == L.get("random_game") then
+            if #global_state.files > 0 then
+                local rand = global_state.love.math.random(1, #global_state.files)
+                global_state.selectedIndex = rand
+                global_state.animatedSelectionIndex = rand
+                global_state.state = "LIST"
+                global_state.closingMenu = true
+                global_state.preview.load(global_state, global_state.log, global_state.loader)
+                global_state.log("Random game selected: " .. global_state.files[rand].name)
+            end
+        elseif optText == L.get("switch_system") then
+            local systems = {}
+            local seen = {}
+            for _, item in ipairs(global_state.allFiles) do
+                if item.isDir and item.name ~= ".." then
+                    local sysName = item.system or item.name
+                    if not seen[sysName] then
+                        seen[sysName] = true
+                        table.insert(systems, {
+                            text = utils.getSystemDisplayName(sysName) or sysName,
+                            system = sysName,
+                            fullPath = item.fullPath
+                        })
+                    end
+                end
+            end
+            table.sort(systems, function(a, b) return a.text:lower() < b.text:lower() end)
+            table.insert(global_state.menuStack, {
+                title = global_state.menuTitle, message = global_state.menuMessage,
+                options = global_state.menuOptions, selection = global_state.menuSelection
+            })
+            global_state.menuTitle = global_state.L.get("switch_system")
+            global_state.menuMessage = ""
+            global_state.menuOptions = {}
+            for _, sys in ipairs(systems) do
+                local icon = utils.getSystemIcon(sys.system, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage)
+                table.insert(global_state.menuOptions, {text = sys.text, icon = icon, fullPath = sys.fullPath})
+            end
+            global_state.menuSelection = 1
+            global_state.menuAnim = 0
         elseif optText == L.get("reindex") then
             if global_state.forceReindex then
                 global_state.forceReindex(global_state)

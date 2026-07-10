@@ -290,6 +290,18 @@ function M.drawScraperView(global_state)
         love.graphics.printf(global_state.scraperProgress.current .. " / " .. global_state.scraperProgress.total, 0, h/2 + 50, w, "center")
         love.graphics.printf(L.get("successes_failures", global_state.scraperProgress.successes, global_state.scraperProgress.failures), 0, h/2 + 80, w, "center")
 
+        if not global_state.scraperCancel then
+            local btnW = 160
+            local btnH = 40
+            local btnX = (w - btnW) / 2
+            local btnY = h/2 + 115
+            love.graphics.setColor(0.8, 0.2, 0.2)
+            love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.setFont(fontMedium)
+            love.graphics.printf(L.get("cancel"), btnX, btnY + (btnH - fontMedium:getHeight())/2, btnW, "center")
+        end
+
     elseif global_state.state == "SCRAPER_RESULTS" then
         love.graphics.setFont(fontMedium)
         love.graphics.printf(L.get("results"), 20, 60, w, "left")

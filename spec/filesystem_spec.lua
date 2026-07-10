@@ -4,7 +4,8 @@ _G.love = {
   filesystem = {
     getSource = function() return "." end,
     getDirectoryItems = function() return {} end,
-    isFile = function() return false end
+    isFile = function() return false end,
+    getInfo = function() return nil end,
   }
 }
 
@@ -56,20 +57,23 @@ describe("filesystem.getArtPathForSystem", function()
   end)
 
   it("should return MUOS path if /mnt/mmc exists", function()
-    io.open = function(path, mode)
-      if path == "/mnt/mmc" then return { close = function() end } end -- Simulate /mnt/mmc exists
-      return original_io_open(path, mode)
+    love.filesystem.getInfo = function(path)
+      if path == "/mnt/mmc" then return { type = "directory" } end
+      return nil
     end
-    assert.are.equal("/mnt/mmc/MUOS/info/catalogue/NES/box/", filesystem.getArtPathForSystem("NES"))
+    love.filesystem.getSource = function() return "/path/to/project/filebernic" end
+    local result = filesystem.getArtPathForSystem("NES")
+    assert.are.equal("/mnt/mmc/MUOS/info/catalogue/NES/box/", result)
   end)
 
   it("should return simulator path if /mnt/mmc does not exist", function()
-    io.open = function(path, mode)
-      if path == "/mnt/mmc" then return nil end
-      return original_io_open(path, mode)
+    love.filesystem.getInfo = function() return nil end
+    love.filesystem.getSource = function() return "/path/to/project/filebernic" end
+    love.filesystem.getDirectoryItems = function(path)
+      return {"SNES"}
     end
-    love.filesystem.getSource = function() return "/path/to/project/filebernic" end -- Mock love.filesystem.getSource
-    assert.are.equal("/path/to/project/filebernic/../Simulador_SD/MUOS/info/catalogue/SNES/box/", filesystem.getArtPathForSystem("SNES"))
+    local result = filesystem.getArtPathForSystem("SNES")
+    assert.are.equal("/path/to/project/filebernic/../Simulador_SD/MUOS/info/catalogue/SNES/box/", result)
   end)
 end)
 
@@ -89,10 +93,10 @@ describe("filesystem.hasRoms", function()
     original_io_popen = io.popen
     original_os_execute = os.execute
     original_io_open = io.open
-    _G.log = function() end -- Mock log function
-    io.popen = function() return nil end -- Mock popen to fail so it falls back to love.filesystem
-    os.execute = function() end -- Mock os.execute to do nothing
-    io.open = function(path, mode) if path == "/tmp/filebernic_hasroms.txt" then return nil end return original_io_open(path, mode) end -- Force fallback
+    _G.log = function() end
+    io.popen = function() return nil end
+    os.execute = function() end
+    love.filesystem.getInfo = function(path) return { type = "file" } end
   end)
 
   after_each(function()
@@ -109,8 +113,10 @@ describe("filesystem.hasRoms", function()
       if path == "/roms/NES/" then return {"game.nes", "image.png"} end
       return {}
     end
-    love.filesystem.isFile = function(path)
-      return path == "/roms/NES/game.nes"
+    love.filesystem.getInfo = function(path)
+      if path:find("%.nes$") then return { type = "file" } end
+      if path:find("image") then return { type = "file" } end
+      return nil
     end
     local validExtensions = {nes = true, zip = true}
     assert.is_true(filesystem.hasRoms("/roms/NES/", validExtensions))
@@ -121,9 +127,7 @@ describe("filesystem.hasRoms", function()
       if path == "/roms/NES" then return {"image.png", "doc.txt"} end
       return {}
     end
-    love.filesystem.isFile = function(path)
-      return path == "/roms/NES/image.png" or path == "/roms/NES/doc.txt"
-    end
+    love.filesystem.getInfo = function(path) return { type = "file" } end
     local validExtensions = {nes = true, zip = true}
     assert.is_falsy(filesystem.hasRoms("/roms/NES", validExtensions))
   end)
@@ -279,9 +283,12 @@ describe("filesystem.deleteGameMedia", function()
     original_love_filesystem_getSource = love.filesystem.getSource
     original_filesystem_safeRemove = filesystem.safeRemove
     mock_removed_files = {}
-    filesystem.safeRemove = function(path)
-      table.insert(mock_removed_files, path)
-      return true
+    local fs_core = package.loaded["fs_core"]
+    if fs_core then
+      fs_core.safeRemove = function(path)
+        table.insert(mock_removed_files, path)
+        return true
+      end
     end
   end)
 
@@ -429,6 +436,8 @@ describe("filesystem copyFile and moveFile", function()
     _G.love = { filesystem = { getSource = function() return "/src" end, getInfo = function() end } }
     deleted_paths = {}
     os.remove = function(path) table.insert(deleted_paths, path); return true end
+    local fs_core = package.loaded["fs_core"]
+    if fs_core then fs_core.safeRemove = function(path) table.insert(deleted_paths, path); return true end end
     mock_io = { writes = {} }
     io.open = function(path, mode)
       if mode == "rb" then

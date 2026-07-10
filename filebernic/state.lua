@@ -35,6 +35,7 @@ end
 function State.loadConfig(defaultConfig, love_filesystem)
     local config = {}
     for k,v in pairs(defaultConfig) do config[k] = v end
+    config.configVersion = 1
 
     local configPath = love_filesystem.getSource() .. "/data/config.json"
     local f = io.open(configPath, "r")
@@ -44,6 +45,10 @@ function State.loadConfig(defaultConfig, love_filesystem)
         local loaded = json.decode(content)
         if loaded then
             for k, v in pairs(loaded) do config[k] = v end
+            -- Asegurar que keys nuevas de defaults estén presentes
+            for k, v in pairs(defaultConfig) do
+                if config[k] == nil then config[k] = v end
+            end
         end
     else
         f = io.open(configPath, "w")

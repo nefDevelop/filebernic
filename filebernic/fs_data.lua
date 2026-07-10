@@ -154,4 +154,111 @@ function M.loadViewCache(json_decode, love_filesystem_getSource, io_open, getSys
     return cache.files, cache.selectedIndex, cache.romPath, cache.isVirtualRoot
 end
 
+local RECENT_MAX = 20
+
+function M.addRecent(path, json_encode, json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local recentPath = dataDir .. "/recent.json"
+    local recent = {}
+
+    local f = io.open(recentPath, "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        if content and content ~= "" then
+            recent = json_decode(content) or {}
+        end
+    end
+
+    -- Remove duplicate
+    for i = #recent, 1, -1 do
+        if recent[i] == path then table.remove(recent, i) end
+    end
+
+    -- Prepend (most recent first)
+    table.insert(recent, 1, path)
+
+    -- Trim
+    while #recent > RECENT_MAX do table.remove(recent) end
+
+    f = io.open(recentPath, "w")
+    if f then
+        f:write(json_encode(recent))
+        f:close()
+    end
+end
+
+function M.loadRecent(json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/recent.json", "r")
+    if not f then return {} end
+    local content = f:read("*a")
+    f:close()
+    if content and content ~= "" then
+        local recent = json_decode(content)
+        if recent and type(recent) == "table" then return recent end
+    end
+    return {}
+end
+
+-- Collections / Playlists
+
+function M.saveCollections(collections, json_encode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/collections.json", "w")
+    if f then
+        f:write(json_encode(collections))
+        f:close()
+    end
+end
+
+function M.loadCollections(json_decode)
+    local dataDir = love.filesystem.getSource() .. "/data"
+    local f = io.open(dataDir .. "/collections.json", "r")
+    if not f then return {} end
+    local content = f:read("*a")
+    f:close()
+    if content and content ~= "" then
+        local cols = json_decode(content)
+        if cols and type(cols) == "table" then return cols end
+    end
+    return {}
+end
+
+function M.addToCollection(collectionName, gamePath, json_encode, json_decode)
+    local cols = M.loadCollections(json_decode)
+    if not cols[collectionName] then cols[collectionName] = {} end
+    for _, p in ipairs(cols[collectionName]) do
+        if p == gamePath then return end -- ya existe
+    end
+    table.insert(cols[collectionName], gamePath)
+    M.saveCollections(cols, json_encode)
+end
+
+function M.removeFromCollection(collectionName, gamePath, json_encode, json_decode)
+    local cols = M.loadCollections(json_decode)
+    if not cols[collectionName] then return end
+    local new = {}
+    for _, p in ipairs(cols[collectionName]) do
+        if p ~= gamePath then table.insert(new, p) end
+    end
+    cols[collectionName] = new
+    if #new == 0 then cols[collectionName] = nil end
+    M.saveCollections(cols, json_encode)
+end
+
+function M.renameCollection(oldName, newName, json_encode, json_decode)
+    local cols = M.loadCollections(json_decode)
+    if not cols[oldName] then return end
+    cols[newName] = cols[oldName]
+    cols[oldName] = nil
+    M.saveCollections(cols, json_encode)
+end
+
+function M.deleteCollection(name, json_encode, json_decode)
+    local cols = M.loadCollections(json_decode)
+    cols[name] = nil
+    M.saveCollections(cols, json_encode)
+end
+
 return M

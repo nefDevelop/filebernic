@@ -21,7 +21,7 @@ describe("Update loop", function()
       imageInvalid = false, screenshotInvalid = false,
       pendingLoad = false, timer = 0, delay = 0,
       fastScrollTimer = 0, keyHeld = nil,
-      selectionAnimationSpeed = 10, viewMode = "LIST", gridSelectionAnimationSpeed = 20,
+      layout = { selectionSpeed = 10, gridSelectionSpeed = 20, menuAnimSpeed = 6, helpAnimSpeed = 6, keyboardAnimSpeed = 6, favAnimSpeed = 12, fadeAnimSpeed = 5, jumpPanelSpeed = 6 }, viewMode = "LIST",
       scrollTimer = 0, initialScrollDelay = 0.4, subsequentScrollDelay = 0.1,
       favAnimIndex = -1,
       indexerChannelOut = { push = function() end, pop = function() return nil end, peek = function() end },

@@ -1,6 +1,30 @@
 ---@diagnostic disable: undefined-global
 local M = {}
 
+-- Rutas de dispositivo
+M.SD1_ROOT = "/mnt/mmc"
+M.SD2_ROOT = "/mnt/sdcard"
+M.SIM_PREFIX = "Simulador_SD"
+M.MUOS_CATALOGUE = "MUOS/info/catalogue/"
+M.MUOS_SAVE = "MUOS/save/"
+M.ROMS_DIR = "ROMS"
+
+function M.isDevice()
+    local f = io.open(M.SD1_ROOT, "r")
+    if f then f:close(); return true end
+    return false
+end
+
+function M.getBaseMuosPath()
+    if M.isDevice() then
+        return M.SD1_ROOT .. "/" .. M.MUOS_CATALOGUE
+    else
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        return cwd .. "/../" .. M.SIM_PREFIX .. "/" .. M.MUOS_CATALOGUE
+    end
+end
+
 -- Grupos de variantes de nombres de sistemas (para buscar iconos)
 local systemVariants = {
     -- Nintendo

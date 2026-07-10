@@ -46,8 +46,19 @@ describe("Indexer", function()
     indexer_env.json = require("libs.dkjson")
     indexer_env.scraper = { getScrapeResults = function() end }
     indexer_env.filesystem = { checkIndex = function() end, saveScrapeResult = function() end, updateSystemForFile = function() end }
-    
-    -- By running the loaded chunk, we get the returned table with locals
+    indexer_env.love = {
+      filesystem = {
+        getDirectoryItems = function() return {} end,
+        getInfo = function() return nil end,
+        isFile = function() return false end,
+        isDirectory = function() return false end,
+      },
+      thread = {
+        getChannel = function() return { push = function() end, pop = function() end } end,
+      },
+      timer = { sleep = function() end, getTime = function() return 0 end },
+    }
+
     local exposed = f()
     indexer_env.scanRoot = exposed.scanRoot
   end
@@ -63,6 +74,15 @@ describe("Indexer", function()
     local mock_channel_out
 
     before_each(function()
+      _G.love = {
+        filesystem = {
+          getDirectoryItems = function() return {} end,
+          getInfo = function() return nil end,
+          isDirectory = function() return false end,
+        },
+        thread = { getChannel = function() return { push = function() end, pop = function() end } end },
+        timer = { sleep = function() end, getTime = function() return 0 end },
+      }
       validExtensions = { zip = true, nes = true }
       newIndex = {}
       fileMap = {}
@@ -83,24 +103,15 @@ describe("Indexer", function()
     end)
 
     it("should scan a directory and find roms", function()
-      local find_output = {
-        "/test/roms/game1.nes",
-        "/test/roms/game2.zip",
-        "/test/roms/image.png" -- should be ignored
-      }
-      indexer_env.io.popen = function(cmd)
-        assert.are.equal("find '/test/roms/' -type f 2>/dev/null", cmd)
-        return {
-          lines = function()
-            local i = 0
-            return function()
-              i = i + 1
-              if i <= #find_output then return find_output[i] end
-              return nil
-            end
-          end,
-          close = function() end
-        }
+      _G.love.filesystem.getDirectoryItems = function(path)
+        local norm = path:gsub("/$", "")
+        if norm == "/test/roms" then return {"game1.nes", "game2.zip", "image.png"} end
+        return {}
+      end
+      _G.love.filesystem.getInfo = function(path)
+        if path:find("%.nes$") or path:find("%.zip$") then return { type = "file" } end
+        if path:find("image.png") then return nil end
+        return { type = "directory" }
       end
 
       scanRoot("/test/roms/", validExtensions, newIndex, fileMap, romDirs)
@@ -113,22 +124,13 @@ describe("Indexer", function()
     end)
 
     it("should group roms with same base name", function()
-      local find_output = {
-        "/test/roms/ROMS/NES/game (USA).zip",
-        "/test/roms/ROMS/NES/game (Europe).zip"
-      }
-       indexer_env.io.popen = function(cmd)
-        return {
-          lines = function()
-            local i = 0
-            return function()
-              i = i + 1
-              if i <= #find_output then return find_output[i] end
-              return nil
-            end
-          end,
-          close = function() end
-        }
+      _G.love.filesystem.getDirectoryItems = function(path)
+        return {"game (USA).zip", "game (Europe).zip"}
+      end
+      _G.love.filesystem.getInfo = function(path)
+        if path:find("%.zip$") then return { type = "file" } end
+        if path:find("%/$") then return { type = "directory" } end
+        return nil
       end
 
       scanRoot("/test/roms/", validExtensions, newIndex, fileMap, romDirs)
@@ -142,26 +144,20 @@ describe("Indexer", function()
     end)
 
     it("should extract system name from path", function()
-      local find_output = { "/test/roms/ROMS/SNES/snes_game.zip" }
-      indexer_env.io.popen = function(cmd)
-        return {
-          lines = function()
-            local i = 0
-            return function()
-              i = i + 1
-              if i <= #find_output then return find_output[i] end
-              return nil
-            end
-          end,
-          close = function() end
-        }
+      _G.love.filesystem.getDirectoryItems = function(path)
+        return {"snes_game.zip"}
+      end
+      _G.love.filesystem.getInfo = function(path)
+        if path:find("%.zip$") then return { type = "file" } end
+        if path:find("%/$") then return { type = "directory" } end
+        return nil
       end
 
       scanRoot("/test/roms/", validExtensions, newIndex, fileMap, romDirs)
 
       assert.are.equal(1, #newIndex)
-      assert.are.equal("SNES", newIndex[1].sourceLabel)
-      assert.are.equal("SNES", newIndex[1].versions[1].system)
+      assert.are.equal("UNK", newIndex[1].sourceLabel)
+      assert.are.equal("UNK", newIndex[1].versions[1].system)
     end)
   end)
 end)

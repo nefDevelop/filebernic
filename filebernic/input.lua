@@ -79,12 +79,27 @@ local function keypressed(key, global_state)
             table.insert(global_state.menuOptions, {text = global_state.L.get("hide_empty") .. ": " .. (global_state.hideEmpty and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
             table.insert(global_state.menuOptions, {text = global_state.L.get("mark_played") .. ": " .. (global_state.markPlayed and global_state.L.get("yes") or global_state.L.get("no")), icon = global_state.iconRom})
             table.insert(global_state.menuOptions, {text = global_state.L.get("hide_favorites") .. ": " .. (global_state.hideFavorites and global_state.L.get("on") or global_state.L.get("off")), icon = global_state.iconHide})
+            table.insert(global_state.menuOptions, {text = global_state.L.get("random_game"), icon = global_state.iconGame})
+            if global_state.isVirtualRoot then
+                table.insert(global_state.menuOptions, {text = global_state.L.get("switch_system"), icon = global_state.iconFolder})
+            end
             table.insert(global_state.menuOptions, {text = global_state.L.get("reindex"), icon = global_state.iconReload})
             table.insert(global_state.menuOptions, {text = global_state.L.get("cleanup"), icon = global_state.iconTrash})
             table.insert(global_state.menuOptions, {text = global_state.L.get("api_settings"), icon = global_state.iconNetwork})
             global_state.inputCooldown = 0.2
             return
         end
+    end
+
+    -- Cancel batch scrape with B button
+    if global_state.state == "BATCH_SCRAPING" and (key == "backspace" or key == "escape") then
+        if not global_state.scraperCancel then
+            global_state.log("Cancelling batch scrape...")
+            global_state.scraperCancel = true
+            global_state.indexerChannelIn:push({ command = "scrape_cancel" })
+            global_state.inputCooldown = 0.2
+        end
+        return
     end
 
     local handler = stateHandlers[global_state.state]

@@ -11,68 +11,50 @@ local utils = require "utils"
 local channel_in = love.thread.getChannel("indexer_in")
 local channel_out = love.thread.getChannel("indexer_out")
 
+local function processFile(fLine, filename, validExtensions, newIndex, fileMap)
+    if filename:sub(1, 1) == "." then return end
+    local ext = filename:match("[^%.]+$")
+    if not ext or not validExtensions[ext:lower()] then return end
+
+    local stem = filename:gsub("%.[^%.]+$", "")
+    local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
+    if groupKey == "" then groupKey = stem end
+
+    local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
+
+    if fileMap[groupKey] then
+        local idx = fileMap[groupKey]
+        local item = newIndex[idx]
+        local exists = false
+        for _, v in ipairs(item.versions) do
+            if v.fullPath == fLine then exists = true break end
+        end
+        if not exists then
+            table.insert(item.versions, { name = filename, fullPath = fLine, sourceLabel = sysName, system = sysName })
+            item.sourceLabel = "Multi"
+        end
+    else
+        local newItem = {
+            name = groupKey, isDir = false, fullPath = fLine,
+            sourceLabel = sysName, system = sysName,
+            versions = {{ name = filename, fullPath = fLine, sourceLabel = sysName, system = sysName }}
+        }
+        table.insert(newIndex, newItem)
+        fileMap[groupKey] = #newIndex
+    end
+end
+
 local function scanRoot(rootPath, validExtensions, newIndex, fileMap, romDirs)
-    local f = io.open(rootPath, "r")
-    if not f then return end
-    f:close()
-    
+    local walker = require "fs_walker"
+    if not walker.isDir(rootPath) then return end
+
     table.insert(romDirs, rootPath)
     channel_out:push({type="progress", message="Escaneando: " .. rootPath})
 
-    local h = io.popen('find ' .. utils.escapeShellArg(rootPath) .. ' -type f 2>/dev/null')
-    if h then
-        for fLine in h:lines() do
-            local filename = fLine:match("([^/]+)$")
-            if filename and filename:sub(1, 1) ~= "." then
-                local ext = filename:match("[^%.]+$")
-                if ext and validExtensions[ext:lower()] then
-                    local stem = filename:gsub("%.[^%.]+$", "")
-                    local groupKey = stem:gsub("%s*%b()", ""):gsub("%s*%b[]", ""):gsub("^%s*(.-)%s*$", "%1")
-                    if groupKey == "" then groupKey = stem end
-                    
-                    local sysName = fLine:match("ROMS/([^/]+)/") or fLine:match("Simulador_SD/([^/]+)/") or "UNK"
-
-                    if fileMap[groupKey] then
-                        local idx = fileMap[groupKey]
-                        local item = newIndex[idx]
-                        
-                        -- Verificar duplicados (mismo fullPath) antes de añadir
-                        local exists = false
-                        for _, v in ipairs(item.versions) do
-                            if v.fullPath == fLine then exists = true break end
-                        end
-                        
-                        if not exists then
-                        table.insert(item.versions, {
-                            name = filename,
-                            fullPath = fLine,
-                            sourceLabel = sysName,
-                            system = sysName
-                        })
-                        item.sourceLabel = "Multi"
-                        end
-                    else
-                        local newItem = {
-                            name = groupKey,
-                            isDir = false,
-                            fullPath = fLine,
-                            sourceLabel = sysName, -- This is already set
-                            system = sysName, -- Add this line to set the system on the top-level item
-                            versions = {{
-                                name = filename,
-                                fullPath = fLine,
-                                sourceLabel = sysName,
-                                system = sysName
-                            }}
-                        }
-                        table.insert(newIndex, newItem)
-                        fileMap[groupKey] = #newIndex
-                    end
-                end
-            end
-        end
-        h:close()
-    end
+    walker.walkFiles(rootPath, function(fLine)
+        local filename = fLine:match("([^/]+)$")
+        if filename then processFile(fLine, filename, validExtensions, newIndex, fileMap) end
+    end)
 end
 
 local function log(msg)

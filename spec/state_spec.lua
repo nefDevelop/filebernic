@@ -120,24 +120,27 @@ describe("State", function()
       mock_io.read_files["/mock/source/data/config.json"] = "json_content"
       mock_json.decoded_data = { theme = "light", show_hidden = true }
       
-      local config = State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
-      
-      assert.are.equal("light", config.theme) -- Overwritten by loaded
-      assert.are.equal(10, config.volume) -- Kept from default
-      assert.is_true(config.show_hidden) -- Added from loaded
+      local config = State.loadConfig(defaultConfig, love.filesystem)
+
+      assert.are.equal("light", config.theme)
+      assert.are.equal(10, config.volume)
+      assert.is_true(config.show_hidden)
+      assert.are.equal(1, config.configVersion)
     end)
 
     it("should return defaults if config file does not exist", function()
       local config = State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
-      assert.are.same(defaultConfig, config)
+      assert.are.equal(1, config.configVersion) -- Version field added
+      assert.are.equal("dark", config.theme)
+      assert.are.equal(10, config.volume)
     end)
 
     it("should create a new config file with defaults if it does not exist", function()
       State.loadConfig(defaultConfig, love.filesystem) -- Pass love.filesystem
       -- Check that it was written
       assert.is_not_nil(mock_io.written_files["/mock/source/data/config.json"])
-      -- Check that the data written was the default config
-      assert.are.same(defaultConfig, mock_json.encoded_data)
+      -- Check that the data written includes configVersion
+      assert.are.equal(1, mock_json.encoded_data.configVersion)
     end)
   end)
 end)

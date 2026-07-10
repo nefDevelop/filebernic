@@ -20,12 +20,6 @@ M.saveHistory = data.saveHistory
 M.logDeletion = data.logDeletion
 M.saveViewCache = data.saveViewCache
 M.loadViewCache = data.loadViewCache
-M.addRecent = data.addRecent
-M.loadRecent = data.loadRecent
-M.saveCollections = data.saveCollections
-M.loadCollections = data.loadCollections
-M.addToCollection = data.addToCollection
-M.removeFromCollection = data.removeFromCollection
 M.getArtPathForSystem = scanner.getArtPathForSystem
 M.hasRoms = scanner.hasRoms
 M.escapeXML = gamelist.escapeXML
@@ -33,6 +27,167 @@ M.findInGamelist = gamelist.findInGamelist
 M.updateSystemForFile = media.updateSystemForFile
 M.deleteGameMedia = media.deleteGameMedia
 M.saveScrapeResult = media.saveScrapeResult
+
+function M.findInGamelist(romFullPath, romFilename)
+    if not romFullPath then return nil end
+    local dir = romFullPath:match("(.*/)")
+    if not dir then return nil end
+    local xmlPath = dir .. "gamelist.xml"
+    
+    local f = io.open(xmlPath, "r")
+    if not f then return nil end
+    local content = f:read("*all")
+    f:close()
+    
+    -- Buscar bloque del juego específico
+    local searchPath = "./" .. romFilename
+    local escapedPath = searchPath:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    
+    local gameBlock = nil
+    for block in content:gmatch("<game>(.-)</game>") do
+        if block:find("<path>%s*" .. escapedPath .. "%s*</path>") then
+            gameBlock = block
+            break
+        end
+    end
+    
+    if gameBlock then
+        local desc = gameBlock:match("<desc>(.-)</desc>")
+        local year = gameBlock:match("<releasedate>(%d%d%d%d)")
+        local img = gameBlock:match("<image>(.-)</image>")
+        
+        if desc then desc = desc:gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", "\""):gsub("&apos;", "'") end
+        
+        local absImgPath = nil
+        if img then
+            -- Resolver ruta relativa de la imagen
+            if img:sub(1,2) == "./" then absImgPath = dir .. img:sub(3)
+            elseif img:sub(1,1) ~= "/" then absImgPath = dir .. img
+            else absImgPath = img end
+        end
+        
+        return { description = desc, year = year, imagePath = absImgPath, source = "Gamelist.xml" }
+    end
+    return nil
+end
+
+-- Función para actualizar gamelist.xml
+local function updateGamelistXML(romPath, metadata, action)
+    local dir = romPath:match("(.*/)")
+    if not dir then return end
+    local filename = romPath:match("([^/]+)$")
+    local xmlPath = dir .. "gamelist.xml"
+    
+    local content
+    local f = io.open(xmlPath, "r")
+    if f then
+        content = f:read("*all")
+        f:close()
+    else
+        if action == "delete" then return end -- No hay nada que borrar
+        content = "<?xml version=\"1.0\"?>\n<gameList>\n</gameList>"
+    end
+    
+    local relPath = "./" .. filename
+    local escapedPath = relPath:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    
+    local games = {}
+    -- Iterar sobre juegos existentes y filtrar el actual
+    for game in content:gmatch("<game>(.-)</game>") do
+        if not game:find("<path>%s*" .. escapedPath .. "%s*</path>") then
+            table.insert(games, "<game>" .. game .. "</game>")
+        end
+    end
+    
+    if action == "add" and metadata then
+        local name = metadata.name or filename:gsub("%.[^%.]+$", "")
+        local entry = "  <game>\n"
+        entry = entry .. "    <path>" .. relPath .. "</path>\n"
+        entry = entry .. "    <name>" .. escapeXML(name) .. "</name>\n"
+        if metadata.image then entry = entry .. "    <image>" .. escapeXML(metadata.image) .. "</image>\n" end
+        if metadata.desc then entry = entry .. "    <desc>" .. escapeXML(metadata.desc) .. "</desc>\n" end
+        if metadata.year then entry = entry .. "    <releasedate>" .. metadata.year .. "0101T000000</releasedate>\n" end
+        entry = entry .. "  </game>"
+        table.insert(games, entry)
+    end
+    
+    f = io.open(xmlPath, "w")
+    if f then
+        f:write("<?xml version=\"1.0\"?>\n<gameList>\n")
+        for _, g in ipairs(games) do f:write(g .. "\n") end
+        f:write("</gameList>")
+        f:close()
+    end
+end
+
+
+
+function M.updateSystemForFile(item, romPath, systemName, muosArtPath, muosTextPath, muosPreviewPath)
+    local currentPath = item.fullPath or (romPath .. item.name)
+    local detectedSystem = currentPath:match("ROMS/([^/]+)/") or currentPath:match("Simulador_SD/([^/]+)/")
+    
+    if detectedSystem and (detectedSystem ~= systemName or not muosArtPath or muosArtPath == "") then
+        systemName = detectedSystem
+        
+        -- log("System detected changed to: " .. systemName) -- Comentado para no saturar log en scroll
+        -- Recalcular rutas de arte
+        local baseMuosPath
+        local f = io.open("/mnt/mmc", "r")
+        if f then
+             f:close()
+             baseMuosPath = "/mnt/mmc/MUOS/info/catalogue/"
+        else
+             local cwd = love.filesystem.getSource()
+             if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+             local simPath = cwd .. "/../Simulador_SD/"
+             baseMuosPath = simPath .. "MUOS/info/catalogue/"
+        end
+        muosArtPath = baseMuosPath .. systemName .. "/box/"
+        muosTextPath = baseMuosPath .. systemName .. "/text/"
+        muosPreviewPath = baseMuosPath .. systemName .. "/preview/"
+        return systemName, muosArtPath, muosTextPath, muosPreviewPath
+    end
+    return systemName, muosArtPath, muosTextPath, muosPreviewPath
+end
+
+
+
+
+
+function M.deleteGameMedia(romPath)
+    local system = romPath:match("ROMS/([^/]+)/")
+    if not system then return end
+    
+    local filename = romPath:match("([^/]+)$")
+    local baseName = filename:gsub("%.[^%.]+$", "")
+    
+    -- Base path for catalogue (usually on SD1 in muOS)
+    local cataloguePath = "/mnt/mmc/MUOS/info/catalogue/"
+    local f = io.open("/mnt/mmc", "r")
+    if f then
+        f:close()
+    else
+        -- Simulator fallback
+        local cwd = love.filesystem.getSource()
+        if cwd:sub(-1) == "/" then cwd = cwd:sub(1, -2) end
+        cataloguePath = cwd .. "/../Simulador_SD/MUOS/info/catalogue/"
+    end
+    
+    local artPath = cataloguePath .. system .. "/box/" .. baseName .. ".png"
+    local textPath = cataloguePath .. system .. "/text/" .. baseName .. ".txt"
+    local yearPath = cataloguePath .. system .. "/text/" .. baseName .. ".year"
+    local prevPath = cataloguePath .. system .. "/preview/" .. baseName .. ".png"
+    
+    M.safeRemove(artPath)
+    M.safeRemove(textPath)
+    M.safeRemove(yearPath)
+    M.safeRemove(prevPath)
+    
+    -- Eliminar entrada de gamelist.xml
+    updateGamelistXML(romPath, nil, "delete")
+end
+
+
 
 function M.resolveSecondary(item)
     -- Permitir input de tipo string (ruta de carpeta)
@@ -100,6 +255,89 @@ end
 
 
 
+function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreviewPath, log)
+    if not muosArtPath or muosArtPath == "" then
+        if log then log("Error: muosArtPath is empty. Cannot save art.") end
+        return
+    end
+    if result and result.tempPath then
+        local baseName = item.name:gsub("%.[^%.]+$", "")
+        
+        -- Asegurar directorio de destino para boxart
+        local ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosArtPath))
+        if not ok then log("Error: Failed to create boxart directory: " .. muosArtPath) end
+        
+        -- Mover archivo temporal a destino final para boxart
+        local destPath = muosArtPath .. baseName .. ".png"
+        local finalImagePath = destPath -- Guardamos ruta absoluta para el XML
+        log("Saving boxart to: " .. destPath)
+        
+        local inp = io.open(result.tempPath, "rb")
+        if inp then
+            local content = inp:read("*a")
+            inp:close()
+            local out = io.open(destPath, "wb")
+            if out then
+                out:write(content)
+                out:close()
+            else
+                log("Error writing boxart file: " .. destPath)
+            end
+        else
+            log("Error reading temp boxart file: " .. result.tempPath)
+        end
+        
+        -- Guardar descripción
+        if result.description then
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            if not ok then log("Error: Failed to create text directory: " .. muosTextPath) end
+            local txtPath = muosTextPath .. baseName .. ".txt"
+            log("Saving description to: " .. txtPath)
+            local f = io.open(txtPath, "w")
+            if f then f:write(result.description) f:close() end
+        end
+        
+        -- Guardar año
+        if result.year then
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosTextPath))
+            if not ok then log("Error: Failed to create year directory: " .. muosTextPath) end
+            local yearPath = muosTextPath .. baseName .. ".year"
+            log("Saving year to: " .. yearPath)
+            local f = io.open(yearPath, "w")
+            if f then f:write(result.year) f:close() end
+        end
+        
+        -- Guardar screenshot (si existe carpeta preview)
+        if result.tempScreenPath and muosPreviewPath ~= "" then
+            ok = os.execute("mkdir -p " .. utils.escapeShellArg(muosPreviewPath))
+            if not ok then log("Error: Failed to create preview directory: " .. muosPreviewPath) end
+            local destScreen = muosPreviewPath .. baseName .. ".png"
+            log("Saving preview to: " .. destScreen)
+
+            inp = io.open(result.tempScreenPath, "rb")
+            if inp then
+                local content = inp:read("*a")
+                inp:close()
+                local out = io.open(destScreen, "wb")
+                if out then
+                    out:write(content)
+                    out:close()
+                end
+            else
+                log("Error reading temp screenshot file: " .. result.tempScreenPath)
+            end
+        end
+        
+        -- Actualizar gamelist.xml
+        local meta = {
+            name = baseName, -- O usar result.name si el scraper lo devolvera
+            desc = result.description,
+            year = result.year,
+            image = finalImagePath
+        }
+        updateGamelistXML(item.fullPath or (item.name), meta, "add")
+    end
+end
 
 function M.performCleanupScan(cleanupData, validExtensions, love_filesystem_getSource, io_open, coroutine_create, coroutine_yield, table_insert, table_sort)
     cleanupData = { orphans = {}, duplicates = {}, orphanedImages = {}, scanned = false, scanning = true, progress = 0, cursor = {col=1, row=1}, confirming = false, currentFile = "" }
@@ -393,13 +631,16 @@ function M.checkIndex(romIndex, json_decode, love_filesystem_getSource, io_open,
         log("Timestamps file corrupted. Indexing needed.")
         needsReindex = true
     else
-        local walker = require "fs_walker"
         for dir, saved_ts in pairs(savedTimestamps) do
-            local current_ts = tostring(walker.getDirTimestamp(dir) or "")
-            if current_ts ~= "" and current_ts ~= saved_ts then
-                log("Change detected in " .. dir .. ". Indexing needed.")
-                needsReindex = true
-                break
+            local h = io.popen('date -r ' .. utils.escapeShellArg(dir) .. ' +%s 2>/dev/null')
+            if h then
+                local current_ts = h:read("*a"):gsub("%s+", "")
+                h:close()
+                if current_ts ~= "" and current_ts ~= saved_ts then
+                    log("Change detected in " .. dir .. ". Indexing needed.")
+                    needsReindex = true
+                    break
+                end
             end
         end
     end
@@ -623,36 +864,11 @@ function M.createMergedVirtualRoot(files, isVirtualRoot, romPath, secondaryPath,
         })
     end
 
-    -- Insert Recent folder (always visible)
-    local insertPos = 1
-    if hasFavorites then insertPos = 2 end
-    table.insert(files, insertPos, {
-        name = "Recientes",
-        isDir = true,
-        fullPath = "@Recent/",
-        isRecent = true
-    })
-
-    -- Insert Collections folder (always visible)
-    table.insert(files, hasFavorites and 3 or 2, {
-        name = "Colecciones",
-        isDir = true,
-        fullPath = "@Collections/",
-        isCollection = true
-    })
-
     -- After sorting, find the item to select
     if pathToSelect then
         if pathToSelect == "@Favorites/" then
             for i, item in ipairs(files) do
                 if item.name == "Favoritos" then
-                    selectedIndex = i
-                    break
-                end
-            end
-        elseif pathToSelect == "@Recent/" then
-            for i, item in ipairs(files) do
-                if item.name == "Recientes" then
                     selectedIndex = i
                     break
                 end
@@ -814,86 +1030,6 @@ function M.refreshFiles(updateSystemPaths, files, selectedFilesCount, launchMode
         table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
         if selectedIndex < 1 then selectedIndex = 1 end
         if selectedIndex > #files then selectedIndex = math.max(1, #files) end
-        allFiles = {}
-        for _, item in ipairs(files) do table.insert(allFiles, item) end
-        return files, selectedFilesCount, selectedIndex, allFiles
-    end
-
-    if romPath == "@Recent/" then
-        local recent = {}
-        local f = io.open(love.filesystem.getSource() .. "/data/recent.json", "r")
-        if f then
-            local c = f:read("*a")
-            f:close()
-            if c and c ~= "" then recent = json.decode(c) or {} end
-        end
-        for _, path in ipairs(recent) do
-            local name = path:match("([^/]+)$")
-            if name then
-                local stem = name:gsub("%.[^%.]+$", "")
-                local system = path:match("ROMS/([^/]+)/") or path:match("Simulador_SD/([^/]+)/")
-                table.insert(files, {
-                    name = stem,
-                    fullPath = path,
-                    isDir = false,
-                    system = system,
-                    sourceLabel = "Rec"
-                })
-            end
-        end
-        allFiles = {}
-        for _, item in ipairs(files) do table.insert(allFiles, item) end
-        return files, selectedFilesCount, selectedIndex, allFiles
-    end
-
-    if romPath == "@Collections/" then
-        local collections = {}
-        local f = io.open(love.filesystem.getSource() .. "/data/collections.json", "r")
-        if f then
-            local c = f:read("*a")
-            f:close()
-            if c and c ~= "" then collections = json.decode(c) or {} end
-        end
-        for name, _ in pairs(collections) do
-            table.insert(files, {
-                name = name,
-                isDir = true,
-                fullPath = "@Collections/" .. name .. "/",
-                sourceLabel = "Col"
-            })
-        end
-        table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
-        allFiles = {}
-        for _, item in ipairs(files) do table.insert(allFiles, item) end
-        return files, selectedFilesCount, selectedIndex, allFiles
-    end
-
-    local colMatch = romPath:match("^@Collections/(.+)/$")
-    if colMatch then
-        local colName = colMatch
-        local collections = {}
-        local f = io.open(love.filesystem.getSource() .. "/data/collections.json", "r")
-        if f then
-            local c = f:read("*a")
-            f:close()
-            if c and c ~= "" then collections = json.decode(c) or {} end
-        end
-        if collections[colName] then
-            for _, path in ipairs(collections[colName]) do
-                local name = path:match("([^/]+)$")
-                if name then
-                    local stem = name:gsub("%.[^%.]+$", "")
-                    local system = path:match("ROMS/([^/]+)/") or path:match("Simulador_SD/([^/]+)/")
-                    table.insert(files, {
-                        name = stem,
-                        fullPath = path,
-                        isDir = false,
-                        system = system,
-                        sourceLabel = "Col"
-                    })
-                end
-            end
-        end
         allFiles = {}
         for _, item in ipairs(files) do table.insert(allFiles, item) end
         return files, selectedFilesCount, selectedIndex, allFiles

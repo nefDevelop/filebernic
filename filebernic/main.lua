@@ -53,11 +53,9 @@ markPlayed = true
 hideFavorites = false
 favoriteRoms = {}
 pageSize = 7
-animatedSelectionIndex = 1 -- Para animación suave del cursor
-selectionAnimationSpeed = 10 -- Velocidad de la animación (ajustar según preferencia)
-animGridRow = nil -- Animación fila grid
-animGridCol = nil -- Animación columna grid
-gridSelectionAnimationSpeed = 25 -- Velocidad de animación para el modo Grid (más rápida)
+animatedSelectionIndex = 1
+animGridRow = nil
+animGridCol = nil
 viewMode = "LIST" -- "LIST" or "GRID"
 gridCols = 4
 launchMode = "Folder" -- "Folder" or "Juego Unico"
@@ -192,15 +190,27 @@ validExtensions = {
 
 -- Configuración de diseño (Layout)
 layout = {
-    listY = 64,           -- Posición Y inicial de la lista
-    rowHeight = 54,       -- Altura de cada fila
-    selWidth = 320,       -- Ancho del selector
-    selHeight = 44,       -- Alto del selector
-    iconScale = 0.9,      -- Escala de los iconos de carpeta/rom
-    boxartMaxW = 280,     -- Ancho máximo del boxart
-    boxartMaxH = 360,     -- Alto máximo del boxart
-    scrollbarX = 315,     -- Posición X de la barra de scroll
-    scrollbarH = 360      -- Altura de la barra de scroll
+    listY = 64,
+    rowHeight = 54,
+    selWidth = 320,
+    selHeight = 44,
+    iconScale = 0.9,
+    boxartMaxW = 280,
+    boxartMaxH = 360,
+    scrollbarX = 315,
+    scrollbarH = 360,
+    -- Velocidades de animación
+    selectionSpeed = 10,
+    gridSelectionSpeed = 25,
+    menuAnimSpeed = 6,
+    helpAnimSpeed = 6,
+    keyboardAnimSpeed = 6,
+    favAnimSpeed = 12,
+    fadeAnimSpeed = 5,
+    jumpPanelSpeed = 6,
+    fastScrollDelay = 2,
+    jumpPanelThreshold = 0.75,
+    scrollAccelDelay = 0.5,
 }
 
 -- Variables para el control de scroll
@@ -211,30 +221,14 @@ keyHeld = nil -- ('up' o 'down')
 isVirtualRoot = false
 
 filesystem = require "filesystem"
-function jumpToNextLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
-    for i = selectedIndex + 1, #files do
-        local c = files[i].name:sub(1,1):upper()
-        if c ~= current then
-            selectedIndex = i
-            jumpLetter = c
-            return
-        end
-    end
-    selectedIndex = #files
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
-end
 
 function forceReindex(global_state)
     log("Forcing re-index...")
     romIndex = nil
-    -- Delete index files
     filesystem.safeRemove(love.filesystem.getSource() .. "/data/rom_index.json", global_state.log)
     filesystem.safeRemove(love.filesystem.getSource() .. "/data/rom_timestamps.json", global_state.log)
     filesystem.safeRemove(love.filesystem.getSource() .. "/data/view_cache.json", global_state.log)
-    
-    -- Vaciar la lista en memoria para forzar la pantalla de "Indexando..."
+
     if global_state.launchMode == "Juego Unico" and global_state.isVirtualRoot then
         global_state.files = {}
         global_state.allFiles = {}
@@ -242,40 +236,10 @@ function forceReindex(global_state)
     else
         refreshFiles()
     end
-    
-    -- Restart indexing
+
     isIndexing = true
     global_state.indexStateMessage = "Iniciando indexado..."
     indexerChannelIn:push({command="start", validExtensions=validExtensions, sourceDir=love.filesystem.getSource(), priorityPath=romPath})
-end
-
-function jumpToPrevLetter()
-    if #files == 0 then return end
-    local current = files[selectedIndex].name:sub(1,1):upper()
-    local prevLetterIdx = nil
-    for i = selectedIndex - 1, 1, -1 do
-        local c = files[i].name:sub(1,1):upper()
-        if c ~= current then
-            prevLetterIdx = i
-            break
-        end
-    end
-    
-    if prevLetterIdx then
-        local targetChar = files[prevLetterIdx].name:sub(1,1):upper()
-        for i = prevLetterIdx - 1, 1, -1 do
-            local c = files[i].name:sub(1,1):upper()
-            if c ~= targetChar then
-                selectedIndex = i + 1
-                jumpLetter = targetChar
-                return
-            end
-        end
-        selectedIndex = 1
-    else
-        selectedIndex = 1
-    end
-    jumpLetter = files[selectedIndex].name:sub(1,1):upper()
 end
 
 -- Expose input.refreshFiles and input.updateSystemPaths to global scope

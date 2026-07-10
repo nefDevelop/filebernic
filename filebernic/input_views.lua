@@ -72,16 +72,29 @@ function M.EDIT_TEXT(key, global_state)
     elseif key == "return" or key == "kpenter" or key == "space" then
         local char = global_state.keyboardGrid[global_state.keyboardRow][global_state.keyboardCol]
         if char == "OK" then
-            if global_state.textEditKey then
+            if global_state.textEditKey == "new_collection_name" and global_state.textToEdit ~= "" then
+                local gamePath = nil
+                if global_state.focusedItem then gamePath = global_state.focusedItem.fullPath end
+                if gamePath then
+                    global_state.filesystem.addToCollection(global_state.textToEdit, gamePath, global_state.json.encode, global_state.json.decode)
+                    global_state.log("Collection created: " .. global_state.textToEdit)
+                end
+                global_state.state = "LIST"
+                global_state.closingMenu = true
+                global_state.love.keyboard.setTextInput(false)
+            elseif global_state.textEditKey then
                 global_state.config[global_state.textEditKey] = global_state.textToEdit
+                local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
+                if f then f:write(global_state.json.encode(global_state.config)) f:close() end
+                global_state.state = "OPTIONS_MENU"
+                global_state.love.keyboard.setTextInput(false)
             else
                 global_state.config.thegamesdb_apikey = global_state.textToEdit
+                local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
+                if f then f:write(global_state.json.encode(global_state.config)) f:close() end
+                global_state.state = "OPTIONS_MENU"
+                global_state.love.keyboard.setTextInput(false)
             end
-            local f = io.open(global_state.love.filesystem.getSource() .. "/data/config.json", "w")
-            if f then f:write(global_state.json.encode(global_state.config)) f:close() end
-
-            global_state.state = "OPTIONS_MENU"
-            global_state.love.keyboard.setTextInput(false)
         elseif char == "BACK" then
             global_state.textToEdit = global_state.textToEdit:sub(1, -2)
         elseif char == "SPACE" then
@@ -91,7 +104,12 @@ function M.EDIT_TEXT(key, global_state)
         end
         global_state.inputCooldown = 0.2
     elseif key == "escape" or key == "backspace" then
-        global_state.state = "OPTIONS_MENU"
+        if global_state.textEditKey == "new_collection_name" then
+            global_state.state = "LIST"
+            global_state.closingMenu = true
+        else
+            global_state.state = "OPTIONS_MENU"
+        end
         global_state.love.keyboard.setTextInput(false)
         global_state.inputCooldown = 0.2
     end

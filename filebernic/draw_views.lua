@@ -379,25 +379,34 @@ function M.drawGrid(global_state, w, h)
 
         local imageToDraw = nil
         if not item.isDir then
-            local base = item.name:gsub("%..-$", "")
+            -- Lazy-load: solo cargar imagenes de items cerca del foco
+            local focusRow = global_state.animGridRow or math.ceil(global_state.animatedSelectionIndex / cols)
+            local focusCol = global_state.animGridCol or ((global_state.animatedSelectionIndex - 1) % cols + 1)
+            local cellRow = math.ceil(i / cols)
+            local cellCol = (i - 1) % cols + 1
+            local dist = math.abs(cellRow - focusRow) + math.abs(cellCol - focusCol)
+            local nearFocus = (dist <= 2)
 
-            local systemForItem = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot)
+            if nearFocus then
+                local base = item.name:gsub("%..-$", "")
+                local systemForItem = utils.getSystemNameForItem(item, global_state.systemName, global_state.isVirtualRoot)
 
-            if global_state.launchMode == "Juego Unico" and item.versions and #item.versions > 0 then
-                local v = item.versions[1]
-                base = v.name:gsub("%..-$", "")
-                systemForItem = v.system or systemForItem
+                if global_state.launchMode == "Juego Unico" and item.versions and #item.versions > 0 then
+                    local v = item.versions[1]
+                    base = v.name:gsub("%..-$", "")
+                    systemForItem = v.system or systemForItem
+                end
+
+                local artPathForItem = filesystem.getArtPathForSystem(systemForItem)
+
+                if artPathForItem then
+                    local path = artPathForItem .. base .. ".png"
+                    imageToDraw = global_state.loader:getImage(path)
+                end
             end
 
-            local artPathForItem = filesystem.getArtPathForSystem(systemForItem)
-
-            if artPathForItem then
-                local path = artPathForItem .. base .. ".png"
-                imageToDraw = global_state.loader:getImage(path)
-
-                if not imageToDraw then
-                    imageToDraw = global_state.imgNoImage
-                end
+            if not imageToDraw then
+                imageToDraw = global_state.imgNoImage
             end
         end
 
@@ -520,7 +529,8 @@ function M.drawGrid(global_state, w, h)
     local animX = marginX + c_abs * cellW
     local animY = startY + r_abs * cellH - gridScrollOffset
 
-    love.graphics.setColor(1, 1, 1, 0.2)
+    local selColor = theme.colors.selection_accent
+    love.graphics.setColor(selColor[1], selColor[2], selColor[3], 0.3)
     love.graphics.rectangle("fill", animX + 2, animY + 2, cellW - 4, cellH + 1, 15)
 end
 
