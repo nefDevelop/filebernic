@@ -47,7 +47,6 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
     if not ok then log("Error: Failed to create boxart directory: " .. muosArtPath) end
 
     local destPath = muosArtPath .. baseName .. ".png"
-    local finalImagePath = destPath
     log("Saving boxart to: " .. destPath)
 
     local inp = io.open(result.tempPath, "rb")
@@ -88,10 +87,10 @@ function M.saveScrapeResult(item, result, muosArtPath, muosTextPath, muosPreview
         if not ok then log("Error: Failed to create preview directory: " .. muosPreviewPath) end
         local destScreen = muosPreviewPath .. baseName .. ".png"
         log("Saving preview to: " .. destScreen)
-        local inp = io.open(result.tempScreenPath, "rb")
-        if inp then
-            local content = inp:read("*a")
-            inp:close()
+        local inp2 = io.open(result.tempScreenPath, "rb")
+        if inp2 then
+            local content = inp2:read("*a")
+            inp2:close()
             local out = io.open(destScreen, "wb")
             if out then
                 out:write(content)

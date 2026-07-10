@@ -34,7 +34,7 @@ read_globals = {
     "input", "inputCooldown", "isIndexing",
     "itemToDelete", "json", "jumpLetter", "jumpPanelAnim", "jumpToNextLetter",
     "jumpToPrevLetter", "keyHeld", "keyboardAnim", "keyboardCol",
-    "keyboardGrid", "keyboardRow",
+    "keyboardGrid", "keyboardRow", "keyboardShift", "keyboardNum", "keyboardGridNum",
     "lastPlayedRom", "launching", "launchTimer",
     "loader", "Loader", "log",
     "markPlayed", "menuAnim", "menuMessage", "menuOptions", "menuSelection",

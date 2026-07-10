@@ -1,6 +1,5 @@
 ---@diagnostic disable: undefined-global
 local M = {}
-local utils = require "utils"
 
 function M.isSafePath(path)
     if not path or type(path) ~= "string" then return false end
