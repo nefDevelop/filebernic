@@ -1,5 +1,5 @@
 package.path = "./filebernic/?.lua;" .. package.path
-for i = #package.searchers, 1, -1 do if tostring(package.searchers[i]):find("luarocks") then table.remove(package.searchers, i) end end
+local searchers = package.loaders or package.searchers; for i = #searchers, 1, -1 do if tostring(searchers[i]):find("luarocks") then table.remove(searchers, i) end end
 
 describe("Indexer", function()
   -- We can't test the thread directly, but we can test the functions it uses.

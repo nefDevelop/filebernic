@@ -1,5 +1,5 @@
 package.path = "./filebernic/?.lua;" .. package.path
-for i = #package.searchers, 1, -1 do if tostring(package.searchers[i]):find("luarocks") then table.remove(package.searchers, i) end end
+local searchers = package.loaders or package.searchers; for i = #searchers, 1, -1 do if tostring(searchers[i]):find("luarocks") then table.remove(searchers, i) end end
 
 describe("Utils", function()
   describe("checkGitHubUpdate", function()
