@@ -30,8 +30,20 @@ jobs:
       - name: Run legacy tests
         run: timeout 120 busted spec/filesystem_spec.lua spec/scraper_spec.lua spec/state_spec.lua spec/theme_spec.lua spec/utils_spec.lua spec/loader_spec.lua spec/indexer_spec.lua
 
-      - name: Run new tests
-        run: timeout 120 busted spec/fs_core_spec.lua spec/fs_data_spec.lua spec/input_helpers_spec.lua spec/update_spec.lua spec/input_list_spec.lua spec/input_menus_spec.lua spec/preview_spec.lua
+      - name: Test fs_core
+        run: busted spec/fs_core_spec.lua
+      - name: Test fs_data
+        run: busted spec/fs_data_spec.lua
+      - name: Test input_helpers
+        run: busted spec/input_helpers_spec.lua
+      - name: Test update
+        run: busted spec/update_spec.lua
+      - name: Test input_list
+        run: busted spec/input_list_spec.lua
+      - name: Test input_menus
+        run: busted spec/input_menus_spec.lua
+      - name: Test preview
+        run: busted spec/preview_spec.lua
 
       - name: Extract version from main.lua
         id: get_version
