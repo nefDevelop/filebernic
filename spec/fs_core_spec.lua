@@ -81,8 +81,9 @@ describe("copyFile", function()
 
   it("copies file contents", function()
     local written = {}
+    local eof = false
     io.open = function(path, mode)
-      if mode == "rb" then return { read = function() return "test data" end, close = function() end } end
+      if mode == "rb" then return { read = function() if eof then return nil end; eof = true; return "test data" end, close = function() end } end
       if mode == "wb" then return { write = function(_, d) written[path] = d end, close = function() end } end
     end
     assert.is_true(core.copyFile("/mnt/mmc/ROMS/src.zip", "/mnt/sdcard/ROMS/dst.zip"))
@@ -108,8 +109,9 @@ describe("moveFile", function()
   after_each(function() io.open = original_io end)
 
   it("copies then removes source", function()
+    local eof = false
     io.open = function(path, mode)
-      if mode == "rb" then return { read = function() return "data" end, close = function() end } end
+      if mode == "rb" then return { read = function() if eof then return nil end; eof = true; return "data" end, close = function() end } end
       if mode == "wb" then return { write = function() end, close = function() end } end
     end
     assert.is_true(core.moveFile("/mnt/mmc/ROMS/game.zip", "/mnt/sdcard/ROMS/game.zip"))
