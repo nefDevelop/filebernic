@@ -97,6 +97,18 @@ describe("fs_data saveLastPlayed and savePendingHistory", function()
 end)
 
 describe("fs_data checkPendingHistory", function()
+  local original_io_open
+  local original_os_remove
+
+  before_each(function()
+    original_io_open = io.open
+    original_os_remove = os.remove
+  end)
+
+  after_each(function()
+    io.open = original_io_open
+    os.remove = original_os_remove
+  end)
 
   it("loads pending and calls saveHistoryFunc", function()
     io.open = function(p, m)
@@ -111,6 +123,18 @@ describe("fs_data checkPendingHistory", function()
 end)
 
 describe("fs_data logDeletion", function()
+  local original_io_open
+  local original_os_date
+
+  before_each(function()
+    original_io_open = io.open
+    original_os_date = os.date
+  end)
+
+  after_each(function()
+    io.open = original_io_open
+    os.date = original_os_date
+  end)
 
   it("should encode log as JSON", function()
     local written = ""
@@ -125,6 +149,15 @@ describe("fs_data logDeletion", function()
 end)
 
 describe("fs_data view cache", function()
+  local original_io_open
+
+  before_each(function()
+    original_io_open = io.open
+  end)
+
+  after_each(function()
+    io.open = original_io_open
+  end)
 
   it("saveViewCache serializes files", function()
     local written = ""
