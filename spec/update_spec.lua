@@ -12,6 +12,7 @@ describe("Update loop", function()
       favAnim = 0, favAnimTarget = 0,
       animatedSelectionIndex = 1, jumpPanelAnim = 0, jumpLetter = "",
       scraperWarningTimer = 0, scraperWarningMessage = "",
+      deleteHoldTimer = 0,
       showHelp = false, closingHelp = false, closingMenu = false,
       launching = false, launchTimer = 0, state = "LIST",
       currentImage = nil, currentScreenshot = nil,

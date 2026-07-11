@@ -544,6 +544,24 @@ function M.drawOverlayMenus(global_state)
              local delMenu = nil
              for _, m in ipairs(menusToDraw) do if m.type == "MENU" and m.isCurrent then delMenu = m break end end
              if delMenu then
+                if global_state.deleteHoldTimer > 0 then
+                    local barW = delMenu.width - 60
+                    local barH = 6
+                    local barX = delMenu.x + 30
+                    local barY = h - 70
+                    local progress = math.min(global_state.deleteHoldTimer / 0.5, 1)
+
+                    love.graphics.setColor(0.3, 0.05, 0.05, delMenu.alpha)
+                    love.graphics.rectangle("fill", barX, barY, barW, barH, 3, 3)
+
+                    love.graphics.setColor(1, 0.2, 0.2, delMenu.alpha)
+                    love.graphics.rectangle("fill", barX, barY, barW * progress, barH, 3, 3)
+
+                    love.graphics.setFont(fontSmall)
+                    love.graphics.setColor(1, 0.4, 0.4, delMenu.alpha)
+                    love.graphics.printf(L.get("hold_to_delete"), barX, barY + barH + 4, barW, "center")
+                end
+
                 local path = global_state.itemToDelete.fullPath or ""
                 local displayPath = path
                 if path:find("ROMS/") then displayPath = path:match("ROMS/(.*)")

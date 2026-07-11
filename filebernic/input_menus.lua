@@ -516,37 +516,11 @@ function M.OPTIONS_MENU(key, global_state)
     end
 end
 
-function M.DELETE_MENU(key, global_state)
-    if key == "return" or key == "space" or key == "kpenter" then
-        if global_state.menuOptions[global_state.menuSelection] == global_state.L.get("delete") then
-            if global_state.selectedFilesCount > 0 then
-                for _, item in ipairs(global_state.files) do
-                    if item.selected then
-                        local fullPath = item.fullPath or (global_state.romPath .. item.name)
-                        helpers.deleteGameMedia(fullPath)
-                        local success, err = filesystem.safeRemove(fullPath, global_state.log)
-                        if not success then
-                            global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
-                        else
-                            global_state.log("Archivo borrado con éxito: " .. fullPath)
-                            filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
-                        end
-                        if global_state.romIndex then helpers.removeFromIndex(fullPath, global_state) end
-                        if global_state.playedRoms[fullPath] then
-                            global_state.playedRoms[fullPath] = nil
-                        end
-                    end
-                end
-                helpers.saveHistory(global_state)
-                if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                    global_state.preview.load(global_state, global_state.log, global_state.loader)
-                else
-                    helpers.refreshFiles(global_state)
-                end
-                global_state.itemToDelete = nil
-            elseif global_state.itemToDelete then
-                local fullPath = global_state.itemToDelete.fullPath or (global_state.romPath .. global_state.itemToDelete.name)
+local function executeDelete(global_state)
+    if global_state.selectedFilesCount > 0 then
+        for _, item in ipairs(global_state.files) do
+            if item.selected then
+                local fullPath = item.fullPath or (global_state.romPath .. item.name)
                 helpers.deleteGameMedia(fullPath)
                 local success, err = filesystem.safeRemove(fullPath, global_state.log)
                 if not success then
@@ -554,31 +528,74 @@ function M.DELETE_MENU(key, global_state)
                 else
                     global_state.log("Archivo borrado con éxito: " .. fullPath)
                     filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
-                    global_state.undoData = { path = fullPath, name = global_state.itemToDelete and global_state.itemToDelete.name or fullPath:match("([^/]+)$"), timer = 3 }
                 end
                 if global_state.romIndex then helpers.removeFromIndex(fullPath, global_state) end
                 if global_state.playedRoms[fullPath] then
                     global_state.playedRoms[fullPath] = nil
-                    helpers.saveHistory(global_state)
                 end
-                if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
-                    global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
-                    global_state.preview.load(global_state, global_state.log, global_state.loader)
-                else
-                    helpers.refreshFiles(global_state)
-                end
-                global_state.itemToDelete = nil
             end
         end
-        global_state.inputCooldown = 0.2
-        global_state.state = "LIST"
-        global_state.closingMenu = true
-        global_state.log("Delete Menu exited")
-    elseif key == "backspace" then
+        helpers.saveHistory(global_state)
+        if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+            global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+            global_state.preview.load(global_state, global_state.log, global_state.loader)
+        else
+            helpers.refreshFiles(global_state)
+        end
         global_state.itemToDelete = nil
-        global_state.inputCooldown = 0.2
-        global_state.closingMenu = true
-        global_state.log("Delete Menu exited")
+    elseif global_state.itemToDelete then
+        local fullPath = global_state.itemToDelete.fullPath or (global_state.romPath .. global_state.itemToDelete.name)
+        helpers.deleteGameMedia(fullPath)
+        local success, err = filesystem.safeRemove(fullPath, global_state.log)
+        if not success then
+            global_state.log("Error al borrar archivo (o ya no existía): " .. fullPath .. " - " .. tostring(err))
+        else
+            global_state.log("Archivo borrado con éxito: " .. fullPath)
+            filesystem.logDeletion(fullPath, global_state.json.encode, global_state.json.decode)
+            global_state.undoData = { path = fullPath, name = global_state.itemToDelete and global_state.itemToDelete.name or fullPath:match("([^/]+)$"), timer = 3 }
+        end
+        if global_state.romIndex then helpers.removeFromIndex(fullPath, global_state) end
+        if global_state.playedRoms[fullPath] then
+            global_state.playedRoms[fullPath] = nil
+            helpers.saveHistory(global_state)
+        end
+        if global_state.isVirtualRoot and global_state.launchMode == "Juego Unico" then
+            global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.allFiles = filesystem.createMergedVirtualRoot(global_state.files, global_state.isVirtualRoot, global_state.romPath, global_state.secondaryPath, global_state.selectedIndex, global_state.launchMode, global_state.romIndex, global_state.hideEmpty, global_state.validExtensions, utils.getSystemIcon, global_state.love.filesystem.getInfo, global_state.love.graphics.newImage, global_state.allFiles, nil, global_state.favoriteRoms, global_state.hideFavorites)
+            global_state.preview.load(global_state, global_state.log, global_state.loader)
+        else
+            helpers.refreshFiles(global_state)
+        end
+        global_state.itemToDelete = nil
+    end
+    global_state.inputCooldown = 0.2
+    global_state.state = "LIST"
+    global_state.closingMenu = true
+    global_state.log("Delete Menu exited")
+end
+
+local function cancelDelete(global_state)
+    global_state.itemToDelete = nil
+    global_state.deleteHoldTimer = 0
+    global_state.inputCooldown = 0.2
+    global_state.closingMenu = true
+    global_state.log("Delete Menu exited")
+end
+
+function M.DELETE_MENU(key, global_state)
+    if global_state.deleteHoldTimer > 0 then
+        if key == "backspace" or key == "escape" then
+            cancelDelete(global_state)
+        end
+        return
+    end
+
+    if key == "return" or key == "space" or key == "kpenter" then
+        if global_state.menuOptions[global_state.menuSelection] == global_state.L.get("delete") then
+            global_state.deleteHoldTimer = 0.001
+            global_state.inputCooldown = 0.2
+        end
+    elseif key == "backspace" or key == "escape" then
+        cancelDelete(global_state)
     end
 end
 
@@ -707,5 +724,8 @@ function M.POST_GAME(key, global_state)
         global_state.inputCooldown = 0.2
     end
 end
+
+M.executeDelete = executeDelete
+M.cancelDelete = cancelDelete
 
 return M

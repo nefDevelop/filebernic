@@ -267,13 +267,34 @@ function M.drawScraperView(global_state)
         local progressY = h/2 - fontMedium:getHeight()/2
 
         if global_state.scraperWarningMessage ~= "" and global_state.scraperWarningTimer > 0 then
-            local totalBlockHeight = fontMedium:getHeight() + 5 + fontSmall:getHeight()
+            local warningText = global_state.scraperWarningMessage
+            local warnFont = fontSmall
+            local padX, padY = 16, 8
+            local iconSize = 20
+            local textW = warnFont:getWidth(warningText)
+            local bgW = textW + padX * 2 + iconSize + 8
+            local bgH = warnFont:getHeight() + padY * 2
+            local totalBlockHeight = fontMedium:getHeight() + 5 + bgH
             progressY = h/2 - totalBlockHeight/2
 
-            love.graphics.setFont(fontSmall)
-            love.graphics.setColor(1, 0.4, 0.4)
             local warningY = progressY + fontMedium:getHeight() + 5
-            love.graphics.printf(global_state.scraperWarningMessage, 0, warningY, w, "center")
+            local bgX = (w - bgW) / 2
+            local bgY = warningY - padY
+
+            love.graphics.setColor(0.5, 0.05, 0.05, 0.9)
+            love.graphics.rectangle("fill", bgX, bgY, bgW, bgH, 6, 6)
+
+            love.graphics.setColor(1, 0.3, 0.3)
+            local iconX = bgX + padX
+            local iconY = bgY + (bgH - iconSize) / 2
+            love.graphics.circle("fill", iconX + iconSize / 2, iconY + iconSize / 2, iconSize / 2)
+            love.graphics.setFont(fontSmall)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.printf("!", iconX, iconY + 1, iconSize, "center")
+
+            love.graphics.setFont(warnFont)
+            love.graphics.setColor(1, 0.6, 0.6)
+            love.graphics.printf(warningText, bgX + padX + iconSize + 8, warningY, textW, "left")
 
             love.graphics.setFont(fontMedium)
             love.graphics.setColor(theme.colors.text_white)

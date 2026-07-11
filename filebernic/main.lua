@@ -95,6 +95,7 @@ scraperTextIndex = 1
 scraperProgressMessage = "" -- New variable for scraper progress messages
 scraperWarningMessage = "" -- New variable for scraper warning messages
 scraperWarningTimer = 0 -- Timer for how long to display the warning
+deleteHoldTimer = 0 -- Timer for delete hold-to-confirm (0 = inactive)
 searchQuery = ""
 textToEdit = "" -- Variable for text editing
 textEditLabel = "" -- Label for text editing

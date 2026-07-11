@@ -90,6 +90,7 @@ local function makeGS(overrides)
     menuStack = {},
     focusedItem = nil,
     itemToDelete = nil,
+    deleteHoldTimer = 0,
     itemToLaunch = nil,
     iconFavorite = {}, iconFolder = {}, iconRom = {},
     iconInfo = {}, iconNetwork = {}, iconSaveStates = {}, iconTrash = {},
@@ -110,14 +111,18 @@ local function makeGS(overrides)
 end
 
 describe("DELETE_MENU", function()
-  it("confirming deletes a single item and refreshes", function()
+  it("confirming starts hold timer then deletes on execute", function()
     local deleted_path = ""
     local orig_safeRemove = filesystem.safeRemove
     filesystem.safeRemove = function(path) deleted_path = path; return true end
     filesystem.logDeletion = function() end
 
-    local gs = makeGS({ menuOptions = { "delete", "cancel" }, menuSelection = 1, itemToDelete = { fullPath = "/mnt/mmc/ROMS/nes/game.nes", name = "game.nes" } })
+    local gs = makeGS({ state = "DELETE_MENU", menuOptions = { "delete", "cancel" }, menuSelection = 1, itemToDelete = { fullPath = "/mnt/mmc/ROMS/nes/game.nes", name = "game.nes" }, deleteHoldTimer = 0 })
     menus.DELETE_MENU("return", gs)
+    assert.is_true(gs.deleteHoldTimer > 0)
+    assert.are.equal("DELETE_MENU", gs.state)
+
+    menus.executeDelete(gs)
     assert.are.equal("/mnt/mmc/ROMS/nes/game.nes", deleted_path)
     assert.are.equal("LIST", gs.state)
 
@@ -125,27 +130,32 @@ describe("DELETE_MENU", function()
   end)
 
   it("canceling clears item and triggers closing", function()
-    local gs = makeGS({ menuOptions = { "delete", "cancel" }, menuSelection = 2, itemToDelete = { name = "game.nes" } })
+    local gs = makeGS({ state = "DELETE_MENU", menuOptions = { "delete", "cancel" }, menuSelection = 2, itemToDelete = { name = "game.nes" }, deleteHoldTimer = 0 })
     menus.DELETE_MENU("backspace", gs)
     assert.is_nil(gs.itemToDelete)
     assert.is_true(gs.closingMenu)
   end)
 
-  it("deletes multiple selected files", function()
+  it("deletes multiple selected files via execute", function()
     local deleted = {}
     local orig_safeRemove = filesystem.safeRemove
     filesystem.safeRemove = function(path) table.insert(deleted, path); return true end
     filesystem.logDeletion = function() end
 
     local gs = makeGS({
+      state = "DELETE_MENU",
       menuOptions = { "delete", "cancel" }, menuSelection = 1,
       selectedFilesCount = 2,
       files = {
         { name = "a.nes", fullPath = "/roms/a.nes", selected = true },
         { name = "b.nes", fullPath = "/roms/b.nes", selected = true },
       },
+      deleteHoldTimer = 0,
     })
     menus.DELETE_MENU("return", gs)
+    assert.is_true(gs.deleteHoldTimer > 0)
+
+    menus.executeDelete(gs)
     assert.are.equal(2, #deleted)
     assert.are.equal("/roms/a.nes", deleted[1])
     assert.are.equal("/roms/b.nes", deleted[2])

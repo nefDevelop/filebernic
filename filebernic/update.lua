@@ -5,6 +5,7 @@ local json = require "libs.dkjson"
 local anim = require "upd_animations"
 local scroll = require "upd_scroll"
 local messages = require "upd_messages"
+local menus = require "input_menus"
 
 local function update(dt, global_state, log_func, loader_obj, updateFileList_func)
     if dt > 0.05 then
@@ -126,6 +127,24 @@ local function update(dt, global_state, log_func, loader_obj, updateFileList_fun
     end
 
     messages.processMessages(global_state, log_func, updateFileList_func)
+
+    -- Delete hold-to-confirm timer
+    if global_state.deleteHoldTimer > 0 then
+        local held = love.keyboard.isDown("return") or love.keyboard.isDown("kpenter") or love.keyboard.isDown("space")
+        if not held then
+            for _, j in ipairs(love.joystick.getJoysticks()) do
+                if j:isGamepadDown("a") then held = true; break end
+            end
+        end
+        if held then
+            global_state.deleteHoldTimer = global_state.deleteHoldTimer + dt
+            if global_state.deleteHoldTimer >= 0.5 then
+                menus.executeDelete(global_state)
+            end
+        else
+            global_state.deleteHoldTimer = 0
+        end
+    end
 
     -- Launch sequence
     if global_state.launching then
