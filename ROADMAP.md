@@ -90,8 +90,8 @@ Issue/PR templates, CONTRIBUTING.md.
 ### ✓ 4.10 Centralizar paths de dispositivo
 `utils.isDevice()`, `SD1_ROOT`, `SD2_ROOT`, `SIM_PREFIX`, `getBaseMuosPath()` usados en todos lados.
 
-### 4.11 Dependencias (Pendiente)
-Fuentes duplicadas, versiones.
+### ✓ 4.11 Dependencias
+Fuentes no usadas eliminadas (Outfit, Onest, SNPro-Bold/Medium). Solo 4 fuentes esenciales.
 
 ---
 
@@ -120,8 +120,8 @@ Botón `?` con instrucciones.
 ### ✓ 5.8 Barra de progreso de indexación
 Barra + texto siempre visible durante indexing.
 
-### 5.9 Errores de API visibles en scraper (Parcial)
-Texto rojo de warning implementado. Falta fondo rojo + icono `!`.
+### ✓ 5.9 Errores de API visibles en scraper
+Fondo rojo + círculo con icono `!` + texto del warning.
 
 ### ✓ 5.10 Feedback búsqueda sin resultados
 "No results for 'query'. Press F2 to clear."
@@ -147,8 +147,8 @@ Usa `animatedSelectionIndex`.
 ### ✓ 5.17 Swap Start/Select
 Select → Config, Start → Salir.
 
-### 5.18 Protección visual en borrado (Pendiente)
-Fondo rojo implementado, falta hold 0.5s.
+### ✓ 5.18 Protección visual en borrado
+Fondo rojo + hold 0.5s con barra de progreso. Se cancela si se suelta la tecla.
 
 ---
 
@@ -159,6 +159,9 @@ Fondo rojo implementado, falta hold 0.5s.
 | 1 — Rendimiento | **4** | 0 | 4 |
 | 2 — Features | **5** | 0 | 5 |
 | 3 — Calidad de vida | **4** | 0 | 4 |
-| 4 — Robustez y plataforma | **10** | **1** | 11 |
-| 5 — UX | **15** | **2** | 18 |
-| **Total** | **38** | **3** | **42** |
+| 4 — Robustez y plataforma | **8** | 0 | 11¹ |
+| 5 — UX | **17** | 0 | 18² |
+| **Total** | **38** | **0** | **42** |
+
+¹ 3 items pospuestos (4.3, 4.6, 4.9)
+² 1 item pospuesto (5.4)
